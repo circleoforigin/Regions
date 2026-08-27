@@ -51,6 +51,11 @@ const pendingProjectActionRef =
     null
   );
 
+  const [
+    showDeleteProjectDialog,
+    setShowDeleteProjectDialog,
+  ] = useState(false);
+
   useEffect(() => {
     modulePresence.start();
 
@@ -262,6 +267,81 @@ function cancelPendingProjectAction() {
   );
 }
 
+async function handleDeleteProject() {
+  try {
+    const projects =
+      await projectRepository
+        .loadProjects();
+
+    setSavedProjects(
+      projects
+    );
+
+    setShowDeleteProjectDialog(
+      true
+    );
+  } catch (error) {
+    console.error(
+      'Unable to load projects for deletion:',
+      error
+    );
+  }
+}
+
+async function handleDeleteSelectedProject(
+  project: Project
+) {
+  const confirmed =
+    window.confirm(
+      `Delete "${project.name}"? This cannot be undone.`
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const deleted =
+      await projectRepository
+        .deleteProject(
+          project.id
+        );
+
+    if (!deleted) {
+      console.error(
+        'Project was not deleted.'
+      );
+
+      return;
+    }
+
+    setSavedProjects(
+      (current) =>
+        current.filter(
+          (candidate) =>
+            candidate.id !==
+            project.id
+        )
+    );
+
+    setShowDeleteProjectDialog(
+      false
+    );
+  } catch (error) {
+    console.error(
+      'Unable to delete project:',
+      error
+    );
+  }
+}
+
+const deletableProjects =
+  savedProjects.filter(
+    (project) =>
+      project.id !==
+      activeProject?.id
+  );
+
   return (
     <div className="regions-app">
       <MenuBar
@@ -272,13 +352,14 @@ function cancelPendingProjectAction() {
     handleLoadProject
   }
   onSaveProject={() =>
-  void handleSaveProject()
-}
-
-onCloseProject={
-  handleCloseProject
-}
-  onDeleteProject={() => {}}
+    void handleSaveProject()
+  }
+  onCloseProject={
+    handleCloseProject
+  }
+  onDeleteProject={() =>
+    void handleDeleteProject()
+  }
   projectName={
     activeProject?.name
   }
@@ -422,6 +503,58 @@ onCloseProject={
           type="button"
           onClick={() =>
             setShowLoadProjectDialog(
+              false
+            )
+          }
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showDeleteProjectDialog && (
+  <div className="dialog-backdrop">
+    <div className="dialog">
+      <h2>
+        Delete Project
+      </h2>
+
+      <p>
+        Select a project to delete.
+      </p>
+
+      <div className="project-picker-list">
+        {deletableProjects.length === 0 ? (
+          <p>
+            No projects available to delete.
+          </p>
+        ) : (
+          deletableProjects.map(
+            (project) => (
+              <button
+                key={project.id}
+                type="button"
+                className="project-picker-item"
+                onClick={() =>
+                  void handleDeleteSelectedProject(
+                    project
+                  )
+                }
+              >
+                {project.name}
+              </button>
+            )
+          )
+        )}
+      </div>
+
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          onClick={() =>
+            setShowDeleteProjectDialog(
               false
             )
           }
