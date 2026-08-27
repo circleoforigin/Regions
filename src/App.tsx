@@ -5,14 +5,23 @@ import './App.css';
 import { modulePresence } from './host/ModulePresence';
 import MenuBar from './components/MenuBar'
 import type { Project} from './models/Project';
+import type {Map as RegionMap} from './models/Map';
 
+import { mapRepository} from './maps/MapRepository';
 import { projectRepository} from './projects/ProjectRepository';;
 
 function App() {
-    const [
+  const [
     activeProject,
     setActiveProject,
   ] = useState<Project | null>(
+    null
+  );
+
+  const [
+    activeMap,
+    setActiveMap,
+  ] = useState<RegionMap | null>(
     null
   );
 
@@ -26,7 +35,7 @@ function App() {
     setNewProjectName,
   ] = useState('');
 
-  const [
+const [
   showLoadProjectDialog,
   setShowLoadProjectDialog,
 ] = useState(false);
@@ -110,9 +119,8 @@ function handleNewProject() {
           project
         );
 
-      setActiveProject(
-        project
-      );
+      setActiveProject(project);
+      setActiveMap(null);
       setProjectDirty(false);
 
       setNewProjectName('');
@@ -152,12 +160,35 @@ function handleLoadProject() {
   });
 }
 
-function handleSelectProject(
+async function handleSelectProject(
   project: Project
 ) {
   setActiveProject(
     project
   );
+
+  setActiveMap(
+    null
+  );
+
+  if (project.activeMapId) {
+    try {
+      const map =
+        await mapRepository.loadMap(
+          project.activeMapId
+        );
+
+      setActiveMap(
+        map
+      );
+    } catch (error) {
+      console.error(
+        'Unable to load active map:',
+        error
+      );
+    }
+  }
+
   setProjectDirty(false);
 
   setShowLoadProjectDialog(
@@ -203,6 +234,10 @@ function handleSaveProject() {
 
 function closeProject() {
   setActiveProject(
+    null
+  );
+
+  setActiveMap(
     null
   );
 
@@ -486,7 +521,7 @@ const deletableProjects =
                 type="button"
                 className="project-picker-item"
                 onClick={() =>
-                  handleSelectProject(
+                  void handleSelectProject(
                     project
                   )
                 }
@@ -570,15 +605,19 @@ const deletableProjects =
   <section className="regions-map-workspace">
     {!activeProject ? (
       <div className="regions-empty-map">
-        <h2>No Project Loaded</h2>
+        <h2>
+          No Project Loaded
+        </h2>
 
         <p>
           Create or load a project to get started.
         </p>
       </div>
-    ) : (
+    ) : !activeMap ? (
       <div className="regions-empty-map">
-        <h2>No Map Selected</h2>
+        <h2>
+          No Map Selected
+        </h2>
 
         <button
           type="button"
@@ -588,6 +627,31 @@ const deletableProjects =
         >
           Assign Map
         </button>
+      </div>
+    ) : !activeMap.imageFileId ? (
+      <div className="regions-empty-map">
+        <h2>
+          No Map Selected
+        </h2>
+
+        <button
+          type="button"
+          onClick={() => {
+            // Assign Map behavior comes next.
+          }}
+        >
+          Assign Map
+        </button>
+      </div>
+    ) : (
+      <div className="regions-empty-map">
+        <h2>
+          {activeMap.name}
+        </h2>
+
+        <p>
+          Map image rendering comes next.
+        </p>
       </div>
     )}
   </section>
