@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import './App.css';
 
@@ -36,6 +36,21 @@ const [
   setSavedProjects,
 ] = useState<Project[]>([]);
 
+const [
+  projectDirty,
+  setProjectDirty,
+] = useState(false);
+
+const [
+  showUnsavedChangesDialog,
+  setShowUnsavedChangesDialog,
+] = useState(false);
+
+const pendingProjectActionRef =
+  useRef<(() => void) | null>(
+    null
+  );
+
   useEffect(() => {
     modulePresence.start();
 
@@ -46,10 +61,16 @@ const [
     };
   }, []);
 
-    function handleNewProject() {
-    setNewProjectName('');
-    setShowNewProjectDialog(true);
-  }
+    function openNewProjectDialog() {
+  setNewProjectName('');
+  setShowNewProjectDialog(true);
+}
+
+function handleNewProject() {
+  requestProjectAction(
+    openNewProjectDialog
+  );
+}
 
   async function handleCreateProject() {
     const trimmedName =
@@ -87,6 +108,7 @@ const [
       setActiveProject(
         project
       );
+      setProjectDirty(false);
 
       setNewProjectName('');
       setShowNewProjectDialog(false);
@@ -98,7 +120,7 @@ const [
     }
   }
 
-  async function handleLoadProject() {
+  async function openLoadProjectDialog() {
   try {
     const projects =
       await projectRepository
@@ -119,21 +141,28 @@ const [
   }
 }
 
+function handleLoadProject() {
+  requestProjectAction(() => {
+    void openLoadProjectDialog();
+  });
+}
+
 function handleSelectProject(
   project: Project
 ) {
   setActiveProject(
     project
   );
+  setProjectDirty(false);
 
   setShowLoadProjectDialog(
     false
   );
 }
 
-async function handleSaveProject() {
+async function saveActiveProject(): Promise<boolean> {
   if (!activeProject) {
-    return;
+    return true;
   }
 
   const updatedProject: Project = {
@@ -149,17 +178,87 @@ async function handleSaveProject() {
     setActiveProject(
       updatedProject
     );
+
+    setProjectDirty(false);
+
+    return true;
   } catch (error) {
     console.error(
       'Unable to save project:',
       error
     );
+
+    return false;
   }
 }
 
-function handleCloseProject() {
+function handleSaveProject() {
+  void saveActiveProject();
+}
+
+function closeProject() {
   setActiveProject(
     null
+  );
+
+  setProjectDirty(false);
+}
+
+function handleCloseProject() {
+  requestProjectAction(
+    closeProject
+  );
+}
+
+function requestProjectAction(
+  action: () => void
+) {
+  if (!projectDirty) {
+    action();
+    return;
+  }
+
+  pendingProjectActionRef.current =
+    action;
+
+  setShowUnsavedChangesDialog(
+    true
+  );
+}
+
+async function finishPendingProjectAction(
+  saveChanges: boolean
+) {
+  if (saveChanges) {
+    const saved =
+      await saveActiveProject();
+
+    if (!saved) {
+      return;
+    }
+  } else {
+    setProjectDirty(false);
+  }
+
+  const action =
+    pendingProjectActionRef.current;
+
+  pendingProjectActionRef.current =
+    null;
+
+  setShowUnsavedChangesDialog(
+    false
+  );
+
+  action?.();
+}
+
+function cancelPendingProjectAction() {
+  pendingProjectActionRef.current =
+    null;
+
+  setShowUnsavedChangesDialog(
+    false
   );
 }
 
@@ -169,8 +268,8 @@ function handleCloseProject() {
   onNewProject={
     handleNewProject
   }
-  onLoadProject={() =>
-    void handleLoadProject()
+  onLoadProject={
+    handleLoadProject
   }
   onSaveProject={() =>
   void handleSaveProject()
@@ -184,6 +283,53 @@ onCloseProject={
     activeProject?.name
   }
 />
+
+{showUnsavedChangesDialog && (
+  <div className="dialog-backdrop">
+    <div className="dialog">
+      <h2>
+        Unsaved Changes
+      </h2>
+
+      <p>
+        Save changes to the current project?
+      </p>
+
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          onClick={() =>
+            void finishPendingProjectAction(
+              true
+            )
+          }
+        >
+          Save
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            void finishPendingProjectAction(
+              false
+            )
+          }
+        >
+          Don't Save
+        </button>
+
+        <button
+          type="button"
+          onClick={
+            cancelPendingProjectAction
+          }
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
 {showNewProjectDialog && (
   <div className="dialog-backdrop">
