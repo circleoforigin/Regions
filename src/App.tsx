@@ -26,6 +26,16 @@ function App() {
     setNewProjectName,
   ] = useState('');
 
+  const [
+  showLoadProjectDialog,
+  setShowLoadProjectDialog,
+] = useState(false);
+
+const [
+  savedProjects,
+  setSavedProjects,
+] = useState<Project[]>([]);
+
   useEffect(() => {
     modulePresence.start();
 
@@ -88,15 +98,87 @@ function App() {
     }
   }
 
+  async function handleLoadProject() {
+  try {
+    const projects =
+      await projectRepository
+        .loadProjects();
+
+    setSavedProjects(
+      projects
+    );
+
+    setShowLoadProjectDialog(
+      true
+    );
+  } catch (error) {
+    console.error(
+      'Unable to load projects:',
+      error
+    );
+  }
+}
+
+function handleSelectProject(
+  project: Project
+) {
+  setActiveProject(
+    project
+  );
+
+  setShowLoadProjectDialog(
+    false
+  );
+}
+
+async function handleSaveProject() {
+  if (!activeProject) {
+    return;
+  }
+
+  const updatedProject: Project = {
+    ...activeProject,
+    updatedAt: new Date(),
+  };
+
+  try {
+    await projectRepository.saveProject(
+      updatedProject
+    );
+
+    setActiveProject(
+      updatedProject
+    );
+  } catch (error) {
+    console.error(
+      'Unable to save project:',
+      error
+    );
+  }
+}
+
+function handleCloseProject() {
+  setActiveProject(
+    null
+  );
+}
+
   return (
     <div className="regions-app">
       <MenuBar
   onNewProject={
     handleNewProject
   }
-  onLoadProject={() => {}}
-  onSaveProject={() => {}}
-  onCloseProject={() => {}}
+  onLoadProject={() =>
+    void handleLoadProject()
+  }
+  onSaveProject={() =>
+  void handleSaveProject()
+}
+
+onCloseProject={
+  handleCloseProject
+}
   onDeleteProject={() => {}}
   projectName={
     activeProject?.name
@@ -151,6 +233,54 @@ function App() {
           }
         >
           Create
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showLoadProjectDialog && (
+  <div className="dialog-backdrop">
+    <div className="dialog">
+      <h2>
+        Load Project
+      </h2>
+
+      <div className="project-picker-list">
+        {savedProjects.length === 0 ? (
+          <p>
+            No saved projects.
+          </p>
+        ) : (
+          savedProjects.map(
+            (project) => (
+              <button
+                key={project.id}
+                type="button"
+                className="project-picker-item"
+                onClick={() =>
+                  handleSelectProject(
+                    project
+                  )
+                }
+              >
+                {project.name}
+              </button>
+            )
+          )
+        )}
+      </div>
+
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          onClick={() =>
+            setShowLoadProjectDialog(
+              false
+            )
+          }
+        >
+          Cancel
         </button>
       </div>
     </div>

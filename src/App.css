@@ -225,3 +225,26 @@
   cursor: default;
   opacity: 0.5;
 }
+
+.project-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-picker-item {
+  width: 100%;
+  padding: 8px 10px;
+
+  background: #181818;
+  color: #ffffff;
+
+  border: 1px solid #454545;
+
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-picker-item:hover {
+  background: #343434;
+}
