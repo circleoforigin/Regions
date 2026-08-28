@@ -594,8 +594,32 @@ const deletableProjects =
     void handleDeleteProject()
   }
   projectName={
-    activeProject?.name
-  }
+  activeProject?.name
+}
+
+zoomValue={
+  zoomControl?.value
+}
+
+zoomMin={
+  zoomControl?.min
+}
+
+zoomMax={
+  zoomControl?.max
+}
+
+zoomStep={
+  zoomControl?.step
+}
+
+zoomDisabled={
+  zoomControl?.disabled
+}
+
+onZoomChange={
+  zoomControl?.setZoom
+}
 />
 
 {showUnsavedChangesDialog && (

@@ -1,8 +1,10 @@
 .regions-app {
   width: 100%;
   height: 100vh;
+
   display: flex;
   flex-direction: column;
+
   overflow: hidden;
 }
 
@@ -28,7 +30,9 @@
 
 .menu-group {
   position: relative;
+
   height: 100%;
+
   display: flex;
   align-items: center;
 }
@@ -58,6 +62,30 @@
   background: #343434;
 }
 
+.menu-project-name {
+  margin-left: 12px;
+
+  color: #b8b8b8;
+
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.menu-bar-spacer {
+  flex: 1;
+}
+
+.menu-zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  color: #ffffff;
+}
+
+.menu-zoom-control input {
+  width: 150px;
+}
 
 /* =========================
    DROPDOWN
@@ -118,7 +146,6 @@
   background: #454545;
 }
 
-
 /* =========================
    REGIONS SHELL
    ========================= */
@@ -178,52 +205,6 @@
     transform;
 }
 
-.map-zoom-control {
-  position: absolute;
-
-  left: 50%;
-  bottom: 18px;
-
-  transform:
-    translateX(-50%);
-
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  padding: 7px 10px;
-
-  background:
-    rgba(24, 24, 24, 0.85);
-
-  border:
-    1px solid #454545;
-
-  border-radius: 4px;
-
-  color: #ffffff;
-
-  cursor: default;
-}
-
-.menu-bar-spacer {
-  flex: 1;
-}
-
-.menu-zoom-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-
-  margin-left: auto;
-
-  color: #ffffff;
-}
-
-.menu-zoom-control input {
-  width: 150px;
-}
-
 .regions-empty-map {
   text-align: center;
 }
@@ -247,6 +228,7 @@
 .dialog-backdrop {
   position: fixed;
   inset: 0;
+
   z-index: 2000;
 
   display: flex;
