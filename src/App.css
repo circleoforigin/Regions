@@ -63,12 +63,23 @@
 }
 
 .menu-project-name {
-  margin-left: 12px;
+  position: absolute;
+
+  left: 50%;
+  transform: translateX(-50%);
+
+  max-width: 40%;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 
   color: #b8b8b8;
 
   font-size: 13px;
-  white-space: nowrap;
+  font-weight: bold;
+
+  pointer-events: none;
 }
 
 .menu-bar-spacer {
@@ -179,7 +190,7 @@
 
   overflow: hidden;
 
-  cursor: grab;
+  cursor: crosshair;
   user-select: none;
   touch-action: none;
 }

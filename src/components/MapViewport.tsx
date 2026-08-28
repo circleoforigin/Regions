@@ -125,9 +125,7 @@ function MapViewport({
     );
   }
 
-  function clampPan(
-    candidate: Point,
-    candidateScale = scale
+  function clampPan( candidate: Point, candidateScale = scale
   ): Point {
     const scaledWidth =
       imageSize.width *
@@ -175,6 +173,102 @@ function MapViewport({
         ),
     };
   }
+
+  function screenToMap(
+  clientX: number,
+  clientY: number
+): Point | null {
+  const viewport =
+    viewportRef.current;
+
+  if (
+    !viewport ||
+    imageSize.width <= 0 ||
+    imageSize.height <= 0 ||
+    scale <= 0
+  ) {
+    return null;
+  }
+
+  const rect =
+    viewport.getBoundingClientRect();
+
+  const screenFromCenter = {
+    x:
+      clientX -
+      rect.left -
+      rect.width / 2,
+
+    y:
+      clientY -
+      rect.top -
+      rect.height / 2,
+  };
+
+  const imageFromCenter = {
+    x:
+      (
+        screenFromCenter.x -
+        pan.x
+      ) / scale,
+
+    y:
+      (
+        screenFromCenter.y -
+        pan.y
+      ) / scale,
+  };
+
+  const mapPoint = {
+    x:
+      imageFromCenter.x +
+      imageSize.width / 2,
+
+    y:
+      imageFromCenter.y +
+      imageSize.height / 2,
+  };
+
+  if (
+    mapPoint.x < 0 ||
+    mapPoint.y < 0 ||
+    mapPoint.x > imageSize.width ||
+    mapPoint.y > imageSize.height
+  ) {
+    return null;
+  }
+
+  return mapPoint;
+}
+
+function mapToScreen(
+  mapX: number,
+  mapY: number
+): Point {
+  const imageFromCenter = {
+    x:
+      mapX -
+      imageSize.width / 2,
+
+    y:
+      mapY -
+      imageSize.height / 2,
+  };
+
+  return {
+    x:
+      viewportSize.width / 2 +
+      pan.x +
+      imageFromCenter.x *
+        scale,
+
+    y:
+      viewportSize.height / 2 +
+      pan.y +
+      imageFromCenter.y *
+        scale,
+  };
+}
 
   function applyScale(
     requestedScale: number,
@@ -398,6 +492,38 @@ function MapViewport({
     });
   }, [imageUrl]);
 
+function handleContextMenu(
+  event:
+    React.MouseEvent<HTMLDivElement>
+) {
+  event.preventDefault();
+
+  const point =
+    screenToMap(
+      event.clientX,
+      event.clientY
+    );
+
+  if (!point) {
+    return;
+  }
+
+  console.log(
+    'Map coordinates:',
+    {
+      x:
+        Math.round(
+          point.x
+        ),
+
+      y:
+        Math.round(
+          point.y
+        ),
+    }
+  );
+}
+
   function handleWheel(
     event:
       React.WheelEvent<HTMLDivElement>
@@ -550,6 +676,9 @@ function MapViewport({
       }
       onPointerCancel={
         endDrag
+      }
+      onContextMenu={
+        handleContextMenu
       }
     >
       <img
