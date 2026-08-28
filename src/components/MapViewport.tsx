@@ -85,6 +85,18 @@ function MapViewport({
     setDragging,
   ] = useState(false);
 
+  const [
+    contextMenu,
+    setContextMenu,
+    ] = useState<{
+    screenX: number;
+    screenY: number;
+    mapX: number;
+    mapY: number;
+    } | null>(
+    null
+    );
+
   const minScale =
     imageSize.width > 0 &&
     imageSize.height > 0 &&
@@ -498,6 +510,13 @@ function handleContextMenu(
 ) {
   event.preventDefault();
 
+  const viewport =
+    viewportRef.current;
+
+  if (!viewport) {
+    return;
+  }
+
   const point =
     screenToMap(
       event.clientX,
@@ -508,20 +527,24 @@ function handleContextMenu(
     return;
   }
 
-  console.log(
-    'Map coordinates:',
-    {
-      x:
-        Math.round(
-          point.x
-        ),
+  const rect =
+    viewport.getBoundingClientRect();
 
-      y:
-        Math.round(
-          point.y
-        ),
-    }
-  );
+  setContextMenu({
+    screenX:
+      event.clientX -
+      rect.left,
+
+    screenY:
+      event.clientY -
+      rect.top,
+
+    mapX:
+      point.x,
+
+    mapY:
+      point.y,
+  });
 }
 
   function handleWheel(
@@ -529,6 +552,7 @@ function handleContextMenu(
       React.WheelEvent<HTMLDivElement>
   ) {
     event.preventDefault();
+    setContextMenu(null);
 
     const zoomFactor =
       event.deltaY < 0
@@ -557,6 +581,8 @@ function handleContextMenu(
     ) {
       return;
     }
+
+    setContextMenu(null);
 
     event.currentTarget
       .setPointerCapture(
@@ -707,6 +733,55 @@ function handleContextMenu(
           transform:
             `translate(-50%, -50%) scale(${scale})`,
         }}
+        {contextMenu && (
+  <div
+    className="map-context-menu"
+    style={{
+      left:
+        contextMenu.screenX,
+
+      top:
+        contextMenu.screenY,
+    }}
+    onPointerDown={(event) =>
+      event.stopPropagation()
+    }
+  >
+    <button
+      type="button"
+      onClick={() => {
+        console.log(
+          'New Feature at:',
+          contextMenu.mapX,
+          contextMenu.mapY
+        );
+
+        setContextMenu(
+          null
+        );
+      }}
+    >
+      New Feature...
+    </button>
+
+    <button
+      type="button"
+      onClick={() => {
+        console.log(
+          'New Location at:',
+          contextMenu.mapX,
+          contextMenu.mapY
+        );
+
+        setContextMenu(
+          null
+        );
+      }}
+    >
+      New Location...
+    </button>
+  </div>
+)}
       />      
     </div>
   );
