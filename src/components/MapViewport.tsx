@@ -708,32 +708,34 @@ function handleContextMenu(
       }
     >
       <img
-        className="map-viewport-image"
-        src={imageUrl}
-        alt={mapName}
-        draggable={false}
-        onLoad={(event) => {
-          setImageSize({
-            width:
-              event.currentTarget
-                .naturalWidth,
+  className="map-viewport-image"
+  src={imageUrl}
+  alt={mapName}
+  draggable={false}
+  onLoad={(event) => {
+    setImageSize({
+      width:
+        event.currentTarget
+          .naturalWidth,
 
-            height:
-              event.currentTarget
-                .naturalHeight,
-          });
-        }}
-        style={{
-          left:
-            `calc(50% + ${pan.x}px)`,
+      height:
+        event.currentTarget
+          .naturalHeight,
+    });
+  }}
+  style={{
+    left:
+      `calc(50% + ${pan.x}px)`,
 
-          top:
-            `calc(50% + ${pan.y}px)`,
+    top:
+      `calc(50% + ${pan.y}px)`,
 
-          transform:
-            `translate(-50%, -50%) scale(${scale})`,
-        }}
-        {contextMenu && (
+    transform:
+      `translate(-50%, -50%) scale(${scale})`,
+  }}
+/>
+
+{contextMenu && (
   <div
     className="map-context-menu"
     style={{
@@ -781,8 +783,7 @@ function handleContextMenu(
       New Location...
     </button>
   </div>
-)}
-      />      
+)}    
     </div>
   );
 }

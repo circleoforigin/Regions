@@ -151,6 +151,7 @@ function handleNewProject() {
 
       setActiveProject(project);
       setActiveMap(null);
+      setZoomControl(null);
       setProjectDirty(false);
 
       setNewProjectName('');
@@ -198,6 +199,10 @@ function clearActiveMapImage() {
   }
 
   setActiveMapImageUrl(
+    null
+  );
+
+  setZoomControl(
     null
   );
 }
