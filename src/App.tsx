@@ -9,6 +9,7 @@ import type {Map as RegionMap} from './models/Map';
 
 import { mapRepository} from './maps/MapRepository';
 import { projectRepository} from './projects/ProjectRepository';;
+import { hostedMapImageService} from './services/maps/HostedMapImageService';
 
 function App() {
   const [
@@ -24,6 +25,11 @@ function App() {
   ] = useState<RegionMap | null>(
     null
   );
+
+  const assignMapInputRef =
+    useRef<HTMLInputElement | null>(
+      null
+    );
 
   const [
     showNewProjectDialog,
@@ -370,6 +376,109 @@ async function handleDeleteSelectedProject(
   }
 }
 
+async function handleAssignMapFile(
+  file: File
+) {
+  if (!activeProject) {
+    return;
+  }
+
+  try {
+    const imageAsset =
+      await hostedMapImageService
+        .importLocalFile(
+          file
+        );
+
+    const now =
+      new Date();
+
+    let updatedMap: RegionMap;
+
+    if (activeMap) {
+      updatedMap = {
+        ...activeMap,
+
+        imageFileId:
+          imageAsset.id,
+
+        updatedAt:
+          now,
+      };
+    } else {
+      updatedMap = {
+        id:
+          crypto.randomUUID(),
+
+        name:
+          file.name.replace(
+            /\.[^/.]+$/,
+            ''
+          ),
+
+        imageFileId:
+          imageAsset.id,
+
+        features: [],
+
+        createdAt:
+          now,
+
+        updatedAt:
+          now,
+      };
+    }
+
+    await mapRepository.saveMap(
+      updatedMap
+    );
+
+    const isNewMap =
+      !activeProject.mapIds.includes(
+        updatedMap.id
+      );
+
+    const updatedProject: Project = {
+      ...activeProject,
+
+      mapIds:
+        isNewMap
+          ? [
+              ...activeProject.mapIds,
+              updatedMap.id,
+            ]
+          : activeProject.mapIds,
+
+      rootMapId:
+        activeProject.rootMapId ??
+        updatedMap.id,
+
+      activeMapId:
+        updatedMap.id,
+
+      updatedAt:
+        now,
+    };
+
+    setActiveMap(
+      updatedMap
+    );
+
+    setActiveProject(
+      updatedProject
+    );
+
+    setProjectDirty(
+      true
+    );
+  } catch (error) {
+    console.error(
+      'Unable to assign map:',
+      error
+    );
+  }
+}
+
 const deletableProjects =
   savedProjects.filter(
     (project) =>
@@ -601,6 +710,25 @@ const deletableProjects =
   </div>
 )}
 
+<input
+  ref={assignMapInputRef}
+  type="file"
+  accept="image/*"
+  hidden
+  onChange={(event) => {
+    const file =
+      event.target.files?.[0];
+
+    if (file) {
+      void handleAssignMapFile(
+        file
+      );
+    }
+
+    event.target.value = '';
+  }}
+/>
+
       <main className="regions-workspace">
   <section className="regions-map-workspace">
     {!activeProject ? (
@@ -621,9 +749,9 @@ const deletableProjects =
 
         <button
           type="button"
-          onClick={() => {
-            // Assign Map behavior comes next.
-          }}
+          onClick={() =>
+            assignMapInputRef.current?.click()
+          }
         >
           Assign Map
         </button>
@@ -636,9 +764,9 @@ const deletableProjects =
 
         <button
           type="button"
-          onClick={() => {
-            // Assign Map behavior comes next.
-          }}
+          onClick={() =>
+            assignMapInputRef.current?.click()
+          }
         >
           Assign Map
         </button>
