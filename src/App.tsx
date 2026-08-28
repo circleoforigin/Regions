@@ -4,6 +4,7 @@ import './App.css';
 
 import { modulePresence } from './host/ModulePresence';
 import MenuBar from './components/MenuBar'
+import MapViewport from './components/MapViewport';
 import type { Project} from './models/Project';
 import type {Map as RegionMap} from './models/Map';
 
@@ -37,6 +38,22 @@ function App() {
     useRef<HTMLInputElement | null>(
       null
     );
+
+    const [
+  zoomControl,
+  setZoomControl,
+] = useState<{
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled: boolean;
+  setZoom: (
+    value: number
+  ) => void;
+} | null>(
+  null
+);
 
   const [
     showNewProjectDialog,
@@ -844,12 +861,18 @@ const deletableProjects =
         </button>
       </div>
     ) : activeMapImageUrl ? (
-  <img
-    className="regions-map-image"
-    src={activeMapImageUrl}
-    alt={activeMap.name}
-  />
-) : (
+      <MapViewport
+  imageUrl={
+    activeMapImageUrl
+  }
+  mapName={
+    activeMap.name
+  }
+  onZoomStateChange={
+    setZoomControl
+  }
+/>
+    ) : (
   <div className="regions-empty-map">
     <h2>
       Loading Map...

@@ -12,6 +12,16 @@ interface MenuBarProps {
   onDeleteProject: () => void;
 
   projectName?: string;
+
+  zoomValue?: number;
+  zoomMin?: number;
+  zoomMax?: number;
+  zoomStep?: number;
+  zoomDisabled?: boolean;
+
+  onZoomChange?: (
+    value: number
+  ) => void;
 }
 
 function MenuBar({
@@ -21,6 +31,13 @@ function MenuBar({
   onCloseProject,
   onDeleteProject,
   projectName,
+
+  zoomValue,
+  zoomMin,
+  zoomMax,
+  zoomStep,
+  zoomDisabled,
+  onZoomChange,
 }: MenuBarProps) {
   const menuBarRef =
     useRef<HTMLDivElement>(null);
@@ -175,6 +192,42 @@ function MenuBar({
           </div>
         )}
       </div>
+
+      <div className="menu-bar-spacer" />
+
+{zoomValue !== undefined &&
+  zoomMin !== undefined &&
+  zoomMax !== undefined &&
+  zoomStep !== undefined &&
+  onZoomChange && (
+    <div className="menu-zoom-control">
+      <span>
+        −
+      </span>
+
+      <input
+        type="range"
+        min={zoomMin}
+        max={zoomMax}
+        step={zoomStep}
+        value={zoomValue}
+        disabled={
+          zoomDisabled
+        }
+        onChange={(event) =>
+          onZoomChange(
+            Number(
+              event.target.value
+            )
+          )
+        }
+      />
+
+      <span>
+        +
+      </span>
+    </div>
+  )}
     </div>
   );
 }
