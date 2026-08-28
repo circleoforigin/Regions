@@ -26,6 +26,13 @@ function App() {
     null
   );
 
+  const [
+    activeMapImageUrl,
+    setActiveMapImageUrl,
+  ] = useState<string | null>(
+    null
+  );
+
   const assignMapInputRef =
     useRef<HTMLInputElement | null>(
       null
@@ -166,6 +173,72 @@ function handleLoadProject() {
   });
 }
 
+function clearActiveMapImage() {
+  if (activeMapImageUrl) {
+    URL.revokeObjectURL(
+      activeMapImageUrl
+    );
+  }
+
+  setActiveMapImageUrl(
+    null
+  );
+}
+
+async function loadMapImage(
+  map: RegionMap
+) {
+  clearActiveMapImage();
+
+  if (!map.imageFileId) {
+    return;
+  }
+
+  try {
+    const imageAsset =
+      await hostedMapImageService
+        .loadAsset(
+          map.imageFileId
+        );
+
+    if (!imageAsset) {
+      console.error(
+        'Map image asset was not found.'
+      );
+
+      return;
+    }
+
+    const blob =
+      await hostedMapImageService
+        .readImage(
+          imageAsset
+        );
+
+    if (!blob) {
+      console.error(
+        'Map image file was not found.'
+      );
+
+      return;
+    }
+
+    const imageUrl =
+      URL.createObjectURL(
+        blob
+      );
+
+    setActiveMapImageUrl(
+      imageUrl
+    );
+  } catch (error) {
+    console.error(
+      'Unable to load map image:',
+      error
+    );
+  }
+}
+
 async function handleSelectProject(
   project: Project
 ) {
@@ -184,9 +257,12 @@ async function handleSelectProject(
           project.activeMapId
         );
 
-      setActiveMap(
-        map
-      );
+      setActiveMap(map);
+      clearActiveMapImage();
+
+      if (map) {
+        await loadMapImage(map);
+      }
     } catch (error) {
       console.error(
         'Unable to load active map:',
@@ -246,6 +322,8 @@ function closeProject() {
   setActiveMap(
     null
   );
+
+  clearActiveMapImage();
 
   setProjectDirty(false);
 }
@@ -460,17 +538,11 @@ async function handleAssignMapFile(
         now,
     };
 
-    setActiveMap(
-      updatedMap
-    );
+    setActiveMap(updatedMap);
+    await loadMapImage(updatedMap);
+    setActiveProject(updatedProject);
 
-    setActiveProject(
-      updatedProject
-    );
-
-    setProjectDirty(
-      true
-    );
+    setProjectDirty(true);
   } catch (error) {
     console.error(
       'Unable to assign map:',
@@ -771,17 +843,19 @@ const deletableProjects =
           Assign Map
         </button>
       </div>
-    ) : (
-      <div className="regions-empty-map">
-        <h2>
-          {activeMap.name}
-        </h2>
-
-        <p>
-          Map image rendering comes next.
-        </p>
-      </div>
-    )}
+    ) : activeMapImageUrl ? (
+  <img
+    className="regions-map-image"
+    src={activeMapImageUrl}
+    alt={activeMap.name}
+  />
+) : (
+  <div className="regions-empty-map">
+    <h2>
+      Loading Map...
+    </h2>
+  </div>
+)}
   </section>
 </main>
     </div>

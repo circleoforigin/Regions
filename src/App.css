@@ -144,6 +144,15 @@
   background: #181818;
 }
 
+.regions-map-image {
+  width: 100%;
+  height: 100%;
+
+  object-fit: contain;
+
+  display: block;
+}
+
 .regions-empty-map {
   text-align: center;
 }
