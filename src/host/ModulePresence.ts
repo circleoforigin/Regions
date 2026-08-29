@@ -111,7 +111,12 @@ export class ModulePresenceStore {
             'regions.location.entered',
           ],
 
-          actions: [],
+          actions: [
+            'project.status',
+            'project.load',
+            'project.save',
+            'project.close',
+          ],
         },
       }
     );

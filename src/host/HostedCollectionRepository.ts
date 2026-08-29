@@ -14,6 +14,16 @@ export class HostedCollectionRepository {
     );
   }
 
+  async load<T>(
+    collection: string,
+    key: string
+    ): Promise<T | null> {
+    return moduleEventBus.request<T | null>('storage.load', {
+        collection,
+        key,
+    });
+  }
+
   async save<T>(
     collection: string,
     key: string,

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import './App.css';
 
 import { modulePresence } from './host/ModulePresence';
+import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
 import type { Project} from './models/Project';
@@ -105,7 +106,112 @@ const pendingProjectActionRef =
     };
   }, []);
 
-    function openNewProjectDialog() {
+  useEffect(() => {
+  const unregisterStatus =
+    moduleEventBus.registerRequestHandler(
+      'project.status',
+      () => ({
+        projectId: activeProject?.id,
+        projectName: activeProject?.name,
+        dirty: projectDirty,
+      })
+    );
+
+  const unregisterLoad =
+    moduleEventBus.registerRequestHandler(
+      'project.load',
+      async (request) => {
+        const payload = request.payload as
+          | { projectId?: string }
+          | undefined;
+
+        if (!payload?.projectId) {
+          throw new Error('project.load requires a projectId.');
+        }
+
+        const project =
+          await projectRepository.loadProject(payload.projectId);
+
+        if (!project) {
+          throw new Error(
+            `Project "${payload.projectId}" was not found.`
+          );
+        }
+
+        await handleSelectProject(project);
+
+        return {
+          loaded: true,
+          projectId: project.id,
+          projectName: project.name,
+        };
+      }
+    );
+
+  const unregisterSave =
+  moduleEventBus.registerRequestHandler(
+    'project.save',
+    async () => {
+      if (!activeProject) {
+        return {
+          saved: false,
+          projectId: undefined,
+        };
+      }
+
+      const saved = await saveActiveProject();
+
+      if (!saved) {
+        throw new Error('Unable to save the active project.');
+      }
+
+      return {
+        saved: true,
+        projectId: activeProject.id,
+      };
+    }
+  );
+  
+  const unregisterClose =
+    moduleEventBus.registerRequestHandler(
+      'project.close',
+      (request) => {
+        const payload = request.payload as
+          | { discardChanges?: boolean }
+          | undefined;
+
+        if (projectDirty && !payload?.discardChanges) {
+          throw new Error('Project has unsaved changes.');
+        }
+
+        closeProject();
+
+        return {
+          closed: true,
+        };
+      }
+    );
+
+  return () => {
+    unregisterStatus();
+    unregisterLoad();
+    unregisterSave();
+    unregisterClose();
+  };
+}, [activeProject, projectDirty]);
+
+  useEffect(() => {
+  return moduleEventBus.registerRequestHandler(
+    'project.status',
+    () => ({
+      projectId: activeProject?.id,
+      projectName: activeProject?.name,
+      dirty: projectDirty,
+    })
+  );
+}, [activeProject, projectDirty]);
+
+function openNewProjectDialog() {
   setNewProjectName('');
   setShowNewProjectDialog(true);
 }

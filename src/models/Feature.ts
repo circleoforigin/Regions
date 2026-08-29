@@ -3,6 +3,11 @@ export interface FeaturePosition {
   y: number;
 }
 
+export interface FeatureNoteLink {
+  noteId: string;
+  sectionId: string;
+}
+
 export interface Feature {
   id: string;
   name: string;
@@ -10,7 +15,9 @@ export interface Feature {
   position: FeaturePosition;
 
   type: string;
-  shortDescription: string;
+  description?: string;
+
+  noteLinks: FeatureNoteLink[];
 
   targetMapId?: string;
 }

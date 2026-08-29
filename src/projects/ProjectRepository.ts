@@ -22,6 +22,13 @@ export class ProjectRepository {
       : [];
   }
 
+  async loadProject(projectId: string): Promise<Project | null> {
+    return hostedCollectionRepository.load<Project>(
+        PROJECTS_COLLECTION,
+        projectId
+    );
+  }
+
   async saveProject(
     project: Project
   ): Promise<void> {
