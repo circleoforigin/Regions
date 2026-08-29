@@ -17,6 +17,11 @@ interface Size {
 interface MapViewportProps {
   imageUrl: string;
   mapName: string;
+  imageRegistration?: {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+};
 
   onZoomStateChange?: (
     state: {
@@ -35,9 +40,16 @@ interface MapViewportProps {
 function MapViewport({
   imageUrl,
   mapName,
+  imageRegistration,
   onZoomStateChange,
 }: MapViewportProps) {
-  const viewportRef =
+  const registration = imageRegistration ?? {
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+};
+  
+    const viewportRef =
     useRef<HTMLDivElement | null>(
       null
     );
@@ -97,16 +109,20 @@ function MapViewport({
     null
     );
 
+    const registeredWidth =
+        imageSize.width * registration.scale;
+
+    const registeredHeight =
+        imageSize.height * registration.scale;
+
   const minScale =
     imageSize.width > 0 &&
     imageSize.height > 0 &&
     viewportSize.width > 0 &&
     viewportSize.height > 0
       ? Math.max(
-          viewportSize.width /
-            imageSize.width,
-          viewportSize.height /
-            imageSize.height
+          viewportSize.width / registeredWidth,
+          viewportSize.height / registeredHeight
         )
       : 1;
 
@@ -139,13 +155,9 @@ function MapViewport({
 
   function clampPan( candidate: Point, candidateScale = scale
   ): Point {
-    const scaledWidth =
-      imageSize.width *
-      candidateScale;
+    const scaledWidth = registeredWidth * candidateScale;
 
-    const scaledHeight =
-      imageSize.height *
-      candidateScale;
+    const scaledHeight = registeredHeight * candidateScale;
 
     const maxX =
       Math.max(
@@ -724,15 +736,15 @@ function handleContextMenu(
     });
   }}
   style={{
-    left:
-      `calc(50% + ${pan.x}px)`,
+  left:
+    `calc(50% + ${pan.x + registration.offsetX * scale}px)`,
 
-    top:
-      `calc(50% + ${pan.y}px)`,
+  top:
+    `calc(50% + ${pan.y + registration.offsetY * scale}px)`,
 
-    transform:
-      `translate(-50%, -50%) scale(${scale})`,
-  }}
+  transform:
+    `translate(-50%, -50%) scale(${scale * registration.scale})`,
+}}
 />
 
 {contextMenu && (

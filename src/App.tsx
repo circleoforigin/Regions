@@ -992,16 +992,11 @@ onZoomChange={
       </div>
     ) : activeMapImageUrl ? (
       <MapViewport
-  imageUrl={
-    activeMapImageUrl
-  }
-  mapName={
-    activeMap.name
-  }
-  onZoomStateChange={
-    setZoomControl
-  }
-/>
+        imageUrl={activeMapImageUrl}
+        mapName={activeMap.name}
+        imageRegistration={activeMap.imageRegistration}
+        onZoomStateChange={setZoomControl}
+      />
     ) : (
   <div className="regions-empty-map">
     <h2>
