@@ -612,9 +612,15 @@ async function handleAssignMapFile(
           ),
 
         imageFileId:
-          imageAsset.id,
+  imageAsset.id,
 
-        features: [],
+imageRegistration: {
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+},
+
+features: [],
 
         createdAt:
           now,
