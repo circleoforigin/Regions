@@ -171,7 +171,7 @@ const pendingProjectActionRef =
       };
     }
   );
-  
+
   const unregisterClose =
     moduleEventBus.registerRequestHandler(
       'project.close',
@@ -198,18 +198,7 @@ const pendingProjectActionRef =
     unregisterSave();
     unregisterClose();
   };
-}, [activeProject, projectDirty]);
-
-  useEffect(() => {
-  return moduleEventBus.registerRequestHandler(
-    'project.status',
-    () => ({
-      projectId: activeProject?.id,
-      projectName: activeProject?.name,
-      dirty: projectDirty,
-    })
-  );
-}, [activeProject, projectDirty]);
+}, [activeProject, projectDirty]);  
 
 function openNewProjectDialog() {
   setNewProjectName('');
