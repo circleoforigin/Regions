@@ -20,4 +20,5 @@ export interface Feature {
   noteLinks: FeatureNoteLink[];
 
   targetMapId?: string;
+  targetFeatureId?: string;
 }

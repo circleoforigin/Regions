@@ -28,6 +28,11 @@ onNewFeatureRequest?: (
   y: number
 ) => void;
 
+onNewLocationRequest?: (
+  x: number,
+  y: number
+) => void;
+
   onZoomStateChange?: (
     state: {
       value: number;
@@ -49,6 +54,7 @@ function MapViewport({
   imageRegistration,
   features,
   onNewFeatureRequest,
+  onNewLocationRequest,
   onZoomStateChange,
 }: MapViewportProps) {
   const { state, dispatch } = useRegionsState();
@@ -737,8 +743,7 @@ function handleContextMenu(
     <button
       type="button"
       onClick={() => {
-  console.log(
-    'New Location at:',
+  onNewLocationRequest?.(
     contextMenu.mapX,
     contextMenu.mapY
   );

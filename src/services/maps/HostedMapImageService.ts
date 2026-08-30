@@ -9,6 +9,10 @@ import {
 import {
   hostedFileRepository,
 } from '../../host/HostedFileRepository';
+import {
+  DEFAULT_MAP_IMAGE_ID,
+  DEFAULT_MAP_IMAGE_URL,
+} from '../../maps/DefaultMap';
 
 const MAP_IMAGE_COLLECTION =
   'mapImages';
@@ -74,6 +78,19 @@ export class HostedMapImageService {
   async loadAsset(
     assetId: string
   ): Promise<MapImageAsset | null> {
+    if (assetId === DEFAULT_MAP_IMAGE_ID) {
+      const createdAt = new Date(0);
+
+      return {
+        id: DEFAULT_MAP_IMAGE_ID,
+        originalFileName: 'default-map.svg',
+        mimeType: 'image/svg+xml',
+        source: { path: DEFAULT_MAP_IMAGE_URL },
+        createdAt,
+        updatedAt: createdAt,
+      };
+    }
+
     const assets =
       await hostedCollectionRepository
         .loadAll<MapImageAsset>(
@@ -91,6 +108,12 @@ export class HostedMapImageService {
   async readImage(
     asset: MapImageAsset
   ): Promise<Blob | null> {
+    if (asset.id === DEFAULT_MAP_IMAGE_ID) {
+      const response = await fetch(DEFAULT_MAP_IMAGE_URL);
+      if (!response.ok) return null;
+      return response.blob();
+    }
+
     return hostedFileRepository.readBlob(
       IMAGE_FOLDER,
       asset.source.path,

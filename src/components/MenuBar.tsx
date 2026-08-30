@@ -10,10 +10,12 @@ interface MenuBarProps {
   onSaveProject: () => void;
   onCloseProject: () => void;
   onDeleteProject: () => void;
+  onAssignMapImage: () => void;
   autoSave: boolean;
   onAutoSaveChange: (enabled: boolean) => void;
 
   projectName?: string;
+  mapActive: boolean;
 
   zoomValue?: number;
   zoomMin?: number;
@@ -32,9 +34,11 @@ function MenuBar({
   onSaveProject,
   onCloseProject,
   onDeleteProject,
+  onAssignMapImage,
   autoSave,
   onAutoSaveChange,
   projectName,
+  mapActive,
 
   zoomValue,
   zoomMin,
@@ -53,9 +57,10 @@ function MenuBar({
   ] = useState(false);
 
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [mapMenuOpen, setMapMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (!fileMenuOpen && !settingsMenuOpen) return;
+    if (!fileMenuOpen && !mapMenuOpen && !settingsMenuOpen) return;
 
     function handleOutsidePointerDown(
       event: PointerEvent
@@ -70,6 +75,7 @@ function MenuBar({
         )
       ) {
         setFileMenuOpen(false);
+        setMapMenuOpen(false);
         setSettingsMenuOpen(false);
       }
     }
@@ -85,10 +91,11 @@ function MenuBar({
         handleOutsidePointerDown
       );
     };
-  }, [fileMenuOpen, settingsMenuOpen]);
+  }, [fileMenuOpen, mapMenuOpen, settingsMenuOpen]);
 
   function closeMenus() {
     setFileMenuOpen(false);
+    setMapMenuOpen(false);
     setSettingsMenuOpen(false);
   }
 
@@ -128,6 +135,7 @@ function MenuBar({
           className="menu-item"
           onClick={() => {
             setFileMenuOpen((open) => !open);
+            setMapMenuOpen(false);
             setSettingsMenuOpen(false);
           }}
         >
@@ -199,9 +207,40 @@ function MenuBar({
         <button
           type="button"
           className="menu-item"
+          disabled={!mapActive}
+          onClick={() => {
+            setMapMenuOpen((open) => !open);
+            setFileMenuOpen(false);
+            setSettingsMenuOpen(false);
+          }}
+        >
+          Map
+        </button>
+
+        {mapMenuOpen && (
+          <div className="dropdown-menu">
+            <button
+              type="button"
+              className="dropdown-item"
+              onClick={() => {
+                closeMenus();
+                onAssignMapImage();
+              }}
+            >
+              Assign Map Image...
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="menu-group">
+        <button
+          type="button"
+          className="menu-item"
           onClick={() => {
             setSettingsMenuOpen((open) => !open);
             setFileMenuOpen(false);
+            setMapMenuOpen(false);
           }}
         >
           Settings

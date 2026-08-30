@@ -12,6 +12,11 @@ import type { Feature } from './models/Feature';
 import { featureRepository } from './features/FeatureRepository';
 
 import { mapRepository} from './maps/MapRepository';
+import {
+  createDefaultMap,
+  DEFAULT_MAP_HEIGHT,
+  DEFAULT_MAP_WIDTH,
+} from './maps/DefaultMap';
 import { projectRepository} from './projects/ProjectRepository';;
 import {
   hostedMapImageService,
@@ -130,6 +135,19 @@ const pendingProjectActionRef =
 
   const [newFeaturePosition, setNewFeaturePosition] =
     useState<{ x: number; y: number } | null>(null);
+
+  const [showNewLocationDialog, setShowNewLocationDialog] =
+    useState(false);
+
+  const [newLocationName, setNewLocationName] = useState('');
+
+  const [newLocationPosition, setNewLocationPosition] =
+    useState<{ x: number; y: number } | null>(null);
+
+  const [pendingMaps, setPendingMaps] = useState<RegionMap[]>([]);
+
+  const [pendingFeatures, setPendingFeatures] =
+    useState<Feature[]>([]);
 
   useEffect(() => {
     if (activeProjectId) {
@@ -289,6 +307,10 @@ function handleNewProject() {
     const now =
       new Date();
 
+    const rootMap = createDefaultMap({
+      id: crypto.randomUUID(),
+      now,
+    });
     const project: Project = {
       id:
         crypto.randomUUID(),
@@ -296,7 +318,11 @@ function handleNewProject() {
       name:
         trimmedName,
 
-      mapIds: [],
+      mapIds: [rootMap.id],
+
+      rootMapId: rootMap.id,
+
+      activeMapId: rootMap.id,
 
       createdAt:
         now,
@@ -306,15 +332,19 @@ function handleNewProject() {
     };
 
     try {
+      await mapRepository.saveMap(rootMap);
       await projectRepository
         .saveProject(
           project
         );
 
       setActiveProject(project);
-      setActiveMap(null);
+      setActiveMap(rootMap);
       setActiveFeatures([]);
+      setPendingMaps([]);
+      setPendingFeatures([]);
       setZoomControl(null);
+      await loadMapImage(rootMap);
       resetProjectDirty();
 
       setNewProjectName('');
@@ -435,6 +465,8 @@ function normalizeMap(map: RegionMap): RegionMap {
 }
 
 async function handleSelectProject(project: Project) {
+  setPendingMaps([]);
+  setPendingFeatures([]);
   setActiveProject(
     project
   );
@@ -486,6 +518,8 @@ async function saveActiveProject(): Promise<boolean> {
   const project = activeProject;
   const map = activeMap;
   const features = activeFeatures;
+  const maps = pendingMaps;
+  const featuresToSave = pendingFeatures;
   const generation = dirtyGenerationRef.current;
   const savedAt = new Date();
   const updatedProject: Project = {
@@ -507,11 +541,25 @@ async function saveActiveProject(): Promise<boolean> {
         await mapRepository.saveMap(updatedMap);
       }
 
+      await Promise.all(
+        featuresToSave.map((feature) => {
+          return featureRepository.saveFeature(feature);
+        })
+      );
+
+      await Promise.all(
+        maps.map((pendingMap) => {
+          return mapRepository.saveMap(pendingMap);
+        })
+      );
+
       await projectRepository.saveProject(updatedProject);
 
       if (dirtyGenerationRef.current === generation) {
         if (updatedMap) setActiveMap(updatedMap);
         setActiveProject(updatedProject);
+        setPendingMaps([]);
+        setPendingFeatures([]);
         setProjectDirty(false);
       } else {
         setSaveCompletionRevision((current) => current + 1);
@@ -559,6 +607,10 @@ function closeProject() {
 
   setActiveFeatures([]);
 
+  setPendingMaps([]);
+
+  setPendingFeatures([]);
+
   clearActiveMapImage();
 
   resetProjectDirty();
@@ -597,6 +649,8 @@ async function finishPendingProjectAction(
       return;
     }
   } else {
+    setPendingMaps([]);
+    setPendingFeatures([]);
     resetProjectDirty();
   }
 
@@ -728,6 +782,70 @@ function handleCreateFeature() {
   setNewFeatureName('');
 }
 
+function handleNewLocationRequest(x: number, y: number) {
+  setNewLocationPosition({ x, y });
+  setNewLocationName('');
+  setShowNewLocationDialog(true);
+}
+
+function handleCreateLocation() {
+  if (!activeProject || !activeMap || !newLocationPosition) return;
+
+  const name = newLocationName.trim();
+  if (!name) return;
+
+  const now = new Date();
+  const featureAId = crypto.randomUUID();
+  const featureBId = crypto.randomUUID();
+  const childMap = createDefaultMap({
+    id: crypto.randomUUID(),
+    now,
+    parentMapId: activeMap.id,
+  });
+  const feature: Feature = {
+    id: featureAId,
+    name,
+    position: newLocationPosition,
+    type: 'location',
+    noteLinks: [],
+    targetMapId: childMap.id,
+    targetFeatureId: featureBId,
+  };
+  const returnFeature: Feature = {
+    id: featureBId,
+    name: 'Return',
+    position: {
+      x: DEFAULT_MAP_WIDTH / 2,
+      y: DEFAULT_MAP_HEIGHT / 2,
+    },
+    type: 'location',
+    noteLinks: [],
+    targetMapId: activeMap.id,
+    targetFeatureId: featureAId,
+  };
+
+  childMap.featureIds = [returnFeature.id];
+
+  setActiveFeatures((current) => [...current, feature]);
+  setActiveMap({
+    ...activeMap,
+    featureIds: [...activeMap.featureIds, feature.id],
+    updatedAt: now,
+  });
+  setActiveProject({
+    ...activeProject,
+    mapIds: [...activeProject.mapIds, childMap.id],
+    updatedAt: now,
+  });
+  setPendingMaps((current) => [...current, childMap]);
+  setPendingFeatures((current) => [...current, returnFeature]);
+
+  markProjectDirty();
+  setShowNewLocationDialog(false);
+  setNewLocationPosition(null);
+  setNewLocationName('');
+}
+
 async function handleAssignMapFile(
   file: File
 ) {
@@ -853,11 +971,13 @@ const deletableProjects =
   onDeleteProject={() =>
     void handleDeleteProject()
   }
+  onAssignMapImage={() => assignMapInputRef.current?.click()}
   autoSave={autoSave}
   onAutoSaveChange={setAutoSave}
   projectName={
     activeProject?.name
   }
+  mapActive={activeMap !== null}
   zoomValue={
     zoomControl?.value
   }
@@ -963,6 +1083,47 @@ const deletableProjects =
           type="button"
           disabled={!newFeatureName.trim()}
           onClick={handleCreateFeature}
+        >
+          Create
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showNewLocationDialog && (
+  <div className="dialog-backdrop">
+    <div className="dialog">
+      <h2>New Location</h2>
+
+      <input
+        type="text"
+        placeholder="Location name"
+        value={newLocationName}
+        onChange={(event) => {
+          setNewLocationName(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') handleCreateLocation();
+        }}
+        autoFocus
+      />
+
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          onClick={() => {
+            setShowNewLocationDialog(false);
+            setNewLocationPosition(null);
+          }}
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          disabled={!newLocationName.trim()}
+          onClick={handleCreateLocation}
         >
           Create
         </button>
@@ -1161,30 +1322,11 @@ const deletableProjects =
         <h2>
           No Map Selected
         </h2>
-
-        <button
-          type="button"
-          onClick={() =>
-            assignMapInputRef.current?.click()
-          }
-        >
-          Assign Map
-        </button>
       </div>
     ) : !activeMap.imageFileId ? (
       <div className="regions-empty-map">
-        <h2>
-          No Map Selected
-        </h2>
-
-        <button
-          type="button"
-          onClick={() =>
-            assignMapInputRef.current?.click()
-          }
-        >
-          Assign Map
-        </button>
+        <h2>No Map Image</h2>
+        <p>Use Map → Assign Map Image...</p>
       </div>
     ) : activeMapImageUrl ? (
       <MapViewport
@@ -1193,6 +1335,7 @@ const deletableProjects =
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
         onNewFeatureRequest={handleNewFeatureRequest}
+        onNewLocationRequest={handleNewLocationRequest}
         onZoomStateChange={setZoomControl}
       />
     ) : (
