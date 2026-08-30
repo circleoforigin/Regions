@@ -169,6 +169,11 @@
   cursor: default;
 }
 
+.dropdown-check {
+  display: inline-block;
+  width: 18px;
+}
+
 .dropdown-separator {
   height: 1px;
   margin: 4px 8px;

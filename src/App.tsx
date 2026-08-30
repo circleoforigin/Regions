@@ -93,6 +93,21 @@ const [
   setProjectDirty,
 ] = useState(false);
 
+const [autoSave, setAutoSave] = useState(false);
+
+const [dirtyRevision, setDirtyRevision] = useState(0);
+
+const [saveCompletionRevision, setSaveCompletionRevision] =
+  useState(0);
+
+const dirtyGenerationRef = useRef(0);
+
+const saveInProgressRef = useRef<Promise<boolean> | null>(null);
+
+const saveActiveProjectRef = useRef<() => Promise<boolean>>(
+  async () => true
+);
+
 const [
   showUnsavedChangesDialog,
   setShowUnsavedChangesDialog,
@@ -241,6 +256,17 @@ const pendingProjectActionRef =
   };
 }, [activeProject, projectDirty]);  
 
+function markProjectDirty() {
+  dirtyGenerationRef.current += 1;
+  setProjectDirty(true);
+  setDirtyRevision((current) => current + 1);
+}
+
+function resetProjectDirty() {
+  dirtyGenerationRef.current += 1;
+  setProjectDirty(false);
+}
+
 function openNewProjectDialog() {
   setNewProjectName('');
   setShowNewProjectDialog(true);
@@ -289,7 +315,7 @@ function handleNewProject() {
       setActiveMap(null);
       setActiveFeatures([]);
       setZoomControl(null);
-      setProjectDirty(false);
+      resetProjectDirty();
 
       setNewProjectName('');
       setShowNewProjectDialog(false);
@@ -446,7 +472,7 @@ async function handleSelectProject(project: Project) {
     }
   }
 
-  setProjectDirty(false);
+  resetProjectDirty();
 
   setShowLoadProjectDialog(
     false
@@ -454,41 +480,69 @@ async function handleSelectProject(project: Project) {
 }
 
 async function saveActiveProject(): Promise<boolean> {
-  if (!activeProject) {
-    return true;
-  }
+  if (!activeProject) return true;
+  if (saveInProgressRef.current) return saveInProgressRef.current;
 
+  const project = activeProject;
+  const map = activeMap;
+  const features = activeFeatures;
+  const generation = dirtyGenerationRef.current;
+  const savedAt = new Date();
   const updatedProject: Project = {
-    ...activeProject,
-    updatedAt: new Date(),
+    ...project,
+    updatedAt: savedAt,
   };
+  const updatedMap = map
+    ? normalizeMap({ ...map, updatedAt: savedAt })
+    : null;
 
-  try {
-  if (activeMap) {
-    const updatedMap = normalizeMap({
-      ...activeMap,
-      updatedAt: new Date(),
-    });
+  const save = (async () => {
+    try {
+      if (updatedMap) {
+        await Promise.all(
+          features.map((feature) => {
+            return featureRepository.saveFeature(feature);
+          })
+        );
+        await mapRepository.saveMap(updatedMap);
+      }
 
-    await Promise.all(
-      activeFeatures.map((feature) => {
-        return featureRepository.saveFeature(feature);
-      })
-    );
-    await mapRepository.saveMap(updatedMap);
-    setActiveMap(updatedMap);
-  }
+      await projectRepository.saveProject(updatedProject);
 
-  await projectRepository.saveProject(updatedProject);
-  setActiveProject(updatedProject);
-  setProjectDirty(false);
+      if (dirtyGenerationRef.current === generation) {
+        if (updatedMap) setActiveMap(updatedMap);
+        setActiveProject(updatedProject);
+        setProjectDirty(false);
+      } else {
+        setSaveCompletionRevision((current) => current + 1);
+      }
 
-  return true;
-} catch (error) {
-  console.error('Unable to save project:', error);
-  return false;
+      return true;
+    } catch (error) {
+      console.error('Unable to save project:', error);
+      return false;
+    } finally {
+      saveInProgressRef.current = null;
+    }
+  })();
+
+  saveInProgressRef.current = save;
+  return save;
 }
-}
+
+saveActiveProjectRef.current = saveActiveProject;
+
+useEffect(() => {
+  if (!projectDirty || !autoSave) return;
+  if (saveInProgressRef.current) return;
+
+  void saveActiveProjectRef.current();
+}, [
+  autoSave,
+  projectDirty,
+  dirtyRevision,
+  saveCompletionRevision,
+]);
 
 function handleSaveProject() {
   void saveActiveProject();
@@ -507,7 +561,7 @@ function closeProject() {
 
   clearActiveMapImage();
 
-  setProjectDirty(false);
+  resetProjectDirty();
 }
 
 function handleCloseProject() {
@@ -543,7 +597,7 @@ async function finishPendingProjectAction(
       return;
     }
   } else {
-    setProjectDirty(false);
+    resetProjectDirty();
   }
 
   const action =
@@ -668,7 +722,7 @@ function handleCreateFeature() {
     updatedAt: new Date(),
   });
 
-  setProjectDirty(true);
+  markProjectDirty();
   setShowNewFeatureDialog(false);
   setNewFeaturePosition(null);
   setNewFeatureName('');
@@ -733,10 +787,6 @@ featureIds: [],
       };
     }
 
-    await mapRepository.saveMap(
-      updatedMap
-    );
-
     const isNewMap =
       !activeProject.mapIds.includes(
         updatedMap.id
@@ -769,7 +819,7 @@ featureIds: [],
     await loadMapImage(updatedMap);
     setActiveProject(updatedProject);
 
-    setProjectDirty(true);
+    markProjectDirty();
   } catch (error) {
     console.error(
       'Unable to assign map:',
@@ -803,6 +853,8 @@ const deletableProjects =
   onDeleteProject={() =>
     void handleDeleteProject()
   }
+  autoSave={autoSave}
+  onAutoSaveChange={setAutoSave}
   projectName={
     activeProject?.name
   }

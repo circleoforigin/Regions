@@ -10,6 +10,8 @@ interface MenuBarProps {
   onSaveProject: () => void;
   onCloseProject: () => void;
   onDeleteProject: () => void;
+  autoSave: boolean;
+  onAutoSaveChange: (enabled: boolean) => void;
 
   projectName?: string;
 
@@ -30,6 +32,8 @@ function MenuBar({
   onSaveProject,
   onCloseProject,
   onDeleteProject,
+  autoSave,
+  onAutoSaveChange,
   projectName,
 
   zoomValue,
@@ -48,10 +52,10 @@ function MenuBar({
     setFileMenuOpen,
   ] = useState(false);
 
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+
   useEffect(() => {
-    if (!fileMenuOpen) {
-      return;
-    }
+    if (!fileMenuOpen && !settingsMenuOpen) return;
 
     function handleOutsidePointerDown(
       event: PointerEvent
@@ -65,9 +69,8 @@ function MenuBar({
           target
         )
       ) {
-        setFileMenuOpen(
-          false
-        );
+        setFileMenuOpen(false);
+        setSettingsMenuOpen(false);
       }
     }
 
@@ -82,12 +85,11 @@ function MenuBar({
         handleOutsidePointerDown
       );
     };
-  }, [fileMenuOpen]);
+  }, [fileMenuOpen, settingsMenuOpen]);
 
   function closeMenus() {
-    setFileMenuOpen(
-      false
-    );
+    setFileMenuOpen(false);
+    setSettingsMenuOpen(false);
   }
 
   function handleNewProject() {
@@ -125,9 +127,8 @@ function MenuBar({
           type="button"
           className="menu-item"
           onClick={() => {
-            setFileMenuOpen(
-              (open) => !open
-            );
+            setFileMenuOpen((open) => !open);
+            setSettingsMenuOpen(false);
           }}
         >
           Project
@@ -189,6 +190,39 @@ function MenuBar({
               }
             >
               Delete Project...
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="menu-group">
+        <button
+          type="button"
+          className="menu-item"
+          onClick={() => {
+            setSettingsMenuOpen((open) => !open);
+            setFileMenuOpen(false);
+          }}
+        >
+          Settings
+        </button>
+
+        {settingsMenuOpen && (
+          <div className="dropdown-menu">
+            <button
+              type="button"
+              className="dropdown-item"
+              role="menuitemcheckbox"
+              aria-checked={autoSave}
+              onClick={() => {
+                onAutoSaveChange(!autoSave);
+                closeMenus();
+              }}
+            >
+              <span className="dropdown-check">
+                {autoSave ? '✓' : ''}
+              </span>
+              Autosave
             </button>
           </div>
         )}
