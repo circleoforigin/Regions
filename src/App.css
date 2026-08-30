@@ -98,6 +98,25 @@
   width: 150px;
 }
 
+.menu-fit-map {
+  padding: 2px 7px;
+  border: 1px solid #454545;
+  background: #292929;
+  color: #eeeeee;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.menu-fit-map:hover:not(:disabled) {
+  background: #3a3a3a;
+}
+
+.menu-fit-map:disabled {
+  color: #777777;
+  cursor: default;
+}
+
 /* =========================
    DROPDOWN
    ========================= */

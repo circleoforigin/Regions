@@ -53,6 +53,7 @@ function App() {
   setZoom: (
     value: number
   ) => void;
+  fitMap: () => void;
 } | null>(
   null
 );
@@ -749,32 +750,29 @@ const deletableProjects =
     void handleDeleteProject()
   }
   projectName={
-  activeProject?.name
-}
-
-zoomValue={
-  zoomControl?.value
-}
-
-zoomMin={
-  zoomControl?.min
-}
-
-zoomMax={
-  zoomControl?.max
-}
-
-zoomStep={
-  zoomControl?.step
-}
-
-zoomDisabled={
-  zoomControl?.disabled
-}
-
-onZoomChange={
-  zoomControl?.setZoom
-}
+    activeProject?.name
+  }
+  zoomValue={
+    zoomControl?.value
+  }
+  zoomMin={
+    zoomControl?.min
+  }
+  zoomMax={
+    zoomControl?.max
+  }
+  zoomStep={
+    zoomControl?.step
+  }
+  zoomDisabled={
+    zoomControl?.disabled
+  }
+  onZoomChange={
+    zoomControl?.setZoom
+  }
+  onFitMap={
+    zoomControl?.fitMap
+  }
 />
 
 {showUnsavedChangesDialog && (

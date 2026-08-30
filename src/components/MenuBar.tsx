@@ -18,10 +18,10 @@ interface MenuBarProps {
   zoomMax?: number;
   zoomStep?: number;
   zoomDisabled?: boolean;
-
   onZoomChange?: (
     value: number
   ) => void;
+  onFitMap?: () => void;
 }
 
 function MenuBar({
@@ -38,6 +38,7 @@ function MenuBar({
   zoomStep,
   zoomDisabled,
   onZoomChange,
+  onFitMap,
 }: MenuBarProps) {
   const menuBarRef =
     useRef<HTMLDivElement>(null);
@@ -232,6 +233,14 @@ function MenuBar({
       <span>
         +
       </span>
+      <button
+        type="button"
+        className="menu-fit-map"
+        disabled={zoomDisabled}
+        onClick={onFitMap}
+        >
+        Fit
+      </button>
     </div>
   )}
     </div>

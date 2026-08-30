@@ -37,6 +37,7 @@ onNewFeatureRequest?: (
       setZoom: (
         value: number
       ) => void;
+      fitMap: () => void;
     }
   ) => void;
 }
@@ -330,6 +331,14 @@ function mapToScreen(
     );
   }
 
+  function fitMap() {
+    setScale(minScale);
+    setPan({
+        x: 0,
+        y: 0,
+    });
+  }
+
   useEffect(() => {
   onZoomStateChange?.({
     value:
@@ -356,6 +365,8 @@ function mapToScreen(
 
     setZoom:
       applyScale,
+
+    fitMap,
   });
 }, [
   scale,
@@ -752,16 +763,13 @@ function handleContextMenu(
     <button
       type="button"
       onClick={() => {
-        console.log(
-          'New Feature at:',
-          contextMenu.mapX,
-          contextMenu.mapY
-        );
+  onNewFeatureRequest?.(
+    contextMenu.mapX,
+    contextMenu.mapY
+  );
 
-        setContextMenu(
-          null
-        );
-      }}
+  setContextMenu(null);
+}}
     >
       New Feature...
     </button>
@@ -769,13 +777,14 @@ function handleContextMenu(
     <button
       type="button"
       onClick={() => {
-        onNewFeatureRequest?.(
-  contextMenu.mapX,
-  contextMenu.mapY
-);
+  console.log(
+    'New Location at:',
+    contextMenu.mapX,
+    contextMenu.mapY
+  );
 
-setContextMenu(null);
-      }}
+  setContextMenu(null);
+}}
     >
       New Location...
     </button>
