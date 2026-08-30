@@ -12,6 +12,13 @@ interface Size {
   height: number;
 }
 
+export interface FeaturePopupAction {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  onInvoke: () => void;
+}
+
 interface MapViewportProps {
   imageUrl: string;
   mapName: string;
@@ -27,6 +34,7 @@ focusFeatureId?: string | null;
 onFocusFeatureComplete?: () => void;
 
 onEnterFeature?: (feature: Feature) => void;
+secondaryActions?: FeaturePopupAction[];
 
 onNewFeatureRequest?: (
   x: number,
@@ -61,6 +69,7 @@ function MapViewport({
   focusFeatureId,
   onFocusFeatureComplete,
   onEnterFeature,
+  secondaryActions = [],
   onNewFeatureRequest,
   onNewLocationRequest,
   onZoomStateChange,
@@ -102,6 +111,8 @@ function MapViewport({
   const popupRef = useRef<HTMLDivElement | null>(null);
   const focusCompleteRef = useRef(onFocusFeatureComplete);
 
+  const [expandedActionsFeatureId, setExpandedActionsFeatureId] =
+    useState<string | null>(null);
   const [
     viewportSize,
     setViewportSize,
@@ -118,21 +129,16 @@ function MapViewport({
     height: 0,
   });
 
-  const [
-    dragging,
-    setDragging,
-  ] = useState(false);
+  const [ dragging, setDragging ] = useState(false);
 
   const [popupSize, setPopupSize] = useState<Size>({
     width: 240,
     height: 140,
   });
 
-    const registeredWidth =
-        imageSize.width * registration.scale;
+    const registeredWidth = imageSize.width * registration.scale;
 
-    const registeredHeight =
-        imageSize.height * registration.scale;
+    const registeredHeight = imageSize.height * registration.scale;
 
   const minScale =
     imageSize.width > 0 &&
@@ -145,24 +151,12 @@ function MapViewport({
         )
       : 1;
 
-  const maxScale =
-    Math.max(
-      2,
-      minScale
-    );
+  const maxScale = Math.max( 2, minScale );
 
-    const zoomStep =
-  Math.max(
-    (
-      maxScale -
-      minScale
-    ) / 200,
-    0.001
-  );
+    const zoomStep = Math.max(( maxScale - minScale ) / 200, 0.001);
 
-  function clampScale(
-    candidate: number
-  ) {
+  function clampScale( candidate: number )
+  {
     return Math.min(
       maxScale,
       Math.max(
@@ -734,7 +728,7 @@ function handleContextMenu(
   function endDrag(
     event:
       React.PointerEvent<HTMLDivElement>
-  ) {
+    ) {
     if (
       dragRef.current
         ?.pointerId !==
@@ -797,6 +791,13 @@ function handleContextMenu(
         popupPosition.y - selectedAnchor.y
       ) >= 24
     : false;
+  const subtitle = selectedFeature?.subtitle?.trim();
+  const actionsExpanded = selectedFeature
+    ? expandedActionsFeatureId === selectedFeature.id
+    : false;
+  const hasLocationTarget = Boolean(
+    selectedFeature?.targetMapId && selectedFeature.targetFeatureId
+  );
 
   return (
     <div
@@ -879,6 +880,11 @@ function handleContextMenu(
         type: 'feature.select',
         featureId: feature.id,
       })}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        dispatch({ type: 'contextMenu.close' });
+      }}
     >
       <span className="map-feature-dot" />
     </button>
@@ -888,11 +894,20 @@ function handleContextMenu(
 {connectorVisible && selectedAnchor && popupPosition && (
   <svg className="feature-popup-connector" aria-hidden="true">
     <line
-      x1={selectedAnchor.x}
-      y1={selectedAnchor.y}
-      x2={popupPosition.x}
-      y2={popupPosition.y}
-    />
+  className="connector-outline"
+  x1={selectedAnchor.x}
+  y1={selectedAnchor.y}
+  x2={popupPosition.x}
+  y2={popupPosition.y}
+/>
+
+<line
+  className="connector-line"
+  x1={selectedAnchor.x}
+  y1={selectedAnchor.y}
+  x2={popupPosition.x}
+  y2={popupPosition.y}
+/>
   </svg>
 )}
 
@@ -911,20 +926,60 @@ function handleContextMenu(
       onPointerUp={endPopupDrag}
       onPointerCancel={endPopupDrag}
     >
-      {selectedFeature.name}
+      <div className="feature-popup-name">
+        {selectedFeature.name}
+      </div>
+
+      {subtitle && (
+        <div className="feature-popup-subtitle">{subtitle}</div>
+      )}
     </div>
 
-    {selectedFeature.targetMapId &&
-      selectedFeature.targetFeatureId && (
-        <div className="feature-popup-actions">
+    {(hasLocationTarget || secondaryActions.length > 0) && (
+      <div className="feature-popup-actions">
+        {hasLocationTarget && (
           <button
             type="button"
             onClick={() => onEnterFeature?.(selectedFeature)}
           >
             Enter
           </button>
-        </div>
-      )}
+        )}
+
+        {secondaryActions.length > 0 && (
+          <button
+            type="button"
+            className="feature-popup-more-actions-toggle"
+            aria-expanded={actionsExpanded}
+            aria-label={actionsExpanded
+              ? 'Hide more actions'
+              : 'Show more actions'}
+            onClick={() => {
+              setExpandedActionsFeatureId(
+                actionsExpanded ? null : selectedFeature.id
+              );
+            }}
+          >
+            {actionsExpanded ? '▴' : '▾'}
+          </button>
+        )}
+
+        {actionsExpanded && (
+          <div className="feature-popup-secondary-actions">
+            {secondaryActions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                disabled={action.disabled}
+                onClick={action.onInvoke}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
 
     <div className="feature-popup-separator" />
 

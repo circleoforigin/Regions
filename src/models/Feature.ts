@@ -11,6 +11,7 @@ export interface FeatureNoteLink {
 export interface Feature {
   id: string;
   name: string;
+  subtitle?: string;
 
   position: FeaturePosition;
 
