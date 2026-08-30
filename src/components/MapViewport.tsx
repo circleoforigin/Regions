@@ -34,6 +34,7 @@ focusFeatureId?: string | null;
 onFocusFeatureComplete?: () => void;
 
 onEnterFeature?: (feature: Feature) => void;
+onSubtitleChange?: (featureId: string, subtitle: string) => void;
 secondaryActions?: FeaturePopupAction[];
 
 onNewFeatureRequest?: (
@@ -69,6 +70,7 @@ function MapViewport({
   focusFeatureId,
   onFocusFeatureComplete,
   onEnterFeature,
+  onSubtitleChange,
   secondaryActions = [],
   onNewFeatureRequest,
   onNewLocationRequest,
@@ -113,6 +115,12 @@ function MapViewport({
 
   const [expandedActionsFeatureId, setExpandedActionsFeatureId] =
     useState<string | null>(null);
+  const [editingSubtitle, setEditingSubtitle] = useState(false);
+  const [subtitleDraft, setSubtitleDraft] = useState('');
+  useEffect(() => {
+    setEditingSubtitle(false);
+    setSubtitleDraft(selectedFeature?.subtitle ?? '');
+    }, [selectedFeature?.id, selectedFeature?.subtitle]);
   const [
     viewportSize,
     setViewportSize,
@@ -799,6 +807,20 @@ function handleContextMenu(
     selectedFeature?.targetMapId && selectedFeature.targetFeatureId
   );
 
+  function saveSubtitle() {
+  if (!selectedFeature) return;
+
+  const subtitle = subtitleDraft.trim();
+
+  onSubtitleChange?.(selectedFeature.id, subtitle);
+  setEditingSubtitle(false);
+}
+
+function cancelSubtitleEdit() {
+  setSubtitleDraft(selectedFeature?.subtitle ?? '');
+  setEditingSubtitle(false);
+}
+
   return (
     <div
       ref={viewportRef}
@@ -930,56 +952,111 @@ function handleContextMenu(
         {selectedFeature.name}
       </div>
 
-      {subtitle && (
-        <div className="feature-popup-subtitle">{subtitle}</div>
-      )}
+      {editingSubtitle ? (
+  <input
+    className="feature-popup-subtitle-input"
+    type="text"
+    value={subtitleDraft}
+    placeholder="Subtitle"
+    onChange={(event) => setSubtitleDraft(event.target.value)}
+    onPointerDown={(event) => event.stopPropagation()}
+    onClick={(event) => event.stopPropagation()}
+    onBlur={saveSubtitle}
+    onKeyDown={(event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        saveSubtitle();
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelSubtitleEdit();
+      }
+    }}
+    autoFocus
+  />
+) : subtitle ? (
+  <button
+    type="button"
+    className="feature-popup-subtitle"
+    onClick={() => {
+      setSubtitleDraft(selectedFeature.subtitle ?? '');
+      setEditingSubtitle(true);
+    }}
+  >
+    {subtitle}
+  </button>
+) : (
+  <div className="feature-popup-subtitle-empty">
+    <span />
+
+    <button
+      type="button"
+      className="feature-popup-subtitle-add"
+      title="Add subtitle"
+      aria-label="Add subtitle"
+      onClick={() => {
+        setSubtitleDraft('');
+        setEditingSubtitle(true);
+      }}
+    />
+
+    <span />
+  </div>
+)}
     </div>
 
-    {(hasLocationTarget || secondaryActions.length > 0) && (
-      <div className="feature-popup-actions">
-        {hasLocationTarget && (
-          <button
-            type="button"
-            onClick={() => onEnterFeature?.(selectedFeature)}
-          >
-            Enter
-          </button>
-        )}
+    <div className="feature-popup-actions">
+  <div className="feature-popup-actions-label">
+    Actions
+  </div>
 
-        {secondaryActions.length > 0 && (
-          <button
-            type="button"
-            className="feature-popup-more-actions-toggle"
-            aria-expanded={actionsExpanded}
-            aria-label={actionsExpanded
-              ? 'Hide more actions'
-              : 'Show more actions'}
-            onClick={() => {
-              setExpandedActionsFeatureId(
-                actionsExpanded ? null : selectedFeature.id
-              );
-            }}
-          >
-            {actionsExpanded ? '▴' : '▾'}
-          </button>
-        )}
+  <button
+    type="button"
+    className="feature-popup-more-actions-toggle"
+    aria-expanded={actionsExpanded}
+    aria-label={actionsExpanded
+      ? 'Hide actions'
+      : 'Show actions'}
+    onClick={() => {
+      setExpandedActionsFeatureId(
+        actionsExpanded ? null : selectedFeature.id
+      );
+    }}
+  >
+    {actionsExpanded ? '▴' : '▾'}
+  </button>
 
-        {actionsExpanded && (
-          <div className="feature-popup-secondary-actions">
-            {secondaryActions.map((action) => (
-              <button
-                key={action.id}
-                type="button"
-                disabled={action.disabled}
-                onClick={action.onInvoke}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    )}
+  {actionsExpanded && (
+    <div className="feature-popup-secondary-actions">
+      {hasLocationTarget && (
+        <button
+          type="button"
+          onClick={() => onEnterFeature?.(selectedFeature)}
+        >
+          Enter
+        </button>
+      )}
+
+      {secondaryActions.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          disabled={action.disabled}
+          onClick={action.onInvoke}
+        >
+          {action.label}
+        </button>
+      ))}
+
+      {!hasLocationTarget && secondaryActions.length === 0 && (
+        <span className="feature-popup-no-actions">
+          No actions available.
+        </span>
+      )}
+    </div>
+  )}
+</div>
 
     <div className="feature-popup-separator" />
 

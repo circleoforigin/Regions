@@ -869,6 +869,21 @@ async function handleDeleteSelectedProject(
   }
 }
 
+function handleSubtitleChange(featureId: string, subtitle: string) {
+  setActiveFeatures((current) =>
+    current.map((feature) =>
+      feature.id === featureId
+        ? {
+            ...feature,
+            subtitle: subtitle || undefined,
+          }
+        : feature
+    )
+  );
+
+  markProjectDirty();
+}
+
 function handleNewFeatureRequest(x: number, y: number) {
   setNewFeaturePosition({ x, y });
   setNewFeatureName('');
@@ -1467,6 +1482,7 @@ const deletableProjects =
         focusFeatureId={pendingFocusFeatureId}
         onFocusFeatureComplete={() => setPendingFocusFeatureId(null)}
         onEnterFeature={(feature) => void handleEnterFeature(feature)}
+        onSubtitleChange={handleSubtitleChange}
         onNewFeatureRequest={handleNewFeatureRequest}
         onNewLocationRequest={handleNewLocationRequest}
         onZoomStateChange={setZoomControl}
