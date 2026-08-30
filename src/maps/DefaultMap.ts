@@ -1,10 +1,10 @@
-import defaultMapImageUrl from '../assets/default-map.svg';
+import defaultMapImageUrl from '../assets/default-map.png';
 import type { Map as RegionMap } from '../models/Map';
 
 export const DEFAULT_MAP_IMAGE_ID = 'regions-default-map';
 export const DEFAULT_MAP_IMAGE_URL = defaultMapImageUrl;
-export const DEFAULT_MAP_WIDTH = 1000;
-export const DEFAULT_MAP_HEIGHT = 1000;
+export const DEFAULT_MAP_WIDTH = 1254;
+export const DEFAULT_MAP_HEIGHT = 1254;
 
 interface CreateDefaultMapOptions {
   id: string;

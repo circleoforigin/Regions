@@ -7,21 +7,19 @@ import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
 import type { Project } from './models/Project';
-import type {Map as RegionMap} from './models/Map';
+import type { Map as RegionMap } from './models/Map';
 import type { Feature } from './models/Feature';
 import { featureRepository } from './features/FeatureRepository';
 
 import { mapRepository} from './maps/MapRepository';
-import {
-  createDefaultMap,
-  DEFAULT_MAP_HEIGHT,
-  DEFAULT_MAP_WIDTH,
-} from './maps/DefaultMap';
-import { projectRepository} from './projects/ProjectRepository';;
+import { createDefaultMap } from './maps/DefaultMap';
+import { projectRepository } from './projects/ProjectRepository';;
 import {
   hostedMapImageService,
 } from './services/maps/HostedMapImageService';
 import { useRegionsState } from './state/RegionsStateContext';
+
+type ProjectActionOutcome = 'unchanged' | 'saved' | 'discarded';
 
 function App() {
   const { dispatch } = useRegionsState();
@@ -119,7 +117,7 @@ const [
 ] = useState(false);
 
 const pendingProjectActionRef =
-  useRef<(() => void) | null>(
+  useRef<((outcome: ProjectActionOutcome) => void) | null>(
     null
   );
 
@@ -148,6 +146,12 @@ const pendingProjectActionRef =
 
   const [pendingFeatures, setPendingFeatures] =
     useState<Feature[]>([]);
+
+  const [pendingFocusFeatureId, setPendingFocusFeatureId] =
+    useState<string | null>(null);
+
+  const [navigationError, setNavigationError] =
+    useState<string | null>(null);
 
   useEffect(() => {
     if (activeProjectId) {
@@ -464,9 +468,122 @@ function normalizeMap(map: RegionMap): RegionMap {
   return normalized;
 }
 
+async function loadMapWithFeatures(mapId: string) {
+  const map = await mapRepository.loadMap(mapId);
+  if (!map) throw new Error(`Map "${mapId}" was not found.`);
+
+  const normalizedMap = normalizeMap(map);
+  const features = await featureRepository.loadFeatures(
+    normalizedMap.featureIds
+  );
+  return { map: normalizedMap, features };
+}
+
+async function restorePersistedSource(
+  projectId: string,
+  mapId: string
+) {
+  const project = await projectRepository.loadProject(projectId);
+  if (!project) throw new Error('The active Project was not found.');
+
+  const source = await loadMapWithFeatures(mapId);
+  setActiveProject(project);
+  setActiveMap(source.map);
+  setActiveFeatures(source.features);
+  setPendingMaps([]);
+  setPendingFeatures([]);
+  setPendingFocusFeatureId(null);
+  await loadMapImage(source.map);
+  return { project, ...source };
+}
+
+async function navigateToFeatureTarget(
+  sourceFeature: Feature,
+  discardChanges: boolean
+) {
+  if (!activeProject || !activeMap) return;
+
+  setNavigationError(null);
+  const sourceMapId = activeMap.id;
+  let project = activeProject;
+  let feature = sourceFeature;
+
+  try {
+    if (discardChanges) {
+      const source = await restorePersistedSource(
+        activeProject.id,
+        sourceMapId
+      );
+      project = source.project;
+      const persistedFeature = source.features.find((candidate) => {
+        return candidate.id === sourceFeature.id;
+      });
+
+      if (!persistedFeature) {
+        throw new Error('The discarded Location no longer exists.');
+      }
+      feature = persistedFeature;
+    }
+
+    if (!feature.targetMapId || !feature.targetFeatureId) {
+      throw new Error('This Feature has no valid navigation target.');
+    }
+
+    const destination = await loadMapWithFeatures(feature.targetMapId);
+    const targetFeature = destination.features.find((candidate) => {
+      return candidate.id === feature.targetFeatureId;
+    });
+
+    if (!targetFeature) {
+      throw new Error('The target Feature could not be resolved.');
+    }
+
+    dispatch({
+      type: 'navigation.push',
+      entry: { mapId: sourceMapId, focusFeatureId: feature.id },
+    });
+    setActiveProject({
+      ...project,
+      activeMapId: destination.map.id,
+      updatedAt: new Date(),
+    });
+    setActiveMap(destination.map);
+    setActiveFeatures(destination.features);
+    setPendingFocusFeatureId(targetFeature.id);
+    await loadMapImage(destination.map);
+    markProjectDirty();
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : 'Unable to enter this Location.';
+    console.error('Unable to enter Location:', error);
+    setNavigationError(message);
+  }
+}
+
+async function handleEnterFeature(feature: Feature) {
+  if (!feature.targetMapId || !feature.targetFeatureId) return;
+
+  if (projectDirty && !autoSave) {
+    requestProjectAction((outcome) => {
+      void navigateToFeatureTarget(feature, outcome === 'discarded');
+    });
+    return;
+  }
+
+  if (projectDirty || saveInProgressRef.current) {
+    const saved = await saveActiveProject();
+    if (!saved) return;
+  }
+
+  await navigateToFeatureTarget(feature, false);
+}
+
 async function handleSelectProject(project: Project) {
   setPendingMaps([]);
   setPendingFeatures([]);
+  setPendingFocusFeatureId(null);
+  setNavigationError(null);
   setActiveProject(
     project
   );
@@ -611,6 +728,10 @@ function closeProject() {
 
   setPendingFeatures([]);
 
+  setPendingFocusFeatureId(null);
+
+  setNavigationError(null);
+
   clearActiveMapImage();
 
   resetProjectDirty();
@@ -623,10 +744,10 @@ function handleCloseProject() {
 }
 
 function requestProjectAction(
-  action: () => void
+  action: (outcome: ProjectActionOutcome) => void
 ) {
   if (!projectDirty) {
-    action();
+    action('unchanged');
     return;
   }
 
@@ -641,6 +762,8 @@ function requestProjectAction(
 async function finishPendingProjectAction(
   saveChanges: boolean
 ) {
+  let outcome: ProjectActionOutcome;
+
   if (saveChanges) {
     const saved =
       await saveActiveProject();
@@ -648,10 +771,12 @@ async function finishPendingProjectAction(
     if (!saved) {
       return;
     }
+    outcome = 'saved';
   } else {
     setPendingMaps([]);
     setPendingFeatures([]);
     resetProjectDirty();
+    outcome = 'discarded';
   }
 
   const action =
@@ -664,7 +789,7 @@ async function finishPendingProjectAction(
     false
   );
 
-  action?.();
+  action?.(outcome);
 }
 
 function cancelPendingProjectAction() {
@@ -815,8 +940,8 @@ function handleCreateLocation() {
     id: featureBId,
     name: 'Return',
     position: {
-      x: DEFAULT_MAP_WIDTH / 2,
-      y: DEFAULT_MAP_HEIGHT / 2,
+      x: 0,
+      y: 0,
     },
     type: 'location',
     noteLinks: [],
@@ -1306,6 +1431,11 @@ const deletableProjects =
 />
 
       <main className="regions-workspace">
+  {navigationError && (
+    <div className="regions-navigation-error" role="alert">
+      {navigationError}
+    </div>
+  )}
   <section className="regions-map-workspace">
     {!activeProject ? (
       <div className="regions-empty-map">
@@ -1334,6 +1464,9 @@ const deletableProjects =
         mapName={activeMap.name}
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
+        focusFeatureId={pendingFocusFeatureId}
+        onFocusFeatureComplete={() => setPendingFocusFeatureId(null)}
+        onEnterFeature={(feature) => void handleEnterFeature(feature)}
         onNewFeatureRequest={handleNewFeatureRequest}
         onNewLocationRequest={handleNewLocationRequest}
         onZoomStateChange={setZoomControl}

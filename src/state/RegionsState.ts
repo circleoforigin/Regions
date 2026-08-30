@@ -4,6 +4,11 @@ export interface RegionsViewportState {
   panY: number;
 }
 
+export interface RegionsPoint {
+  x: number;
+  y: number;
+}
+
 export type RegionsEditingMode =
   | 'browse'
   | 'move-feature'
@@ -27,6 +32,7 @@ export interface RegionsSessionState {
   activeProjectId: string | null;
   activeMapId: string | null;
   selectedFeatureId: string | null;
+  selectedFeaturePopupOffset: RegionsPoint;
   navigationHistory: RegionsNavigationEntry[];
   viewport: RegionsViewportState;
   editingMode: RegionsEditingMode;
@@ -39,6 +45,8 @@ export type RegionsStateAction =
   | { type: 'map.activate'; mapId: string | null }
   | { type: 'feature.select'; featureId: string }
   | { type: 'feature.clearSelection' }
+  | { type: 'featurePopup.setOffset'; offset: RegionsPoint }
+  | { type: 'featurePopup.resetOffset' }
   | { type: 'viewport.set'; viewport: RegionsViewportState }
   | { type: 'viewport.setScale'; scale: number }
   | { type: 'viewport.setPan'; panX: number; panY: number }
@@ -54,6 +62,7 @@ export const initialRegionsState: RegionsSessionState = {
   activeProjectId: null,
   activeMapId: null,
   selectedFeatureId: null,
+  selectedFeaturePopupOffset: { x: 0, y: 0 },
   navigationHistory: [],
   viewport: {
     scale: 1,
@@ -83,16 +92,34 @@ export function regionsStateReducer(
         ...state,
         activeMapId: action.mapId,
         selectedFeatureId: null,
+        selectedFeaturePopupOffset: { x: 0, y: 0 },
         viewport: initialRegionsState.viewport,
         editingMode: 'browse',
         contextMenu: null,
       };
 
     case 'feature.select':
-      return { ...state, selectedFeatureId: action.featureId };
+      return {
+        ...state,
+        selectedFeatureId: action.featureId,
+        selectedFeaturePopupOffset: { x: 0, y: 0 },
+      };
 
     case 'feature.clearSelection':
-      return { ...state, selectedFeatureId: null };
+      return {
+        ...state,
+        selectedFeatureId: null,
+        selectedFeaturePopupOffset: { x: 0, y: 0 },
+      };
+
+    case 'featurePopup.setOffset':
+      return { ...state, selectedFeaturePopupOffset: action.offset };
+
+    case 'featurePopup.resetOffset':
+      return {
+        ...state,
+        selectedFeaturePopupOffset: { x: 0, y: 0 },
+      };
 
     case 'viewport.set':
       return { ...state, viewport: action.viewport };

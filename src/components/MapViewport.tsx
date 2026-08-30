@@ -22,6 +22,11 @@ interface MapViewportProps {
 };
 
 features: Feature[];
+focusFeatureId?: string | null;
+
+onFocusFeatureComplete?: () => void;
+
+onEnterFeature?: (feature: Feature) => void;
 
 onNewFeatureRequest?: (
   x: number,
@@ -53,6 +58,9 @@ function MapViewport({
   mapName,
   imageRegistration,
   features,
+  focusFeatureId,
+  onFocusFeatureComplete,
+  onEnterFeature,
   onNewFeatureRequest,
   onNewLocationRequest,
   onZoomStateChange,
@@ -61,6 +69,10 @@ function MapViewport({
   const { scale, panX, panY } = state.viewport;
   const pan = { x: panX, y: panY };
   const contextMenu = state.contextMenu;
+  const popupOffset = state.selectedFeaturePopupOffset;
+  const selectedFeature = features.find((feature) => {
+    return feature.id === state.selectedFeatureId;
+  });
   const registration = imageRegistration ?? {
   scale: 1,
   offsetX: 0,
@@ -80,6 +92,15 @@ function MapViewport({
     } | null>(
       null
     );
+
+  const popupDragRef = useRef<{
+    pointerId: number;
+    startPointer: Point;
+    startOffset: Point;
+  } | null>(null);
+
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const focusCompleteRef = useRef(onFocusFeatureComplete);
 
   const [
     viewportSize,
@@ -101,6 +122,11 @@ function MapViewport({
     dragging,
     setDragging,
   ] = useState(false);
+
+  const [popupSize, setPopupSize] = useState<Size>({
+    width: 240,
+    height: 140,
+  });
 
     const registeredWidth =
         imageSize.width * registration.scale;
@@ -445,11 +471,129 @@ function mapToScreen(
     });
   }, [imageUrl, dispatch]);
 
+  useEffect(() => {
+    focusCompleteRef.current = onFocusFeatureComplete;
+  }, [onFocusFeatureComplete]);
+
+  useEffect(() => {
+    if (!state.selectedFeatureId || selectedFeature) return;
+    dispatch({ type: 'feature.clearSelection' });
+  }, [dispatch, selectedFeature, state.selectedFeatureId]);
+
+  useEffect(() => {
+    const popup = popupRef.current;
+    if (!popup || !selectedFeature) return;
+
+    const updatePopupSize = () => {
+      const rect = popup.getBoundingClientRect();
+      setPopupSize({ width: rect.width, height: rect.height });
+    };
+
+    updatePopupSize();
+    const observer = new ResizeObserver(updatePopupSize);
+    observer.observe(popup);
+    return () => observer.disconnect();
+  }, [selectedFeature]);
+
+  useEffect(() => {
+    if (!focusFeatureId) return;
+    if (imageSize.width <= 0 || imageSize.height <= 0) return;
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) return;
+
+    const feature = features.find((item) => item.id === focusFeatureId);
+    if (!feature) return;
+
+    const maxX = Math.max(
+      0,
+      (registeredWidth * minScale - viewportSize.width) / 2
+    );
+    const maxY = Math.max(
+      0,
+      (registeredHeight * minScale - viewportSize.height) / 2
+    );
+    const nextPan = {
+      x: Math.max(
+        -maxX,
+        Math.min(maxX, -feature.position.x * minScale)
+      ),
+      y: Math.max(
+        -maxY,
+        Math.min(maxY, -feature.position.y * minScale)
+      ),
+    };
+
+    dispatch({
+      type: 'viewport.set',
+      viewport: {
+        scale: minScale,
+        panX: nextPan.x,
+        panY: nextPan.y,
+      },
+    });
+    focusCompleteRef.current?.();
+  }, [
+    features,
+    focusFeatureId,
+    imageSize.height,
+    imageSize.width,
+    minScale,
+    registeredHeight,
+    registeredWidth,
+    viewportSize.height,
+    viewportSize.width,
+    dispatch,
+  ]);
+
+function clampPopupOffset(offset: Point): Point {
+  const distance = Math.hypot(offset.x, offset.y);
+  if (distance <= 200) return offset;
+
+  const ratio = 200 / distance;
+  return { x: offset.x * ratio, y: offset.y * ratio };
+}
+
+function handlePopupPointerDown(
+  event: React.PointerEvent<HTMLDivElement>
+) {
+  if (event.button !== 0) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.setPointerCapture(event.pointerId);
+  popupDragRef.current = {
+    pointerId: event.pointerId,
+    startPointer: { x: event.clientX, y: event.clientY },
+    startOffset: popupOffset,
+  };
+}
+
+function handlePopupPointerMove(
+  event: React.PointerEvent<HTMLDivElement>
+) {
+  const drag = popupDragRef.current;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+
+  const offset = clampPopupOffset({
+    x: drag.startOffset.x + event.clientX - drag.startPointer.x,
+    y: drag.startOffset.y + event.clientY - drag.startPointer.y,
+  });
+  dispatch({ type: 'featurePopup.setOffset', offset });
+}
+
+function endPopupDrag(event: React.PointerEvent<HTMLDivElement>) {
+  if (popupDragRef.current?.pointerId !== event.pointerId) return;
+
+  popupDragRef.current = null;
+  if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+  event.currentTarget.releasePointerCapture(event.pointerId);
+}
+
 function handleContextMenu(
   event:
     React.MouseEvent<HTMLDivElement>
 ) {
   event.preventDefault();
+  dispatch({ type: 'feature.clearSelection' });
 
   const viewport =
     viewportRef.current;
@@ -518,6 +662,7 @@ function handleContextMenu(
       return;
     }
 
+    dispatch({ type: 'feature.clearSelection' });
     dispatch({ type: 'contextMenu.close' });
 
     event.currentTarget
@@ -618,6 +763,41 @@ function handleContextMenu(
     }
   }
 
+  const selectedAnchor = selectedFeature
+    ? mapToScreen(selectedFeature.position.x, selectedFeature.position.y)
+    : null;
+  const popupMargin = 8;
+  const requestedPopupPosition = selectedAnchor
+    ? {
+        x: selectedAnchor.x + popupOffset.x,
+        y: selectedAnchor.y + popupOffset.y,
+      }
+    : null;
+  const popupPosition = requestedPopupPosition
+    ? {
+        x: Math.max(
+          popupSize.width / 2 + popupMargin,
+          Math.min(
+            viewportSize.width - popupSize.width / 2 - popupMargin,
+            requestedPopupPosition.x
+          )
+        ),
+        y: Math.max(
+          popupSize.height / 2 + popupMargin,
+          Math.min(
+            viewportSize.height - popupSize.height / 2 - popupMargin,
+            requestedPopupPosition.y
+          )
+        ),
+      }
+    : null;
+  const connectorVisible = selectedAnchor && popupPosition
+    ? Math.hypot(
+        popupPosition.x - selectedAnchor.x,
+        popupPosition.y - selectedAnchor.y
+      ) >= 24
+    : false;
+
   return (
     <div
       ref={viewportRef}
@@ -704,6 +884,57 @@ function handleContextMenu(
     </button>
   );
 })}
+
+{connectorVisible && selectedAnchor && popupPosition && (
+  <svg className="feature-popup-connector" aria-hidden="true">
+    <line
+      x1={selectedAnchor.x}
+      y1={selectedAnchor.y}
+      x2={popupPosition.x}
+      y2={popupPosition.y}
+    />
+  </svg>
+)}
+
+{selectedFeature && popupPosition && (
+  <div
+    ref={popupRef}
+    className="feature-popup"
+    style={{ left: popupPosition.x, top: popupPosition.y }}
+    onPointerDown={(event) => event.stopPropagation()}
+    onClick={(event) => event.stopPropagation()}
+  >
+    <div
+      className="feature-popup-header"
+      onPointerDown={handlePopupPointerDown}
+      onPointerMove={handlePopupPointerMove}
+      onPointerUp={endPopupDrag}
+      onPointerCancel={endPopupDrag}
+    >
+      {selectedFeature.name}
+    </div>
+
+    {selectedFeature.targetMapId &&
+      selectedFeature.targetFeatureId && (
+        <div className="feature-popup-actions">
+          <button
+            type="button"
+            onClick={() => onEnterFeature?.(selectedFeature)}
+          >
+            Enter
+          </button>
+        </div>
+      )}
+
+    <div className="feature-popup-separator" />
+
+    <div className="feature-popup-data">
+      {selectedFeature.description || (
+        <span>No additional information.</span>
+      )}
+    </div>
+  </div>
+)}
 
 {contextMenu && (
   <div
