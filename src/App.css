@@ -216,6 +216,28 @@
     transform;
 }
 
+.map-feature-marker {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.map-feature-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin: 4px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #202020;
+  box-sizing: border-box;
+}
+
 .map-context-menu {
   position: absolute;
   z-index: 500;

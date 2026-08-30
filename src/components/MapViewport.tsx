@@ -1,8 +1,5 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import type { Feature } from '../models/Feature';
+import { useEffect, useRef, useState} from 'react';
 
 interface Point {
   x: number;
@@ -23,6 +20,13 @@ interface MapViewportProps {
   offsetY: number;
 };
 
+features: Feature[];
+
+onNewFeatureRequest?: (
+  x: number,
+  y: number
+) => void;
+
   onZoomStateChange?: (
     state: {
       value: number;
@@ -41,6 +45,8 @@ function MapViewport({
   imageUrl,
   mapName,
   imageRegistration,
+  features,
+  onNewFeatureRequest,
   onZoomStateChange,
 }: MapViewportProps) {
   const registration = imageRegistration ?? {
@@ -202,95 +208,45 @@ function MapViewport({
   clientX: number,
   clientY: number
 ): Point | null {
-  const viewport =
-    viewportRef.current;
+  const viewport = viewportRef.current;
 
-  if (
-    !viewport ||
-    imageSize.width <= 0 ||
-    imageSize.height <= 0 ||
-    scale <= 0
-  ) {
+  if (!viewport || scale <= 0) {
     return null;
   }
 
-  const rect =
-    viewport.getBoundingClientRect();
+  const rect = viewport.getBoundingClientRect();
 
-  const screenFromCenter = {
-    x:
+  return {
+    x: (
       clientX -
       rect.left -
-      rect.width / 2,
+      rect.width / 2 -
+      pan.x
+    ) / scale,
 
-    y:
+    y: (
       clientY -
       rect.top -
-      rect.height / 2,
+      rect.height / 2 -
+      pan.y
+    ) / scale,
   };
-
-  const imageFromCenter = {
-    x:
-      (
-        screenFromCenter.x -
-        pan.x
-      ) / scale,
-
-    y:
-      (
-        screenFromCenter.y -
-        pan.y
-      ) / scale,
-  };
-
-  const mapPoint = {
-    x:
-      imageFromCenter.x +
-      imageSize.width / 2,
-
-    y:
-      imageFromCenter.y +
-      imageSize.height / 2,
-  };
-
-  if (
-    mapPoint.x < 0 ||
-    mapPoint.y < 0 ||
-    mapPoint.x > imageSize.width ||
-    mapPoint.y > imageSize.height
-  ) {
-    return null;
-  }
-
-  return mapPoint;
 }
 
 function mapToScreen(
   mapX: number,
   mapY: number
 ): Point {
-  const imageFromCenter = {
-    x:
-      mapX -
-      imageSize.width / 2,
-
-    y:
-      mapY -
-      imageSize.height / 2,
-  };
-
   return {
     x:
       viewportSize.width / 2 +
       pan.x +
-      imageFromCenter.x *
-        scale,
+      mapX * scale,
 
     y:
       viewportSize.height / 2 +
       pan.y +
-      imageFromCenter.y *
-        scale,
+      mapY * scale,
   };
 }
 
@@ -747,16 +703,48 @@ function handleContextMenu(
 }}
 />
 
+{features.map((feature) => {
+  const screenPosition = mapToScreen(
+    feature.position.x,
+    feature.position.y
+  );
+
+  return (
+    <button
+      key={feature.id}
+      type="button"
+      className="map-feature-marker"
+      title={feature.name}
+      style={{
+        left: screenPosition.x,
+        top: screenPosition.y,
+      }}
+      onPointerDown={(event) =>
+        event.stopPropagation()
+      }
+    >
+      <span className="map-feature-dot" />
+    </button>
+  );
+})}
+
 {contextMenu && (
   <div
     className="map-context-menu"
     style={{
-      left:
-        contextMenu.screenX,
+  left: contextMenu.screenX,
+  top: contextMenu.screenY,
 
-      top:
-        contextMenu.screenY,
-    }}
+  transform: [
+    contextMenu.screenX > viewportSize.width / 2
+      ? 'translateX(-100%)'
+      : '',
+
+    contextMenu.screenY > viewportSize.height / 2
+      ? 'translateY(-100%)'
+      : '',
+  ].join(' '),
+}}
     onPointerDown={(event) =>
       event.stopPropagation()
     }
@@ -781,15 +769,12 @@ function handleContextMenu(
     <button
       type="button"
       onClick={() => {
-        console.log(
-          'New Location at:',
-          contextMenu.mapX,
-          contextMenu.mapY
-        );
+        onNewFeatureRequest?.(
+  contextMenu.mapX,
+  contextMenu.mapY
+);
 
-        setContextMenu(
-          null
-        );
+setContextMenu(null);
       }}
     >
       New Location...

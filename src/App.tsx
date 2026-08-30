@@ -6,8 +6,9 @@ import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
-import type { Project} from './models/Project';
+import type { Project } from './models/Project';
 import type {Map as RegionMap} from './models/Map';
+import type { Feature } from './models/Feature';
 
 import { mapRepository} from './maps/MapRepository';
 import { projectRepository} from './projects/ProjectRepository';;
@@ -95,6 +96,14 @@ const pendingProjectActionRef =
     showDeleteProjectDialog,
     setShowDeleteProjectDialog,
   ] = useState(false);
+
+  const [showNewFeatureDialog, setShowNewFeatureDialog] =
+  useState(false);
+
+  const [newFeatureName, setNewFeatureName] = useState('');
+
+  const [newFeaturePosition, setNewFeaturePosition] =
+    useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     modulePresence.start();
@@ -406,25 +415,25 @@ async function saveActiveProject(): Promise<boolean> {
   };
 
   try {
-    await projectRepository.saveProject(
-      updatedProject
-    );
+  if (activeMap) {
+    const updatedMap = {
+      ...activeMap,
+      updatedAt: new Date(),
+    };
 
-    setActiveProject(
-      updatedProject
-    );
-
-    setProjectDirty(false);
-
-    return true;
-  } catch (error) {
-    console.error(
-      'Unable to save project:',
-      error
-    );
-
-    return false;
+    await mapRepository.saveMap(updatedMap);
+    setActiveMap(updatedMap);
   }
+
+  await projectRepository.saveProject(updatedProject);
+  setActiveProject(updatedProject);
+  setProjectDirty(false);
+
+  return true;
+} catch (error) {
+  console.error('Unable to save project:', error);
+  return false;
+}
 }
 
 function handleSaveProject() {
@@ -569,6 +578,46 @@ async function handleDeleteSelectedProject(
       error
     );
   }
+}
+
+function handleNewFeatureRequest(x: number, y: number) {
+  setNewFeaturePosition({ x, y });
+  setNewFeatureName('');
+  setShowNewFeatureDialog(true);
+}
+
+function handleCreateFeature() {
+  if (!activeMap || !newFeaturePosition) {
+    return;
+  }
+
+  const name = newFeatureName.trim();
+
+  if (!name) {
+    return;
+  }
+
+  const feature: Feature = {
+    id: crypto.randomUUID(),
+    name,
+    position: newFeaturePosition,
+    type: 'feature',
+    noteLinks: [],
+  };
+
+  setActiveMap({
+    ...activeMap,
+    features: [
+      ...activeMap.features,
+      feature,
+    ],
+    updatedAt: new Date(),
+  });
+
+  setProjectDirty(true);
+  setShowNewFeatureDialog(false);
+  setNewFeaturePosition(null);
+  setNewFeatureName('');
 }
 
 async function handleAssignMapFile(
@@ -769,6 +818,49 @@ onZoomChange={
           }
         >
           Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showNewFeatureDialog && (
+  <div className="dialog-backdrop">
+    <div className="dialog">
+      <h2>New Feature</h2>
+
+      <input
+        type="text"
+        placeholder="Feature name"
+        value={newFeatureName}
+        onChange={(event) =>
+          setNewFeatureName(event.target.value)
+        }
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            handleCreateFeature();
+          }
+        }}
+        autoFocus
+      />
+
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          onClick={() => {
+            setShowNewFeatureDialog(false);
+            setNewFeaturePosition(null);
+          }}
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          disabled={!newFeatureName.trim()}
+          onClick={handleCreateFeature}
+        >
+          Create
         </button>
       </div>
     </div>
@@ -995,6 +1087,8 @@ onZoomChange={
         imageUrl={activeMapImageUrl}
         mapName={activeMap.name}
         imageRegistration={activeMap.imageRegistration}
+        features={activeMap.features}
+        onNewFeatureRequest={handleNewFeatureRequest}
         onZoomStateChange={setZoomControl}
       />
     ) : (
