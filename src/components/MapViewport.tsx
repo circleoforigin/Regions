@@ -1,5 +1,6 @@
 import type { Feature } from '../models/Feature';
 import { useEffect, useRef, useState} from 'react';
+import { useRegionsState } from '../state/RegionsStateContext';
 
 interface Point {
   x: number;
@@ -50,6 +51,10 @@ function MapViewport({
   onNewFeatureRequest,
   onZoomStateChange,
 }: MapViewportProps) {
+  const { state, dispatch } = useRegionsState();
+  const { scale, panX, panY } = state.viewport;
+  const pan = { x: panX, y: panY };
+  const contextMenu = state.contextMenu;
   const registration = imageRegistration ?? {
   scale: 1,
   offsetX: 0,
@@ -87,34 +92,9 @@ function MapViewport({
   });
 
   const [
-    scale,
-    setScale,
-  ] = useState(1);
-
-  const [
-    pan,
-    setPan,
-  ] = useState<Point>({
-    x: 0,
-    y: 0,
-  });
-
-  const [
     dragging,
     setDragging,
   ] = useState(false);
-
-  const [
-    contextMenu,
-    setContextMenu,
-    ] = useState<{
-    screenX: number;
-    screenY: number;
-    mapX: number;
-    mapY: number;
-    } | null>(
-    null
-    );
 
     const registeredWidth =
         imageSize.width * registration.scale;
@@ -264,9 +244,7 @@ function mapToScreen(
       !viewportRef.current ||
       scale <= 0
     ) {
-      setScale(
-        nextScale
-      );
+      dispatch({ type: 'viewport.setScale', scale: nextScale });
 
       return;
     }
@@ -319,24 +297,20 @@ function mapToScreen(
         ratio,
     };
 
-    setScale(
-      nextScale
-    );
+    const clampedPan = clampPan(nextPan, nextScale);
 
-    setPan(
-      clampPan(
-        nextPan,
-        nextScale
-      )
-    );
+    dispatch({
+      type: 'viewport.set',
+      viewport: {
+        scale: nextScale,
+        panX: clampedPan.x,
+        panY: clampedPan.y,
+      },
+    });
   }
 
   function fitMap() {
-    setScale(minScale);
-    setPan({
-        x: 0,
-        y: 0,
-    });
+    dispatch({ type: 'viewport.fit', scale: minScale });
   }
 
   useEffect(() => {
@@ -432,36 +406,20 @@ function mapToScreen(
           imageSize.height
       );
 
-    setScale(
-      (current) =>
-        Math.max(
-          fittedScale,
-          Math.min(
-            Math.max(
-              1,
-              fittedScale
-            ),
-            current
-          )
-        )
+    const nextScale = Math.max(
+      fittedScale,
+      Math.min(Math.max(1, fittedScale), scale)
     );
+    const nextPan = clampPan(pan, nextScale);
 
-    setPan(
-      (current) =>
-        clampPan(
-          current,
-          Math.max(
-            fittedScale,
-            Math.min(
-              Math.max(
-                1,
-                fittedScale
-              ),
-              scale
-            )
-          )
-        )
-    );
+    dispatch({
+      type: 'viewport.set',
+      viewport: {
+        scale: nextScale,
+        panX: nextPan.x,
+        panY: nextPan.y,
+      },
+    });
   }, [
     viewportSize.width,
     viewportSize.height,
@@ -470,18 +428,16 @@ function mapToScreen(
   ]);
 
   useEffect(() => {
-    setPan({
-      x: 0,
-      y: 0,
+    dispatch({
+      type: 'viewport.set',
+      viewport: { scale: 1, panX: 0, panY: 0 },
     });
-
-    setScale(1);
 
     setImageSize({
       width: 0,
       height: 0,
     });
-  }, [imageUrl]);
+  }, [imageUrl, dispatch]);
 
 function handleContextMenu(
   event:
@@ -509,20 +465,15 @@ function handleContextMenu(
   const rect =
     viewport.getBoundingClientRect();
 
-  setContextMenu({
-    screenX:
-      event.clientX -
-      rect.left,
-
-    screenY:
-      event.clientY -
-      rect.top,
-
-    mapX:
-      point.x,
-
-    mapY:
-      point.y,
+  dispatch({
+    type: 'contextMenu.open',
+    menu: {
+      kind: 'map',
+      screenX: event.clientX - rect.left,
+      screenY: event.clientY - rect.top,
+      mapX: point.x,
+      mapY: point.y,
+    },
   });
 }
 
@@ -531,7 +482,7 @@ function handleContextMenu(
       React.WheelEvent<HTMLDivElement>
   ) {
     event.preventDefault();
-    setContextMenu(null);
+    dispatch({ type: 'contextMenu.close' });
 
     const zoomFactor =
       event.deltaY < 0
@@ -561,7 +512,7 @@ function handleContextMenu(
       return;
     }
 
-    setContextMenu(null);
+    dispatch({ type: 'contextMenu.close' });
 
     event.currentTarget
       .setPointerCapture(
@@ -620,11 +571,13 @@ function handleContextMenu(
         ),
     };
 
-    setPan(
-      clampPan(
-        nextPan
-      )
-    );
+    const clampedPan = clampPan(nextPan);
+
+    dispatch({
+      type: 'viewport.setPan',
+      panX: clampedPan.x,
+      panY: clampedPan.y,
+    });
   }
 
   function endDrag(
@@ -724,8 +677,11 @@ function handleContextMenu(
     <button
       key={feature.id}
       type="button"
-      className="map-feature-marker"
+      className={state.selectedFeatureId === feature.id
+        ? 'map-feature-marker selected'
+        : 'map-feature-marker'}
       title={feature.name}
+      aria-pressed={state.selectedFeatureId === feature.id}
       style={{
         left: screenPosition.x,
         top: screenPosition.y,
@@ -733,6 +689,10 @@ function handleContextMenu(
       onPointerDown={(event) =>
         event.stopPropagation()
       }
+      onClick={() => dispatch({
+        type: 'feature.select',
+        featureId: feature.id,
+      })}
     >
       <span className="map-feature-dot" />
     </button>
@@ -768,7 +728,7 @@ function handleContextMenu(
     contextMenu.mapY
   );
 
-  setContextMenu(null);
+  dispatch({ type: 'contextMenu.close' });
 }}
     >
       New Feature...
@@ -783,7 +743,7 @@ function handleContextMenu(
     contextMenu.mapY
   );
 
-  setContextMenu(null);
+  dispatch({ type: 'contextMenu.close' });
 }}
     >
       New Location...

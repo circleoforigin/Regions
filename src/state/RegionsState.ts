@@ -1,0 +1,153 @@
+export interface RegionsViewportState {
+  scale: number;
+  panX: number;
+  panY: number;
+}
+
+export type RegionsEditingMode =
+  | 'browse'
+  | 'move-feature'
+  | 'edit-feature';
+
+export interface RegionsContextMenuState {
+  kind: 'map' | 'feature';
+  screenX: number;
+  screenY: number;
+  mapX: number;
+  mapY: number;
+  targetId?: string;
+}
+
+export interface RegionsNavigationEntry {
+  mapId: string;
+  focusFeatureId?: string;
+}
+
+export interface RegionsSessionState {
+  activeProjectId: string | null;
+  activeMapId: string | null;
+  selectedFeatureId: string | null;
+  navigationHistory: RegionsNavigationEntry[];
+  viewport: RegionsViewportState;
+  editingMode: RegionsEditingMode;
+  contextMenu: RegionsContextMenuState | null;
+}
+
+export type RegionsStateAction =
+  | { type: 'session.reset' }
+  | { type: 'project.activate'; projectId: string }
+  | { type: 'map.activate'; mapId: string | null }
+  | { type: 'feature.select'; featureId: string }
+  | { type: 'feature.clearSelection' }
+  | { type: 'viewport.set'; viewport: RegionsViewportState }
+  | { type: 'viewport.setScale'; scale: number }
+  | { type: 'viewport.setPan'; panX: number; panY: number }
+  | { type: 'viewport.fit'; scale: number }
+  | { type: 'contextMenu.open'; menu: RegionsContextMenuState }
+  | { type: 'contextMenu.close' }
+  | { type: 'editingMode.set'; mode: RegionsEditingMode }
+  | { type: 'navigation.push'; entry: RegionsNavigationEntry }
+  | { type: 'navigation.back' }
+  | { type: 'navigation.clear' };
+
+export const initialRegionsState: RegionsSessionState = {
+  activeProjectId: null,
+  activeMapId: null,
+  selectedFeatureId: null,
+  navigationHistory: [],
+  viewport: {
+    scale: 1,
+    panX: 0,
+    panY: 0,
+  },
+  editingMode: 'browse',
+  contextMenu: null,
+};
+
+export function regionsStateReducer(
+  state: RegionsSessionState,
+  action: RegionsStateAction
+): RegionsSessionState {
+  switch (action.type) {
+    case 'session.reset':
+      return initialRegionsState;
+
+    case 'project.activate':
+      return {
+        ...initialRegionsState,
+        activeProjectId: action.projectId,
+      };
+
+    case 'map.activate':
+      return {
+        ...state,
+        activeMapId: action.mapId,
+        selectedFeatureId: null,
+        viewport: initialRegionsState.viewport,
+        editingMode: 'browse',
+        contextMenu: null,
+      };
+
+    case 'feature.select':
+      return { ...state, selectedFeatureId: action.featureId };
+
+    case 'feature.clearSelection':
+      return { ...state, selectedFeatureId: null };
+
+    case 'viewport.set':
+      return { ...state, viewport: action.viewport };
+
+    case 'viewport.setScale':
+      return {
+        ...state,
+        viewport: { ...state.viewport, scale: action.scale },
+      };
+
+    case 'viewport.setPan':
+      return {
+        ...state,
+        viewport: {
+          ...state.viewport,
+          panX: action.panX,
+          panY: action.panY,
+        },
+      };
+
+    case 'viewport.fit':
+      return {
+        ...state,
+        viewport: { scale: action.scale, panX: 0, panY: 0 },
+      };
+
+    case 'contextMenu.open':
+      return { ...state, contextMenu: action.menu };
+
+    case 'contextMenu.close':
+      return { ...state, contextMenu: null };
+
+    case 'editingMode.set':
+      return { ...state, editingMode: action.mode };
+
+    case 'navigation.push':
+      return {
+        ...state,
+        navigationHistory: [...state.navigationHistory, action.entry],
+      };
+
+    case 'navigation.back': {
+      const history = state.navigationHistory.slice(0, -1);
+      const destination = history.at(-1);
+
+      return {
+        ...state,
+        activeMapId: destination?.mapId ?? state.activeMapId,
+        selectedFeatureId: destination?.focusFeatureId ?? null,
+        navigationHistory: history,
+        contextMenu: null,
+      };
+    }
+
+    case 'navigation.clear':
+      return { ...state, navigationHistory: [] };
+  }
+}

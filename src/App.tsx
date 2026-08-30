@@ -12,9 +12,13 @@ import type { Feature } from './models/Feature';
 
 import { mapRepository} from './maps/MapRepository';
 import { projectRepository} from './projects/ProjectRepository';;
-import { hostedMapImageService} from './services/maps/HostedMapImageService';
+import {
+  hostedMapImageService,
+} from './services/maps/HostedMapImageService';
+import { useRegionsState } from './state/RegionsStateContext';
 
 function App() {
+  const { dispatch } = useRegionsState();
   const [
     activeProject,
     setActiveProject,
@@ -35,6 +39,9 @@ function App() {
   ] = useState<string | null>(
     null
   );
+
+  const activeProjectId = activeProject?.id ?? null;
+  const activeMapId = activeMap?.id ?? null;
 
   const assignMapInputRef =
     useRef<HTMLInputElement | null>(
@@ -105,6 +112,27 @@ const pendingProjectActionRef =
 
   const [newFeaturePosition, setNewFeaturePosition] =
     useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (activeProjectId) {
+      dispatch({
+        type: 'project.activate',
+        projectId: activeProjectId,
+      });
+      return;
+    }
+
+    dispatch({ type: 'session.reset' });
+  }, [activeProjectId, dispatch]);
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+
+    dispatch({
+      type: 'map.activate',
+      mapId: activeMapId,
+    });
+  }, [activeMapId, activeProjectId, dispatch]);
 
   useEffect(() => {
     modulePresence.start();
