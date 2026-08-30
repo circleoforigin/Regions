@@ -1,7 +1,3 @@
-import type {
-  Feature,
-} from './Feature';
-
 export interface MapImageRegistration {
   scale: number;
   offsetX: number;
@@ -19,7 +15,7 @@ export interface Map {
 
   parentMapId?: string;
 
-  features: Feature[];
+  featureIds: string[];
 
   createdAt: Date;
   updatedAt: Date;

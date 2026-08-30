@@ -9,6 +9,7 @@ import MapViewport from './components/MapViewport';
 import type { Project } from './models/Project';
 import type {Map as RegionMap} from './models/Map';
 import type { Feature } from './models/Feature';
+import { featureRepository } from './features/FeatureRepository';
 
 import { mapRepository} from './maps/MapRepository';
 import { projectRepository} from './projects/ProjectRepository';;
@@ -32,6 +33,8 @@ function App() {
   ] = useState<RegionMap | null>(
     null
   );
+
+  const [activeFeatures, setActiveFeatures] = useState<Feature[]>([]);
 
   const [
     activeMapImageUrl,
@@ -284,6 +287,7 @@ function handleNewProject() {
 
       setActiveProject(project);
       setActiveMap(null);
+      setActiveFeatures([]);
       setZoomControl(null);
       setProjectDirty(false);
 
@@ -394,9 +398,17 @@ async function loadMapImage(
   }
 }
 
-async function handleSelectProject(
-  project: Project
-) {
+function normalizeMap(map: RegionMap): RegionMap {
+  const featureIds = Array.isArray(map.featureIds)
+    ? map.featureIds
+    : [];
+  const normalized = { ...map, featureIds };
+
+  delete (normalized as RegionMap & { features?: Feature[] }).features;
+  return normalized;
+}
+
+async function handleSelectProject(project: Project) {
   setActiveProject(
     project
   );
@@ -404,6 +416,7 @@ async function handleSelectProject(
   setActiveMap(
     null
   );
+  setActiveFeatures([]);
 
   if (project.activeMapId) {
     try {
@@ -412,11 +425,18 @@ async function handleSelectProject(
           project.activeMapId
         );
 
-      setActiveMap(map);
+      const normalizedMap = map ? normalizeMap(map) : null;
+
+      setActiveMap(normalizedMap);
       clearActiveMapImage();
 
-      if (map) {
-        await loadMapImage(map);
+      if (normalizedMap) {
+        const features = await featureRepository.loadFeatures(
+          normalizedMap.featureIds
+        );
+
+        setActiveFeatures(features);
+        await loadMapImage(normalizedMap);
       }
     } catch (error) {
       console.error(
@@ -445,11 +465,16 @@ async function saveActiveProject(): Promise<boolean> {
 
   try {
   if (activeMap) {
-    const updatedMap = {
+    const updatedMap = normalizeMap({
       ...activeMap,
       updatedAt: new Date(),
-    };
+    });
 
+    await Promise.all(
+      activeFeatures.map((feature) => {
+        return featureRepository.saveFeature(feature);
+      })
+    );
     await mapRepository.saveMap(updatedMap);
     setActiveMap(updatedMap);
   }
@@ -477,6 +502,8 @@ function closeProject() {
   setActiveMap(
     null
   );
+
+  setActiveFeatures([]);
 
   clearActiveMapImage();
 
@@ -634,12 +661,10 @@ function handleCreateFeature() {
     noteLinks: [],
   };
 
+  setActiveFeatures((current) => [...current, feature]);
   setActiveMap({
     ...activeMap,
-    features: [
-      ...activeMap.features,
-      feature,
-    ],
+    featureIds: [...activeMap.featureIds, feature.id],
     updatedAt: new Date(),
   });
 
@@ -698,7 +723,7 @@ imageRegistration: {
   offsetY: 0,
 },
 
-features: [],
+featureIds: [],
 
         createdAt:
           now,
@@ -740,6 +765,7 @@ features: [],
     };
 
     setActiveMap(updatedMap);
+    if (!activeMap) setActiveFeatures([]);
     await loadMapImage(updatedMap);
     setActiveProject(updatedProject);
 
@@ -1113,7 +1139,7 @@ const deletableProjects =
         imageUrl={activeMapImageUrl}
         mapName={activeMap.name}
         imageRegistration={activeMap.imageRegistration}
-        features={activeMap.features}
+        features={activeFeatures}
         onNewFeatureRequest={handleNewFeatureRequest}
         onZoomStateChange={setZoomControl}
       />
