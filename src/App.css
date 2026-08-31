@@ -509,6 +509,15 @@
   cursor: pointer;
 }
 
+.map-feature-marker.moving {
+  cursor: crosshair;
+}
+
+.map-feature-marker.invalid .map-feature-dot {
+  border-color: #541313;
+  background: #e65a5a;
+}
+
 .map-feature-dot {
   display: block;
   width: 15px;
@@ -618,6 +627,15 @@
 
 .map-context-menu button:hover {
   background: #3a3a3a;
+}
+
+.map-context-menu button:disabled {
+  color: #777777;
+  cursor: default;
+}
+
+.map-context-menu button:disabled:hover {
+  background: transparent;
 }
 
 .regions-empty-map {

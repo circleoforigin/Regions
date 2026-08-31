@@ -884,6 +884,16 @@ function handleSubtitleChange(featureId: string, subtitle: string) {
   markProjectDirty();
 }
 
+function handleFeatureMove(
+  featureId: string,
+  position: Feature['position']
+) {
+  setActiveFeatures((current) => current.map((feature) => {
+    return feature.id === featureId ? { ...feature, position } : feature;
+  }));
+  markProjectDirty();
+}
+
 function handleNewFeatureRequest(x: number, y: number) {
   setNewFeaturePosition({ x, y });
   setNewFeatureName('');
@@ -1484,6 +1494,7 @@ const deletableProjects =
         onFocusFeatureComplete={() => setPendingFocusFeatureId(null)}
         onEnterFeature={(feature) => void handleEnterFeature(feature)}
         onSubtitleChange={handleSubtitleChange}
+        onFeatureMove={handleFeatureMove}
         onNewFeatureRequest={handleNewFeatureRequest}
         onNewLocationRequest={handleNewLocationRequest}
         onZoomStateChange={setZoomControl}

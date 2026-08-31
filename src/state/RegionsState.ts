@@ -52,6 +52,8 @@ export interface RegionsSessionState {
   viewport: RegionsViewportState;
   editingMode: RegionsEditingMode;
   contextMenu: RegionsContextMenuState | null;
+  movingFeatureId: string | null;
+  movingFeaturePreviewPosition: RegionsPoint | null;
 }
 
 export type RegionsStateAction =
@@ -70,6 +72,13 @@ export type RegionsStateAction =
   | { type: 'contextMenu.open'; menu: RegionsContextMenuState }
   | { type: 'contextMenu.close' }
   | { type: 'editingMode.set'; mode: RegionsEditingMode }
+  | {
+      type: 'featureMove.start';
+      featureId: string;
+      position: RegionsPoint;
+    }
+  | { type: 'featureMove.preview'; position: RegionsPoint }
+  | { type: 'featureMove.cancel' }
   | { type: 'navigation.push'; entry: RegionsNavigationEntry }
   | { type: 'navigation.back' }
   | { type: 'navigation.clear' };
@@ -88,6 +97,8 @@ export const initialRegionsState: RegionsSessionState = {
   },
   editingMode: 'browse',
   contextMenu: null,
+  movingFeatureId: null,
+  movingFeaturePreviewPosition: null,
 };
 
 export function regionsStateReducer(
@@ -113,6 +124,8 @@ export function regionsStateReducer(
         viewport: initialRegionsState.viewport,
         editingMode: 'browse',
         contextMenu: null,
+        movingFeatureId: null,
+        movingFeaturePreviewPosition: null,
       };
 
     case 'feature.select':
@@ -180,6 +193,27 @@ export function regionsStateReducer(
 
     case 'editingMode.set':
       return { ...state, editingMode: action.mode };
+
+    case 'featureMove.start':
+      return {
+        ...state,
+        editingMode: 'move-feature',
+        contextMenu: null,
+        selectedFeatureId: null,
+        movingFeatureId: action.featureId,
+        movingFeaturePreviewPosition: action.position,
+      };
+
+    case 'featureMove.preview':
+      return { ...state, movingFeaturePreviewPosition: action.position };
+
+    case 'featureMove.cancel':
+      return {
+        ...state,
+        editingMode: 'browse',
+        movingFeatureId: null,
+        movingFeaturePreviewPosition: null,
+      };
 
     case 'navigation.push':
       return {

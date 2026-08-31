@@ -5,6 +5,7 @@ import { defaultLayerVisibility } from '../state/RegionsState';
 import MapKey from './MapKey';
 
 const OVERSCROLL_RATIO = 0.5;
+const FEATURE_MARKER_MIN_DISTANCE = 24;
 
 interface Point {
   x: number;
@@ -43,6 +44,7 @@ onFocusFeatureComplete?: () => void;
 
 onEnterFeature?: (feature: Feature) => void;
 onSubtitleChange?: (featureId: string, subtitle: string) => void;
+onFeatureMove?: (featureId: string, position: Point) => void;
 secondaryActions?: FeaturePopupAction[];
 
 onNewFeatureRequest?: (
@@ -79,6 +81,7 @@ function MapViewport({
   onFocusFeatureComplete,
   onEnterFeature,
   onSubtitleChange,
+  onFeatureMove,
   secondaryActions = [],
   onNewFeatureRequest,
   onNewLocationRequest,
@@ -88,6 +91,8 @@ function MapViewport({
   const { scale, panX, panY } = state.viewport;
   const pan = { x: panX, y: panY };
   const contextMenu = state.contextMenu;
+  const movingFeatureId = state.movingFeatureId;
+  const movingFeaturePreviewPosition = state.movingFeaturePreviewPosition;
   const popupOffset = state.selectedFeaturePopupOffset;
   const layerVisibility =
     state.layerVisibility ?? defaultLayerVisibility;
@@ -346,6 +351,18 @@ function isPointInsideMap(point: Point): boolean {
     point.y >= minY && point.y <= maxY;
 }
 
+function isMovePositionValid(point: Point): boolean {
+  if (!isPointInsideMap(point)) return false;
+
+  const proposed = mapToScreen(point.x, point.y);
+  return visibleFeatures.every((feature) => {
+    if (feature.id === movingFeatureId) return true;
+    const other = mapToScreen(feature.position.x, feature.position.y);
+    return Math.hypot(proposed.x - other.x, proposed.y - other.y) >=
+      FEATURE_MARKER_MIN_DISTANCE;
+  });
+}
+
   function applyScale(
     requestedScale: number,
     anchor?: Point
@@ -566,6 +583,39 @@ function isPointInsideMap(point: Point): boolean {
   }, [dispatch, selectedFeature, state.selectedFeatureId]);
 
   useEffect(() => {
+    if (state.editingMode !== 'move-feature') return;
+
+    const movingFeature = features.find((feature) => {
+      return feature.id === movingFeatureId;
+    });
+    const movingLayerIsVisible = movingFeature &&
+      (isLocation(movingFeature)
+        ? layerVisibility.locations
+        : layerVisibility.features);
+    if (movingLayerIsVisible) return;
+    dispatch({ type: 'featureMove.cancel' });
+  }, [
+    dispatch,
+    features,
+    layerVisibility.features,
+    layerVisibility.locations,
+    movingFeatureId,
+    state.editingMode,
+  ]);
+
+  useEffect(() => {
+    if (state.editingMode !== 'move-feature') return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      dispatch({ type: 'featureMove.cancel' });
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [dispatch, state.editingMode]);
+
+  useEffect(() => {
     const popup = popupRef.current;
     if (!popup || !selectedFeature) return;
 
@@ -678,6 +728,7 @@ function handleContextMenu(
     React.MouseEvent<HTMLDivElement>
 ) {
   event.preventDefault();
+  if (state.editingMode === 'move-feature') return;
   dispatch({ type: 'feature.clearSelection' });
   dispatch({ type: 'contextMenu.close' });
 
@@ -750,6 +801,16 @@ function handleContextMenu(
       return;
     }
 
+    if (state.editingMode === 'move-feature') {
+      const point = screenToMap(event.clientX, event.clientY);
+      if (!point || !movingFeatureId) return;
+      dispatch({ type: 'featureMove.preview', position: point });
+      if (!isMovePositionValid(point)) return;
+      onFeatureMove?.(movingFeatureId, point);
+      dispatch({ type: 'featureMove.cancel' });
+      return;
+    }
+
     dispatch({ type: 'feature.clearSelection' });
     dispatch({ type: 'contextMenu.close' });
 
@@ -783,6 +844,12 @@ function handleContextMenu(
     event:
       React.PointerEvent<HTMLDivElement>
   ) {
+    if (state.editingMode === 'move-feature') {
+      const point = screenToMap(event.clientX, event.clientY);
+      if (point) dispatch({ type: 'featureMove.preview', position: point });
+      return;
+    }
+
     const drag =
       dragRef.current;
 
@@ -964,33 +1031,62 @@ function cancelSubtitleEdit() {
 />
 
 {visibleFeatures.map((feature) => {
+  const isMoving = feature.id === movingFeatureId &&
+    state.editingMode === 'move-feature';
+  const position = isMoving && movingFeaturePreviewPosition
+    ? movingFeaturePreviewPosition
+    : feature.position;
   const screenPosition = mapToScreen(
-    feature.position.x,
-    feature.position.y
+    position.x,
+    position.y
   );
+  const moveIsValid = !isMoving || isMovePositionValid(position);
+  const markerClasses = [
+    'map-feature-marker',
+    state.selectedFeatureId === feature.id ? 'selected' : '',
+    isMoving ? 'moving' : '',
+    moveIsValid ? '' : 'invalid',
+  ].filter(Boolean).join(' ');
 
   return (
     <Fragment key={feature.id}>
       <button
         type="button"
-        className={state.selectedFeatureId === feature.id
-          ? 'map-feature-marker selected'
-          : 'map-feature-marker'}
+        className={markerClasses}
         title={feature.name}
         aria-pressed={state.selectedFeatureId === feature.id}
         style={{
           left: screenPosition.x,
           top: screenPosition.y,
         }}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => dispatch({
-          type: 'feature.select',
-          featureId: feature.id,
-        })}
+        onPointerDown={(event) => {
+          if (state.editingMode === 'move-feature') return;
+          event.stopPropagation();
+        }}
+        onClick={() => {
+          if (state.editingMode === 'move-feature') return;
+          dispatch({ type: 'feature.select', featureId: feature.id });
+        }}
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          dispatch({ type: 'contextMenu.close' });
+          if (state.editingMode === 'move-feature') return;
+          const viewport = viewportRef.current;
+          const point = screenToMap(event.clientX, event.clientY);
+          if (!viewport || !point) return;
+          const rect = viewport.getBoundingClientRect();
+          dispatch({ type: 'feature.select', featureId: feature.id });
+          dispatch({
+            type: 'contextMenu.open',
+            menu: {
+              kind: 'feature',
+              targetId: feature.id,
+              screenX: event.clientX - rect.left,
+              screenY: event.clientY - rect.top,
+              mapX: point.x,
+              mapY: point.y,
+            },
+          });
         }}
       >
         <span className="map-feature-dot" />
@@ -1106,7 +1202,7 @@ function cancelSubtitleEdit() {
     <span />
   </div>
 )}
-      <MapKey mapName={mapName} side={displayedMapKeySide} />
+
     </div>
 
     <div className="feature-popup-actions">
@@ -1192,7 +1288,9 @@ function cancelSubtitleEdit() {
       event.stopPropagation()
     }
   >
-    <button
+    {contextMenu.kind === 'map' ? (
+      <>
+      <button
       type="button"
       onClick={() => {
   onNewFeatureRequest?.(
@@ -1219,8 +1317,43 @@ function cancelSubtitleEdit() {
     >
       New Location...
     </button>
+      </>
+    ) : (
+      <>
+        <button
+          type="button"
+          onClick={(event) => {
+            if (!contextMenu.targetId) return;
+            const pointerPosition = screenToMap(
+              event.clientX,
+              event.clientY
+            );
+            dispatch({
+              type: 'featureMove.start',
+              featureId: contextMenu.targetId,
+              position: pointerPosition ?? {
+                x: contextMenu.mapX,
+                y: contextMenu.mapY,
+              },
+            });
+          }}
+        >
+          Move
+        </button>
+
+        <button type="button" disabled>
+          Delete
+        </button>
+      </>
+    )}
   </div>
 )}    
+
+    <MapKey
+        mapName={mapName}
+        side={displayedMapKeySide}
+    />
+
     </div>
   );
 }
