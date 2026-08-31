@@ -1075,7 +1075,7 @@ function cancelSubtitleEdit() {
           const point = screenToMap(event.clientX, event.clientY);
           if (!viewport || !point) return;
           const rect = viewport.getBoundingClientRect();
-          dispatch({ type: 'feature.select', featureId: feature.id });
+          dispatch({ type: 'feature.clearSelection' });
           dispatch({
             type: 'contextMenu.open',
             menu: {
