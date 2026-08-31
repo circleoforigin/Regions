@@ -280,10 +280,11 @@
 
 .feature-popup {
   position: absolute;
-  width: 240px;
-  max-height: min(240px, calc(100% - 16px));
+  width: min(300px, calc(100% - 24px));
+  height: min(360px, calc(100% - 24px));
+  box-sizing: border-box;
   transform: translate(-50%, -50%);
-  overflow: auto;
+  overflow: visible;
   z-index: 20;
   color: #eeeeee;
   background: rgba(38, 38, 38, 0.96);

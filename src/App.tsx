@@ -545,13 +545,11 @@ async function navigateToFeatureTarget(
     setActiveProject({
       ...project,
       activeMapId: destination.map.id,
-      updatedAt: new Date(),
     });
     setActiveMap(destination.map);
     setActiveFeatures(destination.features);
     setPendingFocusFeatureId(targetFeature.id);
     await loadMapImage(destination.map);
-    markProjectDirty();
   } catch (error) {
     const message = error instanceof Error
       ? error.message

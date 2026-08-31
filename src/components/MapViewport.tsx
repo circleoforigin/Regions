@@ -192,8 +192,8 @@ function MapViewport({
     useState<'left' | 'right'>('right');
 
   const [popupSize, setPopupSize] = useState<Size>({
-    width: 240,
-    height: 140,
+    width: 300,
+    height: 480,
   });
 
     const registeredWidth = imageSize.width * registration.scale;
