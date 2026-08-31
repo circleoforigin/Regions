@@ -1,6 +1,7 @@
 import type { Feature } from '../models/Feature';
 import { Fragment, useEffect, useRef, useState} from 'react';
 import { useRegionsState } from '../state/RegionsStateContext';
+import { defaultLayerVisibility } from '../state/RegionsState';
 
 interface Point {
   x: number;
@@ -85,7 +86,8 @@ function MapViewport({
   const pan = { x: panX, y: panY };
   const contextMenu = state.contextMenu;
   const popupOffset = state.selectedFeaturePopupOffset;
-  const { layerVisibility } = state;
+  const layerVisibility =
+    state.layerVisibility ?? defaultLayerVisibility;
   const isFeatureVisible = (feature: Feature) => {
     return isLocation(feature)
       ? layerVisibility.locations
@@ -172,6 +174,18 @@ function MapViewport({
       : 1;
 
   const maxScale = Math.max( 2, minScale );
+
+  const zoomRatio = minScale > 0 ? scale / minScale : 1;
+  const labelFadeStart = 1.1;
+  const labelFadeEnd = 1.5;
+  const labelOpacity = Math.max(
+    0,
+    Math.min(
+      1,
+      (zoomRatio - labelFadeStart) /
+        (labelFadeEnd - labelFadeStart)
+    )
+  );
 
     const zoomStep = Math.max(( maxScale - minScale ) / 200, 0.001);
 
@@ -927,6 +941,7 @@ function cancelSubtitleEdit() {
           style={{
             left: screenPosition.x,
             top: screenPosition.y,
+            opacity: labelOpacity,
           }}
         >
           {feature.name}

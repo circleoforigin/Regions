@@ -17,6 +17,12 @@ export interface RegionsLayerVisibility {
 
 export type RegionsLayer = keyof RegionsLayerVisibility;
 
+export const defaultLayerVisibility: RegionsLayerVisibility = {
+  names: true,
+  features: true,
+  locations: true,
+};
+
 export type RegionsEditingMode =
   | 'browse'
   | 'move-feature'
@@ -73,11 +79,7 @@ export const initialRegionsState: RegionsSessionState = {
   activeMapId: null,
   selectedFeatureId: null,
   selectedFeaturePopupOffset: { x: 0, y: 0 },
-  layerVisibility: {
-    names: true,
-    features: true,
-    locations: true,
-  },
+  layerVisibility: { ...defaultLayerVisibility },
   navigationHistory: [],
   viewport: {
     scale: 1,
@@ -140,7 +142,7 @@ export function regionsStateReducer(
       return {
         ...state,
         layerVisibility: {
-          ...state.layerVisibility,
+          ...(state.layerVisibility ?? defaultLayerVisibility),
           [action.layer]: action.visible,
         },
       };

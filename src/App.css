@@ -524,6 +524,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
+  transition: opacity 120ms ease;
   text-shadow:
     -1px -1px 1px #111111,
     1px -1px 1px #111111,

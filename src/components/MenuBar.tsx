@@ -4,7 +4,10 @@ import {
   useState,
 } from 'react';
 import { useRegionsState } from '../state/RegionsStateContext';
-import type { RegionsLayer } from '../state/RegionsState';
+import {
+  defaultLayerVisibility,
+  type RegionsLayer,
+} from '../state/RegionsState';
 
 const LAYER_OPTIONS: { id: RegionsLayer; label: string }[] = [
   { id: 'names', label: 'Names' },
@@ -57,6 +60,8 @@ function MenuBar({
   onFitMap,
 }: MenuBarProps) {
   const { state, dispatch } = useRegionsState();
+  const layerVisibility =
+    state.layerVisibility ?? defaultLayerVisibility;
   const menuBarRef =
     useRef<HTMLDivElement>(null);
 
@@ -262,7 +267,7 @@ function MenuBar({
               {layersMenuOpen && (
                 <div className="dropdown-menu dropdown-submenu">
                   {LAYER_OPTIONS.map((option) => {
-                    const visible = state.layerVisibility[option.id];
+                    const visible = layerVisibility[option.id];
 
                     return (
                       <button
