@@ -21,12 +21,14 @@ interface MenuBarProps {
   onSaveProject: () => void;
   onCloseProject: () => void;
   onDeleteProject: () => void;
+  onGoToParentMap: () => void;
   onAssignMapImage: () => void;
   autoSave: boolean;
   onAutoSaveChange: (enabled: boolean) => void;
 
   projectName?: string;
   mapActive: boolean;
+  parentMapAvailable: boolean;
 
   zoomValue?: number;
   zoomMin?: number;
@@ -45,11 +47,13 @@ function MenuBar({
   onSaveProject,
   onCloseProject,
   onDeleteProject,
+  onGoToParentMap,
   onAssignMapImage,
   autoSave,
   onAutoSaveChange,
   projectName,
   mapActive,
+  parentMapAvailable,
 
   zoomValue,
   zoomMin,
@@ -238,6 +242,20 @@ function MenuBar({
 
         {mapMenuOpen && (
           <div className="dropdown-menu">
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={!parentMapAvailable}
+              onClick={() => {
+                closeMenus();
+                onGoToParentMap();
+              }}
+            >
+              Go to Parent Map
+            </button>
+
+            <div className="dropdown-separator" />
+
             <button
               type="button"
               className="dropdown-item"

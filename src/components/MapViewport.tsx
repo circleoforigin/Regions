@@ -6,6 +6,7 @@ import MapKey from './MapKey';
 
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
+const NAVIGATION_ZOOM_RATIO = 0.5;
 
 interface Point {
   x: number;
@@ -15,6 +16,31 @@ interface Point {
 interface Size {
   width: number;
   height: number;
+}
+
+function clampPanToViewport(
+  candidate: Point,
+  candidateScale: number,
+  mapSize: Size,
+  viewportSize: Size
+): Point {
+  const scaledWidth = mapSize.width * candidateScale;
+  const scaledHeight = mapSize.height * candidateScale;
+  const normalMaxX = Math.max(
+    0,
+    (scaledWidth - viewportSize.width) / 2
+  );
+  const normalMaxY = Math.max(
+    0,
+    (scaledHeight - viewportSize.height) / 2
+  );
+  const maxX = normalMaxX + viewportSize.width * OVERSCROLL_RATIO;
+  const maxY = normalMaxY + viewportSize.height * OVERSCROLL_RATIO;
+
+  return {
+    x: Math.max(-maxX, Math.min(maxX, candidate.x)),
+    y: Math.max(-maxY, Math.min(maxY, candidate.y)),
+  };
 }
 
 function isLocation(feature: Feature): boolean {
@@ -214,53 +240,12 @@ function MapViewport({
 
   function clampPan( candidate: Point, candidateScale = scale
   ): Point {
-    const scaledWidth = registeredWidth * candidateScale;
-
-    const scaledHeight = registeredHeight * candidateScale;
-
-    const normalMaxX =
-      Math.max(
-        0,
-        (
-          scaledWidth -
-          viewportSize.width
-        ) / 2
-      );
-
-    const normalMaxY =
-      Math.max(
-        0,
-        (
-          scaledHeight -
-          viewportSize.height
-        ) / 2
-      );
-
-    const maxX =
-      normalMaxX + viewportSize.width * OVERSCROLL_RATIO;
-
-    const maxY =
-      normalMaxY + viewportSize.height * OVERSCROLL_RATIO;
-
-    return {
-      x:
-        Math.max(
-          -maxX,
-          Math.min(
-            maxX,
-            candidate.x
-          )
-        ),
-
-      y:
-        Math.max(
-          -maxY,
-          Math.min(
-            maxY,
-            candidate.y
-          )
-        ),
-    };
+    return clampPanToViewport(
+      candidate,
+      candidateScale,
+      { width: registeredWidth, height: registeredHeight },
+      viewportSize
+    );
   }
 
   function getMapKeySide(
@@ -639,29 +624,22 @@ function isMovePositionValid(point: Point): boolean {
     const feature = features.find((item) => item.id === focusFeatureId);
     if (!feature) return;
 
-    const maxX = Math.max(
-      0,
-      (registeredWidth * minScale - viewportSize.width) / 2
-    ) + viewportSize.width * OVERSCROLL_RATIO;
-    const maxY = Math.max(
-      0,
-      (registeredHeight * minScale - viewportSize.height) / 2
-    ) + viewportSize.height * OVERSCROLL_RATIO;
-    const nextPan = {
-      x: Math.max(
-        -maxX,
-        Math.min(maxX, -feature.position.x * minScale)
-      ),
-      y: Math.max(
-        -maxY,
-        Math.min(maxY, -feature.position.y * minScale)
-      ),
-    };
+    const arrivalScale = minScale +
+      (maxScale - minScale) * NAVIGATION_ZOOM_RATIO;
+    const nextPan = clampPanToViewport(
+      {
+        x: -feature.position.x * arrivalScale,
+        y: -feature.position.y * arrivalScale,
+      },
+      arrivalScale,
+      { width: registeredWidth, height: registeredHeight },
+      viewportSize
+    );
 
     dispatch({
       type: 'viewport.set',
       viewport: {
-        scale: minScale,
+        scale: arrivalScale,
         panX: nextPan.x,
         panY: nextPan.y,
       },
@@ -672,11 +650,13 @@ function isMovePositionValid(point: Point): boolean {
     focusFeatureId,
     imageSize.height,
     imageSize.width,
+    maxScale,
     minScale,
     registeredHeight,
     registeredWidth,
     viewportSize.height,
     viewportSize.width,
+    viewportSize,
     dispatch,
   ]);
 

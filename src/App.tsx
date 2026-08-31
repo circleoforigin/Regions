@@ -563,6 +563,7 @@ async function navigateToFeatureTarget(
 
 async function handleEnterFeature(feature: Feature) {
   if (!feature.targetMapId || !feature.targetFeatureId) return;
+  dispatch({ type: 'featureMove.cancel' });
 
   if (projectDirty && !autoSave) {
     requestProjectAction((outcome) => {
@@ -577,6 +578,25 @@ async function handleEnterFeature(feature: Feature) {
   }
 
   await navigateToFeatureTarget(feature, false);
+}
+
+function handleGoToParentMap() {
+  if (!activeMap?.parentMapId) return;
+
+  const returnFeatures = activeFeatures.filter((feature) => {
+    return feature.targetMapId === activeMap.parentMapId &&
+      Boolean(feature.targetFeatureId);
+  });
+  const returnFeature = returnFeatures.sort((left, right) => {
+    return left.id.localeCompare(right.id);
+  })[0];
+
+  if (!returnFeature) {
+    setNavigationError('No valid return Location was found.');
+    return;
+  }
+
+  void handleEnterFeature(returnFeature);
 }
 
 async function handleSelectProject(project: Project) {
@@ -1121,6 +1141,7 @@ const deletableProjects =
   onDeleteProject={() =>
     void handleDeleteProject()
   }
+  onGoToParentMap={handleGoToParentMap}
   onAssignMapImage={() => assignMapInputRef.current?.click()}
   autoSave={autoSave}
   onAutoSaveChange={setAutoSave}
@@ -1128,6 +1149,7 @@ const deletableProjects =
     activeProject?.name
   }
   mapActive={activeMap !== null}
+  parentMapAvailable={Boolean(activeMap?.parentMapId)}
   zoomValue={
     zoomControl?.value
   }
