@@ -112,7 +112,8 @@ function MapViewport({
   offsetY: 0,
 };
   
-    const viewportRef =
+  const suppressNextFeatureClickRef = useRef(false);
+  const viewportRef =
     useRef<HTMLDivElement | null>(
       null
     );
@@ -801,11 +802,13 @@ function handleContextMenu(
       return;
     }
 
-    if (state.editingMode === 'move-feature') {
+    if (state.editingMode === 'move-feature') 
+    {
       const point = screenToMap(event.clientX, event.clientY);
       if (!point || !movingFeatureId) return;
       dispatch({ type: 'featureMove.preview', position: point });
       if (!isMovePositionValid(point)) return;
+      suppressNextFeatureClickRef.current = true;
       onFeatureMove?.(movingFeatureId, point);
       dispatch({ type: 'featureMove.cancel' });
       return;
@@ -978,11 +981,11 @@ function cancelSubtitleEdit() {
   return (
     <div
       ref={viewportRef}
-      className={
-        dragging
-          ? 'map-viewport dragging'
-          : 'map-viewport'
-      }
+      className={[
+        'map-viewport',
+        dragging ? 'dragging' : '',
+        state.editingMode === 'move-feature' ? 'moving-feature' : '',
+      ].filter(Boolean).join(' ')}
       onWheel={
         handleWheel
       }
@@ -1064,8 +1067,14 @@ function cancelSubtitleEdit() {
           event.stopPropagation();
         }}
         onClick={() => {
-          if (state.editingMode === 'move-feature') return;
-          dispatch({ type: 'feature.select', featureId: feature.id });
+            if (suppressNextFeatureClickRef.current) {
+                suppressNextFeatureClickRef.current = false;
+                return;
+            }
+
+            if (state.editingMode === 'move-feature') return;
+
+            dispatch({ type: 'feature.select', featureId: feature.id  });
         }}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -1092,7 +1101,7 @@ function cancelSubtitleEdit() {
         <span className="map-feature-dot" />
       </button>
 
-      {layerVisibility.names && (
+      {layerVisibility.names && !isMoving && (
         <span
           className="map-feature-label"
           style={{
