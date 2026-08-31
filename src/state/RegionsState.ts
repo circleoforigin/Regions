@@ -9,6 +9,14 @@ export interface RegionsPoint {
   y: number;
 }
 
+export interface RegionsLayerVisibility {
+  names: boolean;
+  features: boolean;
+  locations: boolean;
+}
+
+export type RegionsLayer = keyof RegionsLayerVisibility;
+
 export type RegionsEditingMode =
   | 'browse'
   | 'move-feature'
@@ -33,6 +41,7 @@ export interface RegionsSessionState {
   activeMapId: string | null;
   selectedFeatureId: string | null;
   selectedFeaturePopupOffset: RegionsPoint;
+  layerVisibility: RegionsLayerVisibility;
   navigationHistory: RegionsNavigationEntry[];
   viewport: RegionsViewportState;
   editingMode: RegionsEditingMode;
@@ -47,6 +56,7 @@ export type RegionsStateAction =
   | { type: 'feature.clearSelection' }
   | { type: 'featurePopup.setOffset'; offset: RegionsPoint }
   | { type: 'featurePopup.resetOffset' }
+  | { type: 'layers.setVisibility'; layer: RegionsLayer; visible: boolean }
   | { type: 'viewport.set'; viewport: RegionsViewportState }
   | { type: 'viewport.setScale'; scale: number }
   | { type: 'viewport.setPan'; panX: number; panY: number }
@@ -63,6 +73,11 @@ export const initialRegionsState: RegionsSessionState = {
   activeMapId: null,
   selectedFeatureId: null,
   selectedFeaturePopupOffset: { x: 0, y: 0 },
+  layerVisibility: {
+    names: true,
+    features: true,
+    locations: true,
+  },
   navigationHistory: [],
   viewport: {
     scale: 1,
@@ -119,6 +134,15 @@ export function regionsStateReducer(
       return {
         ...state,
         selectedFeaturePopupOffset: { x: 0, y: 0 },
+      };
+
+    case 'layers.setVisibility':
+      return {
+        ...state,
+        layerVisibility: {
+          ...state.layerVisibility,
+          [action.layer]: action.visible,
+        },
       };
 
     case 'viewport.set':

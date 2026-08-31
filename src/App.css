@@ -181,6 +181,22 @@
   background: #454545;
 }
 
+.dropdown-submenu-host {
+  position: relative;
+}
+
+.dropdown-submenu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.dropdown-submenu {
+  top: -5px;
+  left: 100%;
+}
+
 /* =========================
    REGIONS SHELL
    ========================= */
@@ -288,7 +304,7 @@
 .feature-popup-subtitle {
   display: block;
   width: 100%;
-  margin-top: 3px;
+  margin-top: -5px;
   padding: 0;
 
   border: 0;
@@ -492,6 +508,27 @@
   border-radius: 50%;
   background: #202020;
   box-sizing: border-box;
+}
+
+.map-feature-label {
+  position: absolute;
+  transform: translate(-50%, 12px);
+  z-index: 2;
+  max-width: 180px;
+  overflow: hidden;
+  color: #f2f2f2;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow:
+    -1px -1px 1px #111111,
+    1px -1px 1px #111111,
+    -1px 1px 1px #111111,
+    1px 1px 1px #111111;
 }
 
 .map-context-menu {

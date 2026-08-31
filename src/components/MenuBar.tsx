@@ -3,6 +3,14 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useRegionsState } from '../state/RegionsStateContext';
+import type { RegionsLayer } from '../state/RegionsState';
+
+const LAYER_OPTIONS: { id: RegionsLayer; label: string }[] = [
+  { id: 'names', label: 'Names' },
+  { id: 'features', label: 'Features' },
+  { id: 'locations', label: 'Locations' },
+];
 
 interface MenuBarProps {
   onNewProject: () => void;
@@ -48,6 +56,7 @@ function MenuBar({
   onZoomChange,
   onFitMap,
 }: MenuBarProps) {
+  const { state, dispatch } = useRegionsState();
   const menuBarRef =
     useRef<HTMLDivElement>(null);
 
@@ -58,6 +67,7 @@ function MenuBar({
 
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
+  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!fileMenuOpen && !mapMenuOpen && !settingsMenuOpen) return;
@@ -76,6 +86,7 @@ function MenuBar({
       ) {
         setFileMenuOpen(false);
         setMapMenuOpen(false);
+        setLayersMenuOpen(false);
         setSettingsMenuOpen(false);
       }
     }
@@ -96,6 +107,7 @@ function MenuBar({
   function closeMenus() {
     setFileMenuOpen(false);
     setMapMenuOpen(false);
+    setLayersMenuOpen(false);
     setSettingsMenuOpen(false);
   }
 
@@ -136,6 +148,7 @@ function MenuBar({
           onClick={() => {
             setFileMenuOpen((open) => !open);
             setMapMenuOpen(false);
+            setLayersMenuOpen(false);
             setSettingsMenuOpen(false);
           }}
         >
@@ -210,6 +223,7 @@ function MenuBar({
           disabled={!mapActive}
           onClick={() => {
             setMapMenuOpen((open) => !open);
+            setLayersMenuOpen(false);
             setFileMenuOpen(false);
             setSettingsMenuOpen(false);
           }}
@@ -229,6 +243,50 @@ function MenuBar({
             >
               Assign Map Image...
             </button>
+
+            <div
+              className="dropdown-submenu-host"
+              onPointerEnter={() => setLayersMenuOpen(true)}
+            >
+              <button
+                type="button"
+                className="dropdown-item dropdown-submenu-trigger"
+                aria-haspopup="menu"
+                aria-expanded={layersMenuOpen}
+                onClick={() => setLayersMenuOpen((open) => !open)}
+              >
+                <span>Layers</span>
+                <span aria-hidden="true">▸</span>
+              </button>
+
+              {layersMenuOpen && (
+                <div className="dropdown-menu dropdown-submenu">
+                  {LAYER_OPTIONS.map((option) => {
+                    const visible = state.layerVisibility[option.id];
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className="dropdown-item"
+                        role="menuitemcheckbox"
+                        aria-checked={visible}
+                        onClick={() => dispatch({
+                          type: 'layers.setVisibility',
+                          layer: option.id,
+                          visible: !visible,
+                        })}
+                      >
+                        <span className="dropdown-check">
+                          {visible ? '✓' : ''}
+                        </span>
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -241,6 +299,7 @@ function MenuBar({
             setSettingsMenuOpen((open) => !open);
             setFileMenuOpen(false);
             setMapMenuOpen(false);
+            setLayersMenuOpen(false);
           }}
         >
           Settings

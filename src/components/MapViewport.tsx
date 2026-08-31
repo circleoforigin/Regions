@@ -1,5 +1,5 @@
 import type { Feature } from '../models/Feature';
-import { useEffect, useRef, useState} from 'react';
+import { Fragment, useEffect, useRef, useState} from 'react';
 import { useRegionsState } from '../state/RegionsStateContext';
 
 interface Point {
@@ -10,6 +10,10 @@ interface Point {
 interface Size {
   width: number;
   height: number;
+}
+
+function isLocation(feature: Feature): boolean {
+  return Boolean(feature.targetMapId && feature.targetFeatureId);
 }
 
 export interface FeaturePopupAction {
@@ -81,9 +85,17 @@ function MapViewport({
   const pan = { x: panX, y: panY };
   const contextMenu = state.contextMenu;
   const popupOffset = state.selectedFeaturePopupOffset;
+  const { layerVisibility } = state;
+  const isFeatureVisible = (feature: Feature) => {
+    return isLocation(feature)
+      ? layerVisibility.locations
+      : layerVisibility.features;
+  };
   const selectedFeature = features.find((feature) => {
-    return feature.id === state.selectedFeatureId;
+    return feature.id === state.selectedFeatureId &&
+      isFeatureVisible(feature);
   });
+  const visibleFeatures = features.filter(isFeatureVisible);
   const registration = imageRegistration ?? {
   scale: 1,
   offsetX: 0,
@@ -876,40 +888,51 @@ function cancelSubtitleEdit() {
 }}
 />
 
-{features.map((feature) => {
+{visibleFeatures.map((feature) => {
   const screenPosition = mapToScreen(
     feature.position.x,
     feature.position.y
   );
 
   return (
-    <button
-      key={feature.id}
-      type="button"
-      className={state.selectedFeatureId === feature.id
-        ? 'map-feature-marker selected'
-        : 'map-feature-marker'}
-      title={feature.name}
-      aria-pressed={state.selectedFeatureId === feature.id}
-      style={{
-        left: screenPosition.x,
-        top: screenPosition.y,
-      }}
-      onPointerDown={(event) =>
-        event.stopPropagation()
-      }
-      onClick={() => dispatch({
-        type: 'feature.select',
-        featureId: feature.id,
-      })}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        dispatch({ type: 'contextMenu.close' });
-      }}
-    >
-      <span className="map-feature-dot" />
-    </button>
+    <Fragment key={feature.id}>
+      <button
+        type="button"
+        className={state.selectedFeatureId === feature.id
+          ? 'map-feature-marker selected'
+          : 'map-feature-marker'}
+        title={feature.name}
+        aria-pressed={state.selectedFeatureId === feature.id}
+        style={{
+          left: screenPosition.x,
+          top: screenPosition.y,
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => dispatch({
+          type: 'feature.select',
+          featureId: feature.id,
+        })}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          dispatch({ type: 'contextMenu.close' });
+        }}
+      >
+        <span className="map-feature-dot" />
+      </button>
+
+      {layerVisibility.names && (
+        <span
+          className="map-feature-label"
+          style={{
+            left: screenPosition.x,
+            top: screenPosition.y,
+          }}
+        >
+          {feature.name}
+        </span>
+      )}
+    </Fragment>
   );
 })}
 
@@ -979,6 +1002,8 @@ function cancelSubtitleEdit() {
   <button
     type="button"
     className="feature-popup-subtitle"
+
+  onPointerDown={(event) => event.stopPropagation()}
     onClick={() => {
       setSubtitleDraft(selectedFeature.subtitle ?? '');
       setEditingSubtitle(true);
@@ -995,6 +1020,7 @@ function cancelSubtitleEdit() {
       className="feature-popup-subtitle-add"
       title="Add subtitle"
       aria-label="Add subtitle"
+      onPointerDown={(event) => event.stopPropagation()}
       onClick={() => {
         setSubtitleDraft('');
         setEditingSubtitle(true);
