@@ -3,6 +3,8 @@ import { Fragment, useEffect, useRef, useState} from 'react';
 import { useRegionsState } from '../state/RegionsStateContext';
 import { defaultLayerVisibility } from '../state/RegionsState';
 import MapKey from './MapKey';
+import RichTextEditor from './RichTextEditor';
+import type { RichTextDocument } from '../models/RichText';
 
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
@@ -70,6 +72,10 @@ onFocusFeatureComplete?: () => void;
 
 onEnterFeature?: (feature: Feature) => void;
 onSubtitleChange?: (featureId: string, subtitle: string) => void;
+onDescriptionChange?: (
+  featureId: string,
+  description: RichTextDocument
+) => void;
 onFeatureMove?: (featureId: string, position: Point) => void;
 secondaryActions?: FeaturePopupAction[];
 
@@ -107,6 +113,7 @@ function MapViewport({
   onFocusFeatureComplete,
   onEnterFeature,
   onSubtitleChange,
+  onDescriptionChange,
   onFeatureMove,
   secondaryActions = [],
   onNewFeatureRequest,
@@ -1248,11 +1255,13 @@ function cancelSubtitleEdit() {
 
     <div className="feature-popup-separator" />
 
-    <div className="feature-popup-data">
-      {selectedFeature.description || (
-        <span>No additional information.</span>
-      )}
-    </div>
+    <RichTextEditor
+      key={selectedFeature.id}
+      value={selectedFeature.description}
+      onChange={(description) => {
+        onDescriptionChange?.(selectedFeature.id, description);
+      }}
+    />
   </div>
 )}
 

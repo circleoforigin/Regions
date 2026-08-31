@@ -16,10 +16,11 @@ export interface Feature {
   position: FeaturePosition;
 
   type: string;
-  description?: string;
+  description?: RichTextDocument | string;
 
   noteLinks: FeatureNoteLink[];
 
   targetMapId?: string;
   targetFeatureId?: string;
 }
+import type { RichTextDocument } from './RichText';

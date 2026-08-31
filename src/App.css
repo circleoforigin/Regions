@@ -472,6 +472,120 @@
   font-style: italic;
 }
 
+.feature-description-section {
+  padding: 10px 11px 12px;
+}
+
+.feature-description-label {
+  margin-top: -10px;
+  margin-bottom: 0px;
+  color: #a8a8a8;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rich-text-editor {
+  height: 240px;
+  box-sizing: border-box;
+  padding: 8px 9px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid #555555;
+  background: #202020;
+  color: #e2e2e2;
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+  cursor: text;
+  white-space: pre-wrap;
+}
+
+.rich-text-editor:focus {
+  border-color: #777777;
+}
+
+.rich-text-editor.empty::before {
+  position: absolute;
+  color: #777777;
+  content: attr(data-placeholder);
+  font-style: italic;
+  pointer-events: none;
+}
+
+.rich-text-block {
+  min-height: 1.4em;
+}
+
+.rich-text-block.bullet,
+.rich-text-block.numbered {
+  position: relative;
+  padding-left: 18px;
+}
+
+.rich-text-block.bullet::before {
+  position: absolute;
+  left: 4px;
+  content: '•';
+}
+
+.rich-text-editor {
+  counter-reset: rich-text-number;
+}
+
+.rich-text-block.numbered {
+  counter-increment: rich-text-number;
+}
+
+.rich-text-block.numbered::before {
+  position: absolute;
+  left: 0;
+  content: counter(rich-text-number) '.';
+}
+
+.rich-text-block:not(.numbered) + .rich-text-block.numbered {
+  counter-reset: rich-text-number;
+}
+
+.rich-text-format-menu {
+  position: fixed;
+  z-index: 2200;
+  min-width: 160px;
+  padding: 4px 0;
+  border: 1px solid #555555;
+  background: #252525;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.48);
+}
+
+.rich-text-format-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: #eeeeee;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rich-text-format-menu button:hover:not(:disabled) {
+  background: #3a3a3a;
+}
+
+.rich-text-format-menu button:disabled {
+  color: #777777;
+  cursor: default;
+}
+
+.rich-text-format-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: #4b4b4b;
+}
+
 .map-viewport.dragging {
   cursor: grabbing;
 }

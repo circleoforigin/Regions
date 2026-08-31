@@ -9,6 +9,7 @@ import MapViewport from './components/MapViewport';
 import type { Project } from './models/Project';
 import type { Map as RegionMap } from './models/Map';
 import type { Feature } from './models/Feature';
+import type { RichTextDocument } from './models/RichText';
 import { featureRepository } from './features/FeatureRepository';
 
 import { mapRepository} from './maps/MapRepository';
@@ -178,6 +179,16 @@ const pendingProjectActionRef =
     modulePresence.start();
 
     modulePresence.announceReady();
+
+    if (moduleEventBus.hosted) {
+      void moduleEventBus.registerActions([
+        {
+          id: 'Regions.Entered',
+          label: 'Entered',
+          description: 'Raised when a Location is entered.',
+        },
+      ]).catch(() => undefined);
+    }
 
     return () => {
       modulePresence.stop();
@@ -550,6 +561,10 @@ async function navigateToFeatureTarget(
     setActiveFeatures(destination.features);
     setPendingFocusFeatureId(targetFeature.id);
     await loadMapImage(destination.map);
+    moduleEventBus.emit('Regions.Entered', {
+      mapId: destination.map.id,
+      featureId: targetFeature.id,
+    });
   } catch (error) {
     const message = error instanceof Error
       ? error.message
@@ -899,6 +914,16 @@ function handleSubtitleChange(featureId: string, subtitle: string) {
     )
   );
 
+  markProjectDirty();
+}
+
+function handleDescriptionChange(
+  featureId: string,
+  description: RichTextDocument
+) {
+  setActiveFeatures((current) => current.map((feature) => {
+    return feature.id === featureId ? { ...feature, description } : feature;
+  }));
   markProjectDirty();
 }
 
@@ -1514,6 +1539,7 @@ const deletableProjects =
         onFocusFeatureComplete={() => setPendingFocusFeatureId(null)}
         onEnterFeature={(feature) => void handleEnterFeature(feature)}
         onSubtitleChange={handleSubtitleChange}
+        onDescriptionChange={handleDescriptionChange}
         onFeatureMove={handleFeatureMove}
         onNewFeatureRequest={handleNewFeatureRequest}
         onNewLocationRequest={handleNewLocationRequest}
