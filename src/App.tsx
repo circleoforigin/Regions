@@ -183,9 +183,17 @@ const pendingProjectActionRef =
     if (moduleEventBus.hosted) {
       void moduleEventBus.registerActions([
         {
-          id: 'Regions.Entered',
-          label: 'Entered',
-          description: 'Raised when a Location is entered.',
+          id: 'Regions.LocationEntered',
+          label: 'Location Entered',
+          description: 'Raised when navigation into a Location completes.',
+          fields: [
+            { key: 'area', label: 'Area', type: 'string' },
+            { key: 'parentMap', label: 'Parent Map', type: 'string' },
+            { key: 'name', label: 'Name', type: 'string' },
+            { key: 'type', label: 'Type', type: 'string' },
+            { key: 'mapId', label: 'Map ID', type: 'string' },
+            { key: 'featureId', label: 'Feature ID', type: 'string' },
+          ],
         },
       ]).catch(() => undefined);
     }
@@ -516,6 +524,7 @@ async function navigateToFeatureTarget(
 
   setNavigationError(null);
   const sourceMapId = activeMap.id;
+  let sourceMapName = activeMap.name;
   let project = activeProject;
   let feature = sourceFeature;
 
@@ -526,6 +535,7 @@ async function navigateToFeatureTarget(
         sourceMapId
       );
       project = source.project;
+      sourceMapName = source.map.name;
       const persistedFeature = source.features.find((candidate) => {
         return candidate.id === sourceFeature.id;
       });
@@ -561,7 +571,11 @@ async function navigateToFeatureTarget(
     setActiveFeatures(destination.features);
     setPendingFocusFeatureId(targetFeature.id);
     await loadMapImage(destination.map);
-    moduleEventBus.emit('Regions.Entered', {
+    moduleEventBus.emit('Regions.LocationEntered', {
+      area: 'Location',
+      parentMap: sourceMapName,
+      name: targetFeature.name,
+      type: targetFeature.type,
       mapId: destination.map.id,
       featureId: targetFeature.id,
     });
