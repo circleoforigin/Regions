@@ -3,6 +3,8 @@ import { Fragment, useEffect, useRef, useState} from 'react';
 import { useRegionsState } from '../state/RegionsStateContext';
 import { defaultLayerVisibility } from '../state/RegionsState';
 
+const OVERSCROLL_RATIO = 0.5;
+
 interface Point {
   x: number;
   y: number;
@@ -206,7 +208,7 @@ function MapViewport({
 
     const scaledHeight = registeredHeight * candidateScale;
 
-    const maxX =
+    const normalMaxX =
       Math.max(
         0,
         (
@@ -215,7 +217,7 @@ function MapViewport({
         ) / 2
       );
 
-    const maxY =
+    const normalMaxY =
       Math.max(
         0,
         (
@@ -223,6 +225,12 @@ function MapViewport({
           viewportSize.height
         ) / 2
       );
+
+    const maxX =
+      normalMaxX + viewportSize.width * OVERSCROLL_RATIO;
+
+    const maxY =
+      normalMaxY + viewportSize.height * OVERSCROLL_RATIO;
 
     return {
       x:
@@ -289,6 +297,20 @@ function mapToScreen(
       pan.y +
       mapY * scale,
   };
+}
+
+function isPointInsideMap(point: Point): boolean {
+  if (registeredWidth <= 0 || registeredHeight <= 0) return false;
+
+  const halfWidth = registeredWidth / 2;
+  const halfHeight = registeredHeight / 2;
+  const minX = registration.offsetX - halfWidth;
+  const maxX = registration.offsetX + halfWidth;
+  const minY = registration.offsetY - halfHeight;
+  const maxY = registration.offsetY + halfHeight;
+
+  return point.x >= minX && point.x <= maxX &&
+    point.y >= minY && point.y <= maxY;
 }
 
   function applyScale(
@@ -534,11 +556,11 @@ function mapToScreen(
     const maxX = Math.max(
       0,
       (registeredWidth * minScale - viewportSize.width) / 2
-    );
+    ) + viewportSize.width * OVERSCROLL_RATIO;
     const maxY = Math.max(
       0,
       (registeredHeight * minScale - viewportSize.height) / 2
-    );
+    ) + viewportSize.height * OVERSCROLL_RATIO;
     const nextPan = {
       x: Math.max(
         -maxX,
@@ -622,6 +644,7 @@ function handleContextMenu(
 ) {
   event.preventDefault();
   dispatch({ type: 'feature.clearSelection' });
+  dispatch({ type: 'contextMenu.close' });
 
   const viewport =
     viewportRef.current;
@@ -639,6 +662,8 @@ function handleContextMenu(
   if (!point) {
     return;
   }
+
+  if (!isPointInsideMap(point)) return;
 
   const rect =
     viewport.getBoundingClientRect();
