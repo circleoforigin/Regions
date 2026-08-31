@@ -544,6 +544,44 @@
     1px 1px 1px #111111;
 }
 
+/* =========================
+   MAP KEY
+   ========================= */
+
+.map-key {
+  position: absolute;
+  bottom: 14px;
+  z-index: 12;
+  min-width: 150px;
+  max-width: min(320px, calc(50% - 28px));
+  padding: 9px 14px;
+  box-sizing: border-box;
+  color: #eeeeee;
+  background: rgba(31, 33, 36, 0.88);
+  border: 1px solid rgba(190, 190, 190, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.map-key-left {
+  left: 14px;
+}
+
+.map-key-right {
+  right: 14px;
+}
+
+.map-key-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .map-context-menu {
   position: absolute;
   z-index: 500;

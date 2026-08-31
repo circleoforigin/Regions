@@ -2,6 +2,7 @@ import type { Feature } from '../models/Feature';
 import { Fragment, useEffect, useRef, useState} from 'react';
 import { useRegionsState } from '../state/RegionsStateContext';
 import { defaultLayerVisibility } from '../state/RegionsState';
+import MapKey from './MapKey';
 
 const OVERSCROLL_RATIO = 0.5;
 
@@ -155,6 +156,9 @@ function MapViewport({
 
   const [ dragging, setDragging ] = useState(false);
 
+  const [mapKeySide, setMapKeySide] =
+    useState<'left' | 'right'>('right');
+
   const [popupSize, setPopupSize] = useState<Size>({
     width: 240,
     height: 140,
@@ -252,6 +256,35 @@ function MapViewport({
         ),
     };
   }
+
+  function getMapKeySide(
+    nextPanX: number,
+    nextScale: number
+  ): 'left' | 'right' | null {
+    if (nextScale <= 0 || registeredWidth <= 0) return null;
+
+    const viewportCenterMapX = -nextPanX / nextScale;
+    const deadZoneHalfWidth = registeredWidth * 0.05;
+    const mapCenterX = registration.offsetX;
+
+    if (viewportCenterMapX < mapCenterX - deadZoneHalfWidth) {
+      return 'right';
+    }
+
+    if (viewportCenterMapX > mapCenterX + deadZoneHalfWidth) {
+      return 'left';
+    }
+
+    return null;
+  }
+
+  function updateMapKeySide(nextPanX: number, nextScale: number) {
+    const nextSide = getMapKeySide(nextPanX, nextScale);
+    if (nextSide) setMapKeySide(nextSide);
+  }
+
+  const viewedMapKeySide = getMapKeySide(pan.x, scale);
+  const displayedMapKeySide = viewedMapKeySide ?? mapKeySide;
 
   function screenToMap(
   clientX: number,
@@ -380,6 +413,7 @@ function isPointInsideMap(point: Point): boolean {
     };
 
     const clampedPan = clampPan(nextPan, nextScale);
+    updateMapKeySide(clampedPan.x, nextScale);
 
     dispatch({
       type: 'viewport.set',
@@ -392,6 +426,7 @@ function isPointInsideMap(point: Point): boolean {
   }
 
   function fitMap() {
+    setMapKeySide(displayedMapKeySide);
     dispatch({ type: 'viewport.fit', scale: minScale });
   }
 
@@ -776,6 +811,7 @@ function handleContextMenu(
     };
 
     const clampedPan = clampPan(nextPan);
+    updateMapKeySide(clampedPan.x, scale);
 
     dispatch({
       type: 'viewport.setPan',
@@ -1070,6 +1106,7 @@ function cancelSubtitleEdit() {
     <span />
   </div>
 )}
+      <MapKey mapName={mapName} side={displayedMapKeySide} />
     </div>
 
     <div className="feature-popup-actions">

@@ -1475,6 +1475,7 @@ const deletableProjects =
       </div>
     ) : activeMapImageUrl ? (
       <MapViewport
+        key={activeMap.id}
         imageUrl={activeMapImageUrl}
         mapName={activeMap.name}
         imageRegistration={activeMap.imageRegistration}
