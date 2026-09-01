@@ -6,10 +6,12 @@ import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
+import FeatureTypesDialog from './components/FeatureTypesDialog';
 import type { Project } from './models/Project';
 import type { Map as RegionMap } from './models/Map';
 import type { Feature } from './models/Feature';
 import type { RichTextDocument } from './models/RichText';
+import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import { featureRepository } from './features/FeatureRepository';
 
 import { mapRepository} from './maps/MapRepository';
@@ -153,6 +155,9 @@ const pendingProjectActionRef =
 
   const [navigationError, setNavigationError] =
     useState<string | null>(null);
+
+  const [showFeatureTypesDialog, setShowFeatureTypesDialog] =
+    useState(false);
 
   useEffect(() => {
     if (activeProjectId) {
@@ -346,6 +351,8 @@ function handleNewProject() {
       rootMapId: rootMap.id,
 
       activeMapId: rootMap.id,
+
+      featureTypes: [],
 
       createdAt:
         now,
@@ -571,11 +578,14 @@ async function navigateToFeatureTarget(
     setActiveFeatures(destination.features);
     setPendingFocusFeatureId(targetFeature.id);
     await loadMapImage(destination.map);
+    const semanticType = project.featureTypes.find((type) => {
+      return type.id === targetFeature.featureTypeId;
+    })?.name ?? '';
     moduleEventBus.emit('Regions.LocationEntered', {
       area: 'Location',
       parentMap: sourceMapName,
       name: targetFeature.name,
-      type: targetFeature.type,
+      type: semanticType,
       mapId: destination.map.id,
       featureId: targetFeature.id,
     });
@@ -941,6 +951,77 @@ function handleDescriptionChange(
   markProjectDirty();
 }
 
+function handleShowLabelChange(featureId: string, showLabel: boolean) {
+  setActiveFeatures((current) => current.map((feature) => {
+    return feature.id === featureId ? { ...feature, showLabel } : feature;
+  }));
+  markProjectDirty();
+}
+
+function handleFeatureTypeChange(
+  featureId: string,
+  featureTypeId: string | undefined
+) {
+  const feature = activeFeatures.find((item) => item.id === featureId);
+  if (!feature || feature.featureTypeId === featureTypeId) return;
+  setActiveFeatures((current) => current.map((feature) => {
+    if (feature.id !== featureId) return feature;
+    return { ...feature, featureTypeId };
+  }));
+  markProjectDirty();
+}
+
+function featureTypeNameExists(name: string, excludedId?: string): boolean {
+  const normalizedName = name.trim().toLocaleLowerCase();
+  return activeProject?.featureTypes.some((type) => {
+    return type.id !== excludedId &&
+      type.name.toLocaleLowerCase() === normalizedName;
+  }) ?? false;
+}
+
+function handleAddFeatureType(name: string): boolean {
+  if (!activeProject || featureTypeNameExists(name)) return false;
+  const featureType: FeatureTypeDefinition = {
+    id: crypto.randomUUID(),
+    name: name.trim(),
+  };
+  setActiveProject({
+    ...activeProject,
+    featureTypes: [...activeProject.featureTypes, featureType],
+  });
+  markProjectDirty();
+  return true;
+}
+
+function handleRenameFeatureType(id: string, name: string): boolean {
+  if (!activeProject || featureTypeNameExists(name, id)) return false;
+  const current = activeProject.featureTypes.find((type) => type.id === id);
+  if (!current) return false;
+  const trimmedName = name.trim();
+  if (current.name === trimmedName) return true;
+  setActiveProject({
+    ...activeProject,
+    featureTypes: activeProject.featureTypes.map((type) => {
+      return type.id === id ? { ...type, name: trimmedName } : type;
+    }),
+  });
+  markProjectDirty();
+  return true;
+}
+
+function handleDeleteFeatureType(id: string) {
+  if (!activeProject) return;
+  setActiveProject({
+    ...activeProject,
+    featureTypes: activeProject.featureTypes.filter((type) => type.id !== id),
+  });
+  setActiveFeatures((current) => current.map((feature) => {
+    if (feature.featureTypeId !== id) return feature;
+    return { ...feature, featureTypeId: undefined };
+  }));
+  markProjectDirty();
+}
+
 function handleFeatureMove(
   featureId: string,
   position: Feature['position']
@@ -1182,6 +1263,7 @@ const deletableProjects =
   onAssignMapImage={() => assignMapInputRef.current?.click()}
   autoSave={autoSave}
   onAutoSaveChange={setAutoSave}
+  onManageFeatureTypes={() => setShowFeatureTypesDialog(true)}
   projectName={
     activeProject?.name
   }
@@ -1255,6 +1337,16 @@ const deletableProjects =
       </div>
     </div>
   </div>
+)}
+
+{showFeatureTypesDialog && activeProject && (
+  <FeatureTypesDialog
+    featureTypes={activeProject.featureTypes}
+    onAdd={handleAddFeatureType}
+    onRename={handleRenameFeatureType}
+    onDelete={handleDeleteFeatureType}
+    onClose={() => setShowFeatureTypesDialog(false)}
+  />
 )}
 
 {showNewFeatureDialog && (
@@ -1549,11 +1641,14 @@ const deletableProjects =
         mapName={activeMap.name}
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
+        featureTypes={activeProject.featureTypes}
         focusFeatureId={pendingFocusFeatureId}
         onFocusFeatureComplete={() => setPendingFocusFeatureId(null)}
         onEnterFeature={(feature) => void handleEnterFeature(feature)}
         onSubtitleChange={handleSubtitleChange}
         onDescriptionChange={handleDescriptionChange}
+        onShowLabelChange={handleShowLabelChange}
+        onFeatureTypeChange={handleFeatureTypeChange}
         onFeatureMove={handleFeatureMove}
         onNewFeatureRequest={handleNewFeatureRequest}
         onNewLocationRequest={handleNewLocationRequest}

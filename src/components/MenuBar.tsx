@@ -10,7 +10,6 @@ import {
 } from '../state/RegionsState';
 
 const LAYER_OPTIONS: { id: RegionsLayer; label: string }[] = [
-  { id: 'names', label: 'Names' },
   { id: 'features', label: 'Features' },
   { id: 'locations', label: 'Locations' },
 ];
@@ -25,6 +24,7 @@ interface MenuBarProps {
   onAssignMapImage: () => void;
   autoSave: boolean;
   onAutoSaveChange: (enabled: boolean) => void;
+  onManageFeatureTypes: () => void;
 
   projectName?: string;
   mapActive: boolean;
@@ -51,6 +51,7 @@ function MenuBar({
   onAssignMapImage,
   autoSave,
   onAutoSaveChange,
+  onManageFeatureTypes,
   projectName,
   mapActive,
   parentMapAvailable,
@@ -344,6 +345,18 @@ function MenuBar({
                 {autoSave ? '✓' : ''}
               </span>
               Autosave
+            </button>
+
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={!projectName}
+              onClick={() => {
+                closeMenus();
+                onManageFeatureTypes();
+              }}
+            >
+              Feature Types...
             </button>
           </div>
         )}

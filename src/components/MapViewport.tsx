@@ -5,6 +5,7 @@ import { defaultLayerVisibility } from '../state/RegionsState';
 import MapKey from './MapKey';
 import RichTextEditor from './RichTextEditor';
 import type { RichTextDocument } from '../models/RichText';
+import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
 
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
@@ -66,6 +67,7 @@ interface MapViewportProps {
 };
 
 features: Feature[];
+featureTypes: FeatureTypeDefinition[];
 focusFeatureId?: string | null;
 
 onFocusFeatureComplete?: () => void;
@@ -75,6 +77,11 @@ onSubtitleChange?: (featureId: string, subtitle: string) => void;
 onDescriptionChange?: (
   featureId: string,
   description: RichTextDocument
+) => void;
+onShowLabelChange?: (featureId: string, showLabel: boolean) => void;
+onFeatureTypeChange?: (
+  featureId: string,
+  featureTypeId: string | undefined
 ) => void;
 onFeatureMove?: (featureId: string, position: Point) => void;
 secondaryActions?: FeaturePopupAction[];
@@ -109,11 +116,14 @@ function MapViewport({
   mapName,
   imageRegistration,
   features,
+  featureTypes,
   focusFeatureId,
   onFocusFeatureComplete,
   onEnterFeature,
   onSubtitleChange,
   onDescriptionChange,
+  onShowLabelChange,
+  onFeatureTypeChange,
   onFeatureMove,
   secondaryActions = [],
   onNewFeatureRequest,
@@ -171,6 +181,8 @@ function MapViewport({
 
   const [expandedActionsFeatureId, setExpandedActionsFeatureId] =
     useState<string | null>(null);
+  const [expandedTypeFeatureId, setExpandedTypeFeatureId] =
+    useState<string | null>(null);
   const [editingSubtitle, setEditingSubtitle] = useState(false);
   const [subtitleDraft, setSubtitleDraft] = useState('');
   useEffect(() => {
@@ -202,6 +214,9 @@ function MapViewport({
     width: 300,
     height: 480,
   });
+  const contextTargetFeature = contextMenu?.kind === 'feature'
+    ? features.find((feature) => feature.id === contextMenu.targetId)
+    : undefined;
 
     const registeredWidth = imageSize.width * registration.scale;
 
@@ -947,6 +962,12 @@ function handleContextMenu(
   const actionsExpanded = selectedFeature
     ? expandedActionsFeatureId === selectedFeature.id
     : false;
+  const typeExpanded = selectedFeature
+    ? expandedTypeFeatureId === selectedFeature.id
+    : false;
+  const selectedFeatureType = featureTypes.find((type) => {
+    return type.id === selectedFeature?.featureTypeId;
+  });
   const hasLocationTarget = Boolean(
     selectedFeature?.targetMapId && selectedFeature.targetFeatureId
   );
@@ -1088,7 +1109,7 @@ function cancelSubtitleEdit() {
         <span className="map-feature-dot" />
       </button>
 
-      {layerVisibility.names && !isMoving && (
+      {feature.showLabel !== false && !isMoving && (
         <span
           className="map-feature-label"
           style={{
@@ -1201,57 +1222,100 @@ function cancelSubtitleEdit() {
 
     </div>
 
-    <div className="feature-popup-actions">
-  <div className="feature-popup-actions-label">
-    Actions
-  </div>
-
-  <button
-    type="button"
-    className="feature-popup-more-actions-toggle"
-    aria-expanded={actionsExpanded}
-    aria-label={actionsExpanded
-      ? 'Hide actions'
-      : 'Show actions'}
-    onClick={() => {
-      setExpandedActionsFeatureId(
-        actionsExpanded ? null : selectedFeature.id
-      );
-    }}
-  >
-    {actionsExpanded ? '▴' : '▾'}
-  </button>
-
-  {actionsExpanded && (
-    <div className="feature-popup-secondary-actions">
-      {hasLocationTarget && (
+    <div className="feature-popup-controls">
+      <div className="feature-popup-control">
         <button
           type="button"
-          onClick={() => onEnterFeature?.(selectedFeature)}
+          className="feature-popup-control-toggle"
+          aria-expanded={typeExpanded}
+          onClick={() => {
+            setExpandedActionsFeatureId(null);
+            setExpandedTypeFeatureId(
+              typeExpanded ? null : selectedFeature.id
+            );
+          }}
         >
-          Enter
+          Type: {selectedFeatureType?.name ?? 'No Type'}{' '}
+          <span aria-hidden="true">▾</span>
         </button>
-      )}
 
-      {secondaryActions.map((action) => (
+        {typeExpanded && (
+          <div className="feature-popup-control-menu type-menu">
+            <button
+              type="button"
+              className={!selectedFeatureType ? 'selected' : ''}
+              onClick={() => {
+                onFeatureTypeChange?.(selectedFeature.id, undefined);
+                setExpandedTypeFeatureId(null);
+              }}
+            >
+              No Type
+            </button>
+            {featureTypes.map((type) => (
+              <button
+                key={type.id}
+                type="button"
+                className={selectedFeatureType?.id === type.id
+                  ? 'selected'
+                  : ''}
+                onClick={() => {
+                  onFeatureTypeChange?.(selectedFeature.id, type.id);
+                  setExpandedTypeFeatureId(null);
+                }}
+              >
+                {type.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="feature-popup-control">
         <button
-          key={action.id}
           type="button"
-          disabled={action.disabled}
-          onClick={action.onInvoke}
+          className="feature-popup-control-toggle"
+          aria-expanded={actionsExpanded}
+          onClick={() => {
+            setExpandedTypeFeatureId(null);
+            setExpandedActionsFeatureId(
+              actionsExpanded ? null : selectedFeature.id
+            );
+          }}
         >
-          {action.label}
+          Actions <span aria-hidden="true">▾</span>
         </button>
-      ))}
 
-      {!hasLocationTarget && secondaryActions.length === 0 && (
-        <span className="feature-popup-no-actions">
-          No actions available.
-        </span>
-      )}
+        {actionsExpanded && (
+          <div className="feature-popup-control-menu actions-menu">
+            {hasLocationTarget && (
+              <button
+                type="button"
+                onClick={() => onEnterFeature?.(selectedFeature)}
+              >
+                Enter
+              </button>
+            )}
+
+            {secondaryActions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                disabled={action.disabled}
+                onClick={action.onInvoke}
+              >
+                {action.label}
+              </button>
+            ))}
+
+            {!hasLocationTarget && secondaryActions.length === 0 && (
+              <span className="feature-popup-no-actions">
+                No actions available.
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </div>
-  )}
-</div>
 
     <div className="feature-popup-separator" />
 
@@ -1338,6 +1402,28 @@ function cancelSubtitleEdit() {
         >
           Move
         </button>
+
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked={contextTargetFeature?.showLabel !== false}
+          disabled={!contextTargetFeature}
+          onClick={() => {
+            if (!contextTargetFeature) return;
+            onShowLabelChange?.(
+              contextTargetFeature.id,
+              contextTargetFeature.showLabel === false
+            );
+            dispatch({ type: 'contextMenu.close' });
+          }}
+        >
+          Show Label
+          <span className="map-context-check">
+            {contextTargetFeature?.showLabel !== false ? '✓' : ''}
+          </span>
+        </button>
+
+        <div className="map-context-separator" />
 
         <button type="button" disabled>
           Delete

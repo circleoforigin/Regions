@@ -10,7 +10,6 @@ export interface RegionsPoint {
 }
 
 export interface RegionsLayerVisibility {
-  names: boolean;
   features: boolean;
   locations: boolean;
 }
@@ -18,7 +17,6 @@ export interface RegionsLayerVisibility {
 export type RegionsLayer = keyof RegionsLayerVisibility;
 
 export const defaultLayerVisibility: RegionsLayerVisibility = {
-  names: true,
   features: true,
   locations: true,
 };

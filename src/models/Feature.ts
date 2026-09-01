@@ -1,3 +1,5 @@
+import type { RichTextDocument } from './RichText';
+
 export interface FeaturePosition {
   x: number;
   y: number;
@@ -15,12 +17,13 @@ export interface Feature {
 
   position: FeaturePosition;
 
-  type: string;
+  type: 'feature' | 'location';
   description?: RichTextDocument | string;
+  featureTypeId?: string;
+  showLabel?: boolean;
 
   noteLinks: FeatureNoteLink[];
 
   targetMapId?: string;
   targetFeatureId?: string;
 }
-import type { RichTextDocument } from './RichText';

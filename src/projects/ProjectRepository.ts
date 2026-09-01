@@ -9,6 +9,15 @@ import {
 const PROJECTS_COLLECTION =
   'projects';
 
+function normalizeProject(project: Project): Project {
+  return {
+    ...project,
+    featureTypes: Array.isArray(project.featureTypes)
+      ? project.featureTypes
+      : [],
+  };
+}
+
 export class ProjectRepository {
   async loadProjects(): Promise<Project[]> {
     const projects =
@@ -18,15 +27,16 @@ export class ProjectRepository {
         );
 
     return Array.isArray(projects)
-      ? projects
+      ? projects.map(normalizeProject)
       : [];
   }
 
   async loadProject(projectId: string): Promise<Project | null> {
-    return hostedCollectionRepository.load<Project>(
+    const project = await hostedCollectionRepository.load<Project>(
         PROJECTS_COLLECTION,
         projectId
     );
+    return project ? normalizeProject(project) : null;
   }
 
   async saveProject(
