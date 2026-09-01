@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
 import './App.css';
+import type {
+  ProjectLoadAcceptedPayload,
+  ProjectLoadFailedPayload,
+  ProjectLoadedPayload,
+  ProjectLoadRequest,
+} from '@settingforge/module-sdk';
 
 import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
@@ -224,11 +230,13 @@ const pendingProjectActionRef =
       'project.load',
       async (request) => {
         const payload = request.payload as
-          | { projectId?: string }
+          | Partial<ProjectLoadRequest>
           | undefined;
 
-        if (!payload?.projectId) {
-          throw new Error('project.load requires a projectId.');
+        if (!payload?.projectId || !payload.loadId) {
+          throw new Error(
+            'project.load requires projectId and loadId.'
+          );
         }
 
         const project =
@@ -240,13 +248,35 @@ const pendingProjectActionRef =
           );
         }
 
-        await handleSelectProject(project);
+        const projectId = project.id;
+        const loadId = payload.loadId;
 
-        return {
-          loaded: true,
-          projectId: project.id,
-          projectName: project.name,
+        void handleSelectProject(project)
+          .then(() => {
+            const loaded: ProjectLoadedPayload = {
+              projectId,
+              loadId,
+            };
+            moduleEventBus.emit('project.loaded', loaded);
+          })
+          .catch((error: unknown) => {
+            const failed: ProjectLoadFailedPayload = {
+              projectId,
+              loadId,
+              error: error instanceof Error
+                ? error.message
+                : 'Project restoration failed.',
+            };
+            moduleEventBus.emit('project.loadFailed', failed);
+          });
+
+        const accepted: ProjectLoadAcceptedPayload = {
+          accepted: true,
+          projectId,
+          loadId,
         };
+
+        return accepted;
       }
     );
 

@@ -1,3 +1,6 @@
+console.warn(
+  `[RegionsBoot] main.tsx entered ${performance.now()}`
+);
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'

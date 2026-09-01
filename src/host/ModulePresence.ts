@@ -101,6 +101,9 @@ export class ModulePresenceStore {
   }
 
   announceReady(): void {
+    console.warn(
+    `[RegionsBoot] announceReady ${performance.now()}`
+  );
     moduleEventBus.emit(
       'module.ready',
       {
