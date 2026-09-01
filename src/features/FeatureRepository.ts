@@ -14,8 +14,11 @@ export class FeatureRepository {
   }
 
   async loadFeatures(featureIds: string[]): Promise<Feature[]> {
-    const features = await Promise.all(
-      featureIds.map((featureId) => this.loadFeature(featureId))
+    if (featureIds.length === 0) return [];
+
+    const features = await hostedCollectionRepository.loadMany<Feature>(
+      FEATURES_COLLECTION,
+      featureIds
     );
 
     features.forEach((feature, index) => {

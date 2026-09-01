@@ -24,6 +24,21 @@ export class HostedCollectionRepository {
     });
   }
 
+  async loadMany<T>(
+    collection: string,
+    keys: string[]
+  ): Promise<(T | null)[]> {
+    if (keys.length === 0) return [];
+
+    return moduleEventBus.request<(T | null)[]>(
+      'storage.loadMany',
+      {
+        collection,
+        keys,
+      }
+    );
+  }
+
   async save<T>(
     collection: string,
     key: string,

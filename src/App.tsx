@@ -663,12 +663,14 @@ async function handleSelectProject(project: Project) {
       clearActiveMapImage();
 
       if (normalizedMap) {
-        const features = await featureRepository.loadFeatures(
+        const featuresPromise = featureRepository.loadFeatures(
           normalizedMap.featureIds
         );
+        const imagePromise = loadMapImage(normalizedMap);
+        const features = await featuresPromise;
 
         setActiveFeatures(features);
-        await loadMapImage(normalizedMap);
+        await imagePromise;
       }
     } catch (error) {
       console.error(

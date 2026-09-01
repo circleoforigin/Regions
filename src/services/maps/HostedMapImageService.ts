@@ -91,17 +91,9 @@ export class HostedMapImageService {
       };
     }
 
-    const assets =
-      await hostedCollectionRepository
-        .loadAll<MapImageAsset>(
-          MAP_IMAGE_COLLECTION
-        );
-
-    return (
-      assets.find(
-        (asset) =>
-          asset.id === assetId
-      ) ?? null
+    return hostedCollectionRepository.load<MapImageAsset>(
+      MAP_IMAGE_COLLECTION,
+      assetId
     );
   }
 
