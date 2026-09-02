@@ -771,6 +771,19 @@
   z-index: 12;
 }
 
+.map-key-label {
+  margin-top: -5px;
+
+  color: #6f7378;
+
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+
+  pointer-events: none;
+}
+
 .map-key-left {
   left: 16px;
 }

@@ -1712,6 +1712,7 @@ const deletableProjects =
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
         featureTypes={activeProject.featureTypes}
+        onMapMetadataChange={handleMapMetadataChange}
         focusFeatureId={pendingFocusFeatureId}
         onFocusFeatureComplete={() => setPendingFocusFeatureId(null)}
         onEnterFeature={(feature) => void handleEnterFeature(feature)}

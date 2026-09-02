@@ -30,6 +30,9 @@ function MapKey({
   const [editing, setEditing] =
     useState(false);
 
+  const [editTarget, setEditTarget] =
+    useState<'name' | 'type'>('name');
+
   const [nameDraft, setNameDraft] =
     useState(mapName);
 
@@ -145,16 +148,22 @@ function MapKey({
             type="button"
             className="map-key-name"
             onClick={() => {
+              setEditTarget('name');
               setEditing(true);
             }}
           >
             {mapName}
           </button>
 
+          <span className="map-key-label">
+            Map
+          </span>
+
           <button
             type="button"
             className="map-key-type"
             onClick={() => {
+              setEditTarget('type');
               setEditing(true);
             }}
           >
@@ -191,12 +200,13 @@ function MapKey({
                 cancel();
               }
             }}
-            autoFocus
+            autoFocus={editTarget === 'name'}
           />
 
           <select
             className="map-key-type-select"
             value={typeDraft}
+            autoFocus={editTarget === 'type'}
             onChange={(event) => {
               const value =
                 event.target.value;
@@ -227,7 +237,7 @@ function MapKey({
                   {type.name}
                 </option>
               )
-            )}
+            )}            
           </select>
         </div>
       )}
