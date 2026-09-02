@@ -178,6 +178,13 @@ const pendingProjectActionRef =
   const [pendingFeatures, setPendingFeatures] =
     useState<Feature[]>([]);
 
+  const [
+    pendingFeatureDeletionIds,
+    setPendingFeatureDeletionIds,
+  ] = useState<Set<string>>(
+    () => new Set()
+  );
+
   const [pendingFocusFeatureId, setPendingFocusFeatureId] =
     useState<string | null>(null);
 
@@ -658,6 +665,9 @@ async function restorePersistedSource(
   setActiveFeatures(source.features);
   setPendingMaps([]);
   setPendingFeatures([]);
+  setPendingFeatureDeletionIds(
+    new Set()
+  );
   setPendingFocusFeatureId(null);
   await loadMapImage(source.map);
   return { project, ...source };
@@ -773,6 +783,9 @@ function handleGoToParentMap() {
 async function handleSelectProject(project: Project) {
   setPendingMaps([]);
   setPendingFeatures([]);
+  setPendingFeatureDeletionIds(
+    new Set()
+  ); 
   setPendingFocusFeatureId(null);
   setNavigationError(null);
   setActiveProject(
@@ -858,6 +871,16 @@ async function saveActiveProject(): Promise<boolean> {
       );
 
       await Promise.all(
+        Array.from(
+          pendingFeatureDeletionIds
+        ).map((featureId) => {
+          return featureRepository.deleteFeature(
+            featureId
+          );
+        })
+      );
+
+      await Promise.all(
         maps.map((pendingMap) => {
           return mapRepository.saveMap(pendingMap);
         })
@@ -870,6 +893,9 @@ async function saveActiveProject(): Promise<boolean> {
         setActiveProject(updatedProject);
         setPendingMaps([]);
         setPendingFeatures([]);
+        setPendingFeatureDeletionIds(
+          new Set()
+        );
         setProjectDirty(false);
       } else {
         setSaveCompletionRevision((current) => current + 1);
@@ -916,17 +942,14 @@ function closeProject() {
   );
 
   setActiveFeatures([]);
-
   setPendingMaps([]);
-
   setPendingFeatures([]);
-
+  setPendingFeatureDeletionIds(
+    new Set()
+  );
   setPendingFocusFeatureId(null);
-
   setNavigationError(null);
-
   clearActiveMapImage();
-
   resetProjectDirty();
 }
 
@@ -968,6 +991,9 @@ async function finishPendingProjectAction(
   } else {
     setPendingMaps([]);
     setPendingFeatures([]);
+    setPendingFeatureDeletionIds(
+      new Set()
+    );
     resetProjectDirty();
     outcome = 'discarded';
   }
@@ -1198,6 +1224,247 @@ function handleFeatureMove(
     return feature.id === featureId ? { ...feature, position } : feature;
   }));
   markProjectDirty();
+}
+
+async function handleDeleteFeature(
+  feature: Feature
+) {
+  if (!activeMap) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    feature.targetMapId &&
+      feature.targetFeatureId
+      ? `Delete Location "${feature.name}" and its paired Location?`
+      : `Delete Feature "${feature.name}"?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  const now = new Date();
+
+  // Ordinary Feature: only remove this Feature.
+  if (
+    !feature.targetMapId ||
+    !feature.targetFeatureId
+  ) {
+    setActiveFeatures((current) =>
+      current.filter(
+        (candidate) =>
+          candidate.id !== feature.id
+      )
+    );
+
+    setActiveMap({
+      ...activeMap,
+      featureIds:
+        activeMap.featureIds.filter(
+          (featureId) =>
+            featureId !== feature.id
+        ),
+      updatedAt: now,
+    });
+
+    setPendingFeatureDeletionIds(
+      (current) => {
+        const next =
+          new Set(current);
+
+        next.add(feature.id);
+
+        return next;
+      }
+    );
+
+    markProjectDirty();
+    return;
+  }
+
+  const pairedFeatureId =
+    feature.targetFeatureId;
+
+  /*
+   * Same-map Location.
+   *
+   * Both ends of the connection live in
+   * activeFeatures / activeMap.
+   */
+  if (
+    feature.targetMapId ===
+    activeMap.id
+  ) {
+    setActiveFeatures((current) =>
+      current.filter(
+        (candidate) =>
+          candidate.id !== feature.id &&
+          candidate.id !==
+            pairedFeatureId
+      )
+    );
+
+    setActiveMap({
+      ...activeMap,
+      featureIds:
+        activeMap.featureIds.filter(
+          (featureId) =>
+            featureId !== feature.id &&
+            featureId !==
+              pairedFeatureId
+        ),
+      updatedAt: now,
+    });
+
+    setPendingFeatureDeletionIds(
+      (current) => {
+        const next =
+          new Set(current);
+
+        next.add(feature.id);
+        next.add(pairedFeatureId);
+
+        return next;
+      }
+    );
+
+    markProjectDirty();
+    return;
+  }
+
+  /*
+   * Different-map Location.
+   *
+   * Load the destination Map so its paired
+   * return Feature can be removed from that
+   * Map's featureIds.
+   */
+  try {
+    const destinationMap =
+      pendingMaps.find(
+        (map) =>
+          map.id ===
+          feature.targetMapId
+      ) ??
+      await mapRepository.loadMap(
+        feature.targetMapId
+      );
+
+    if (!destinationMap) {
+      throw new Error(
+        'The destination Map could not be found.'
+      );
+    }
+
+    const updatedDestinationMap = {
+      ...normalizeMap(
+        destinationMap
+      ),
+      featureIds:
+        destinationMap.featureIds.filter(
+          (featureId) =>
+            featureId !==
+            pairedFeatureId
+        ),
+      updatedAt: now,
+    };
+
+    /*
+     * Remove the visible/source Location
+     * from the current Map.
+     */
+    setActiveFeatures((current) =>
+      current.filter(
+        (candidate) =>
+          candidate.id !== feature.id
+      )
+    );
+
+    setActiveMap({
+      ...activeMap,
+      featureIds:
+        activeMap.featureIds.filter(
+          (featureId) =>
+            featureId !== feature.id
+        ),
+      updatedAt: now,
+    });
+
+    /*
+     * Stage the modified destination Map.
+     * Replacing an existing pending version
+     * prevents duplicate pending Maps.
+     */
+    setPendingMaps((current) => [
+      ...current.filter(
+        (map) =>
+          map.id !==
+          updatedDestinationMap.id
+      ),
+      updatedDestinationMap,
+    ]);
+
+    /*
+     * If either Location was newly created
+     * and hasn't been saved yet, remove it
+     * from pendingFeatures as well.
+     */
+    const pendingFeatureIds =
+  new Set(
+    pendingFeatures.map(
+      (candidate) =>
+        candidate.id
+    )
+  );
+
+setPendingFeatures((current) =>
+  current.filter(
+    (candidate) =>
+      candidate.id !== feature.id &&
+      candidate.id !==
+        pairedFeatureId
+  )
+);
+
+setPendingFeatureDeletionIds(
+  (current) => {
+    const next =
+      new Set(current);
+
+    if (
+      !pendingFeatureIds.has(
+        feature.id
+      )
+    ) {
+      next.add(feature.id);
+    }
+
+    if (
+      !pendingFeatureIds.has(
+        pairedFeatureId
+      )
+    ) {
+      next.add(
+        pairedFeatureId
+      );
+    }
+
+    return next;
+  }
+);
+
+    markProjectDirty();
+  } catch (error) {
+    console.error(
+      'Unable to delete Location:',
+      error
+    );
+
+    setNavigationError(
+      'Unable to delete this Location.'
+    );
+  }
 }
 
 function handleNewFeatureRequest(x: number, y: number) {
@@ -2037,6 +2304,7 @@ const deletableProjects =
         onShowLabelChange={handleShowLabelChange}
         onFeatureTypeChange={handleFeatureTypeChange}
         onFeatureMove={handleFeatureMove}
+        onDeleteFeature={handleDeleteFeature}
         onNewFeatureRequest={handleNewFeatureRequest}
         onNewLocationRequest={handleNewLocationRequest}
         onZoomStateChange={setZoomControl}

@@ -99,6 +99,10 @@ onFeatureTypeChange?: (
 onFeatureMove?: (featureId: string, position: Point) => void;
 secondaryActions?: FeaturePopupAction[];
 
+onDeleteFeature?: (
+  feature: Feature
+) => void;
+
 onNewFeatureRequest?: (
   x: number,
   y: number
@@ -140,6 +144,7 @@ function MapViewport({
   onShowLabelChange,
   onFeatureTypeChange,
   onFeatureMove,
+  onDeleteFeature,
   secondaryActions = [],
   onNewFeatureRequest,
   onNewLocationRequest,
@@ -1452,9 +1457,25 @@ function cancelSubtitleEdit() {
 
         <div className="map-context-separator" />
 
-        <button type="button" disabled>
-          Delete
-        </button>
+        <button
+  type="button"
+  disabled={!contextTargetFeature}
+  onClick={() => {
+    if (!contextTargetFeature) {
+      return;
+    }
+
+    onDeleteFeature?.(
+      contextTargetFeature
+    );
+
+    dispatch({
+      type: 'contextMenu.close',
+    });
+  }}
+>
+  Delete
+</button>
       </>
     )}
   </div>
