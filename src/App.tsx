@@ -253,6 +253,7 @@ const pendingProjectActionRef =
   const [selectedDeleteMapId, setSelectedDeleteMapId] =
     useState<string | null>(null);
   const [confirmDeleteMap, setConfirmDeleteMap] = useState(false);
+  const [showDeleteMapBlocker, setShowDeleteMapBlocker] = useState(false);
   const [mapDeletionAnalysis, setMapDeletionAnalysis] =
     useState<MapDeletionAnalysis | null>(null);
   const deleteMapAnalysisRunIdRef = useRef(0);
@@ -1200,8 +1201,10 @@ async function loadEffectiveMapFeatures(map: RegionMap): Promise<Feature[]> {
     .filter((feature) => !pendingFeatureDeletionIds.has(feature.id));
 }
 
-async function analyzeMapDeletion(map: RegionMap) {
-  if (!activeProject) return;
+async function analyzeMapDeletion(
+  map: RegionMap
+): Promise<MapDeletionAnalysis | null> {
+  if (!activeProject) return null;
   const runId = ++deleteMapAnalysisRunIdRef.current;
   const childMaps = projectMaps.filter((candidate) => {
     return candidate.parentMapId === map.id;
@@ -1226,20 +1229,23 @@ async function analyzeMapDeletion(map: RegionMap) {
     });
   }));
 
-  if (runId !== deleteMapAnalysisRunIdRef.current) return;
-  setMapDeletionAnalysis({
+  if (runId !== deleteMapAnalysisRunIdRef.current) return null;
+  const analysis: MapDeletionAnalysis = {
     map,
     isWorldRoot: activeProject.rootMapId === map.id,
     childMaps,
     pieces,
     incomingLocations,
     ownedFeatureCount: map.featureIds.length,
-  });
+  };
+  setMapDeletionAnalysis(analysis);
+  return analysis;
 }
 
 function selectDeleteMap(map: RegionMap) {
   setSelectedDeleteMapId(map.id);
   setConfirmDeleteMap(false);
+  setShowDeleteMapBlocker(false);
   setMapDeletionAnalysis(null);
   void loadGoToMapPreview(map);
   void analyzeMapDeletion(map).catch((error) => {
@@ -1262,6 +1268,24 @@ function closeDeleteMapDialog() {
   setSelectedDeleteMapId(null);
   setMapDeletionAnalysis(null);
   setConfirmDeleteMap(false);
+  setShowDeleteMapBlocker(false);
+}
+
+async function handleDeleteMapRequest() {
+  if (!selectedDeleteMap) return;
+  const currentAnalysis = mapDeletionAnalysis?.map.id === selectedDeleteMap.id
+    ? mapDeletionAnalysis
+    : await analyzeMapDeletion(selectedDeleteMap);
+  if (!currentAnalysis) return;
+  const blocked = currentAnalysis.isWorldRoot ||
+    currentAnalysis.childMaps.length > 0 ||
+    currentAnalysis.pieces.length > 0;
+  if (blocked) {
+    setConfirmDeleteMap(false);
+    setShowDeleteMapBlocker(true);
+    return;
+  }
+  setConfirmDeleteMap(true);
 }
 
 async function stageDeleteMap() {
@@ -1405,6 +1429,7 @@ async function handleSelectProject(project: Project) {
   setSelectedDeleteMapId(null);
   setMapDeletionAnalysis(null);
   setConfirmDeleteMap(false);
+  setShowDeleteMapBlocker(false);
   setMapToMakeRoot(null);
   setPendingMaps([]);
   setPendingFeatures([]);
@@ -1573,6 +1598,7 @@ function closeProject() {
   setSelectedDeleteMapId(null);
   setMapDeletionAnalysis(null);
   setConfirmDeleteMap(false);
+  setShowDeleteMapBlocker(false);
   setMapToMakeRoot(null);
   setActiveProject(
     null
@@ -2448,11 +2474,6 @@ const selectedDeleteMap = projectMaps.find((map) => {
 const selectedDeleteMapType = activeProject?.featureTypes.find((type) => {
   return type.id === selectedDeleteMap?.featureTypeId;
 })?.name ?? 'No Type';
-const deletionBlocked = Boolean(
-  mapDeletionAnalysis?.isWorldRoot ||
-  mapDeletionAnalysis?.childMaps.length ||
-  mapDeletionAnalysis?.pieces.length
-);
 const activeMapDescendants = activeMap
   ? getDescendantMapIds(activeMap.id)
   : new Set<string>();
@@ -2678,7 +2699,7 @@ const parentMapName = activeMap?.parentMapId
           </div>
         </div>
 
-        <div className="go-to-map-preview delete-map-analysis">
+        <div className="go-to-map-preview">
           <div className="go-to-map-preview-image">
             {goToMapPreviewUrl ? (
               <img src={goToMapPreviewUrl} alt="" />
@@ -2689,54 +2710,19 @@ const parentMapName = activeMap?.parentMapId
 
           <strong>{selectedDeleteMap?.name ?? 'Select a Map'}</strong>
           {selectedDeleteMap && <span>Type: {selectedDeleteMapType}</span>}
-          {selectedDeleteMap && (
-            <span>
-              Parent: {selectedDeleteMap.id === activeProject.rootMapId
-                ? 'World Root'
-                : projectMaps.find((map) => {
-                    return map.id === selectedDeleteMap.parentMapId;
-                  })?.name ?? 'Unassigned'}
-            </span>
-          )}
-
-          {mapDeletionAnalysis &&
-            mapDeletionAnalysis.map.id === selectedDeleteMap?.id && (
-            <div className="delete-map-details">
-              <span>
-                Owns {mapDeletionAnalysis.ownedFeatureCount} feature(s)
-              </span>
-              <span>
-                Converts {mapDeletionAnalysis.incomingLocations.length}
-                {' '}incoming Location(s)
-              </span>
-              {mapDeletionAnalysis.isWorldRoot && (
-                <strong className="delete-map-blocker">
-                  This Map is the World Root and cannot be deleted.
-                </strong>
-              )}
-              {mapDeletionAnalysis.childMaps.length > 0 && (
-                <strong className="delete-map-blocker">
-                  This Map has child Maps. Reparent or delete them first.
-                </strong>
-              )}
-              {mapDeletionAnalysis.pieces.length > 0 && (
-                <strong className="delete-map-blocker">
-                  This Map contains Pieces. Move or delete them first.
-                </strong>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
-      {confirmDeleteMap && selectedDeleteMap && !deletionBlocked && (
+      {confirmDeleteMap && selectedDeleteMap && mapDeletionAnalysis && (
         <div className="delete-map-confirmation">
           <strong>Delete “{selectedDeleteMap.name}”?</strong>
           <span>
-            Its Features will be deleted when the Project is saved.
+            This will delete the Map and all Features on it.
           </span>
           <span>
-            Incoming Locations will remain as ordinary Features.
+            {mapDeletionAnalysis.incomingLocations.length} connected
+            {' '}Location(s) on other Maps will be converted into normal
+            {' '}Features.
           </span>
           <span>
             This cannot be undone after the Project is saved.
@@ -2750,16 +2736,73 @@ const parentMapName = activeMap?.parentMapId
         </button>
         <button
           type="button"
-          disabled={!mapDeletionAnalysis || deletionBlocked}
+          disabled={!selectedDeleteMap}
           onClick={() => {
             if (confirmDeleteMap) {
               void stageDeleteMap();
               return;
             }
-            setConfirmDeleteMap(true);
+            void handleDeleteMapRequest();
           }}
         >
-          {confirmDeleteMap ? 'Confirm Delete' : 'Delete...'}
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showDeleteMapBlocker && selectedDeleteMap && mapDeletionAnalysis && (
+  <div className="dialog-backdrop delete-map-blocker-backdrop">
+    <div className="dialog delete-map-blocker-dialog">
+      <h2>Cannot Delete Map</h2>
+      <p>“{selectedDeleteMap.name}” cannot be deleted because:</p>
+      <ul>
+        {mapDeletionAnalysis.isWorldRoot && (
+          <li>It is the current World Root.</li>
+        )}
+        {mapDeletionAnalysis.pieces.length > 0 && (
+          <li>
+            It contains {mapDeletionAnalysis.pieces.length} Piece(s).
+          </li>
+        )}
+        {mapDeletionAnalysis.childMaps.length > 0 && (
+          <li>
+            It has {mapDeletionAnalysis.childMaps.length} child Map(s).
+          </li>
+        )}
+      </ul>
+      {mapDeletionAnalysis.isWorldRoot && (
+        <p>Assign another Map as World Root before deleting it.</p>
+      )}
+      {mapDeletionAnalysis.pieces.length > 0 &&
+        mapDeletionAnalysis.childMaps.length > 0 && (
+        <p>
+          Move or delete the Pieces and reparent or delete the child Maps
+          {' '}before deleting {selectedDeleteMap.name}.
+        </p>
+      )}
+      {mapDeletionAnalysis.pieces.length > 0 &&
+        mapDeletionAnalysis.childMaps.length === 0 && (
+        <p>
+          Move or delete the Pieces before deleting
+          {' '}{selectedDeleteMap.name}.
+        </p>
+      )}
+      {mapDeletionAnalysis.childMaps.length > 0 &&
+        mapDeletionAnalysis.pieces.length === 0 && (
+        <p>
+          Reparent or delete the child Maps before deleting
+          {' '}{selectedDeleteMap.name}.
+        </p>
+      )}
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          onClick={() => setShowDeleteMapBlocker(false)}
+          autoFocus
+        >
+          OK
         </button>
       </div>
     </div>

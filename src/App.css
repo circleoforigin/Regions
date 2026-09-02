@@ -1082,27 +1082,22 @@ button.map-key-parent:hover {
 }
 
 .delete-map-dialog {
-  width: min(760px, calc(100vw - 40px));
+  display: flex;
+  flex-direction: column;
+  width: min(820px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  box-sizing: border-box;
 }
 
-.delete-map-analysis {
-  align-items: stretch;
-}
-
-.delete-map-details,
 .delete-map-confirmation {
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
 
-.delete-map-details {
-  margin-top: 8px;
-  font-size: 12px;
-}
-
-.delete-map-blocker {
-  color: #f0a1a1;
+.delete-map-dialog .go-to-map-layout {
+  min-height: 0;
+  height: min(500px, calc(100vh - 220px));
 }
 
 .delete-map-confirmation {
@@ -1111,6 +1106,14 @@ button.map-key-parent:hover {
   border: 1px solid #694646;
   background: #2c2222;
   font-size: 12px;
+}
+
+.delete-map-blocker-backdrop {
+  z-index: 1100;
+}
+
+.delete-map-blocker-dialog {
+  width: min(430px, calc(100vw - 40px));
 }
 
 .map-context-menu {
