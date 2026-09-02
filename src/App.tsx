@@ -165,6 +165,21 @@ const pendingProjectActionRef =
 
   const [projectMaps, setProjectMaps] = useState<RegionMap[]>([]);
 
+  const [showGoToMapDialog, setShowGoToMapDialog] = useState(false);
+
+  const [goToMapSearch, setGoToMapSearch] = useState('');
+
+  const [goToMapTypeFilter, setGoToMapTypeFilter] = useState('all');
+
+  const [selectedGoToMapId, setSelectedGoToMapId] =
+    useState<string | null>(null);
+
+  const [goToMapPreviewUrl, setGoToMapPreviewUrl] =
+    useState<string | null>(null);
+
+  const goToMapPreviewUrlRef = useRef<string | null>(null);
+  const goToMapPreviewRunIdRef = useRef(0);
+
   const [locationSearch, setLocationSearch] = useState('');
 
   const [locationTypeFilter, setLocationTypeFilter] =
@@ -304,6 +319,14 @@ const pendingProjectActionRef =
 
     return () => {
       modulePresence.stop();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (goToMapPreviewUrlRef.current) {
+        URL.revokeObjectURL(goToMapPreviewUrlRef.current);
+      }
     };
   }, []);
 
@@ -780,7 +803,120 @@ function handleGoToParentMap() {
   void handleEnterFeature(returnFeature);
 }
 
+function clearGoToMapPreview() {
+  goToMapPreviewRunIdRef.current += 1;
+  if (goToMapPreviewUrlRef.current) {
+    URL.revokeObjectURL(goToMapPreviewUrlRef.current);
+  }
+  goToMapPreviewUrlRef.current = null;
+  setGoToMapPreviewUrl(null);
+}
+
+async function loadGoToMapPreview(map: RegionMap) {
+  clearGoToMapPreview();
+  if (!map.imageFileId) return;
+
+  const runId = goToMapPreviewRunIdRef.current;
+
+  try {
+    const asset = await hostedMapImageService.loadAsset(map.imageFileId);
+    if (!asset || runId !== goToMapPreviewRunIdRef.current) return;
+    const image = await hostedMapImageService.readImage(asset);
+    if (!image || runId !== goToMapPreviewRunIdRef.current) return;
+
+    const previewUrl = URL.createObjectURL(image);
+    if (runId !== goToMapPreviewRunIdRef.current) {
+      URL.revokeObjectURL(previewUrl);
+      return;
+    }
+
+    goToMapPreviewUrlRef.current = previewUrl;
+    setGoToMapPreviewUrl(previewUrl);
+  } catch (error) {
+    console.error('Unable to load Map preview:', error);
+  }
+}
+
+function selectGoToMap(map: RegionMap) {
+  setSelectedGoToMapId(map.id);
+  void loadGoToMapPreview(map);
+}
+
+function closeGoToMapDialog() {
+  clearGoToMapPreview();
+  setShowGoToMapDialog(false);
+  setSelectedGoToMapId(null);
+}
+
+function handleOpenGoToMap() {
+  if (!activeProject || !activeMap) return;
+  setGoToMapSearch('');
+  setGoToMapTypeFilter('all');
+  setSelectedGoToMapId(activeMap.id);
+  setShowGoToMapDialog(true);
+  void loadGoToMapPreview(activeMap);
+}
+
+async function goDirectlyToMap(
+  mapId: string,
+  discardChanges: boolean
+) {
+  if (!activeProject || !activeMap) return;
+
+  setNavigationError(null);
+  let project = activeProject;
+
+  try {
+    if (discardChanges) {
+      const source = await restorePersistedSource(
+        activeProject.id,
+        activeMap.id
+      );
+      project = source.project;
+    }
+
+    const destination = await loadMapWithFeatures(mapId);
+    setActiveProject({ ...project, activeMapId: destination.map.id });
+    setActiveMap(destination.map);
+    setActiveFeatures(destination.features);
+    setPendingFocusFeatureId(null);
+    await loadMapImage(destination.map);
+    closeGoToMapDialog();
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : 'Unable to go to this Map.';
+    console.error('Unable to go directly to Map:', error);
+    setNavigationError(message);
+  }
+}
+
+async function handleConfirmGoToMap() {
+  if (!selectedGoToMapId || !activeMap) return;
+
+  if (selectedGoToMapId === activeMap.id) {
+    closeGoToMapDialog();
+    return;
+  }
+
+  const destinationId = selectedGoToMapId;
+  if (projectDirty && !autoSave) {
+    requestProjectAction((outcome) => {
+      void goDirectlyToMap(destinationId, outcome === 'discarded');
+    });
+    return;
+  }
+
+  if (projectDirty || saveInProgressRef.current) {
+    const saved = await saveActiveProject();
+    if (!saved) return;
+  }
+
+  await goDirectlyToMap(destinationId, false);
+}
+
 async function handleSelectProject(project: Project) {
+  closeGoToMapDialog();
   setPendingMaps([]);
   setPendingFeatures([]);
   setPendingFeatureDeletionIds(
@@ -933,6 +1069,7 @@ function handleSaveProject() {
 }
 
 function closeProject() {
+  closeGoToMapDialog();
   setActiveProject(
     null
   );
@@ -1780,6 +1917,16 @@ const deletableProjects =
       activeProject?.id
   );
 
+const goToMapMaps = projectMaps.map((map) => {
+  return map.id === activeMap?.id ? activeMap : map;
+});
+const selectedGoToMap = goToMapMaps.find((map) => {
+  return map.id === selectedGoToMapId;
+}) ?? null;
+const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
+  return type.id === selectedGoToMap?.featureTypeId;
+})?.name ?? 'No Type';
+
   return (
     <div className="regions-app">
       <MenuBar
@@ -1798,6 +1945,7 @@ const deletableProjects =
   onDeleteProject={() =>
     void handleDeleteProject()
   }
+  onGoToMap={handleOpenGoToMap}
   onGoToParentMap={handleGoToParentMap}
   onAssignMapImage={() => assignMapInputRef.current?.click()}
   autoSave={autoSave}
@@ -1830,6 +1978,106 @@ const deletableProjects =
     zoomControl?.fitMap
   }
 />
+
+{showGoToMapDialog && activeProject && (
+  <div className="dialog-backdrop">
+    <div className="dialog go-to-map-dialog">
+      <h2>Go to Map</h2>
+
+      <div className="go-to-map-layout">
+        <div className="go-to-map-browser">
+          <input
+            type="search"
+            placeholder="Search Maps"
+            value={goToMapSearch}
+            onChange={(event) => setGoToMapSearch(event.target.value)}
+            autoFocus
+          />
+
+          <select
+            value={goToMapTypeFilter}
+            onChange={(event) => {
+              setGoToMapTypeFilter(event.target.value);
+            }}
+          >
+            <option value="all">All Types</option>
+            <option value="none">No Type</option>
+            {activeProject.featureTypes.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
+
+          <div className="go-to-map-list">
+            {goToMapMaps
+              .filter((map) => {
+                const search = goToMapSearch.trim().toLocaleLowerCase();
+                const matchesSearch = map.name
+                  .toLocaleLowerCase()
+                  .includes(search);
+                const matchesType = goToMapTypeFilter === 'all' ||
+                  (goToMapTypeFilter === 'none' && !map.featureTypeId) ||
+                  map.featureTypeId === goToMapTypeFilter;
+                return matchesSearch && matchesType;
+              })
+              .sort((left, right) => left.name.localeCompare(right.name))
+              .map((map) => {
+                const typeName = activeProject.featureTypes.find((type) => {
+                  return type.id === map.featureTypeId;
+                })?.name ?? 'No Type';
+                const className = [
+                  'go-to-map-item',
+                  map.id === selectedGoToMapId ? 'selected' : '',
+                  map.id === activeMap?.id ? 'current' : '',
+                ].filter(Boolean).join(' ');
+
+                return (
+                  <button
+                    key={map.id}
+                    type="button"
+                    className={className}
+                    onClick={() => selectGoToMap(map)}
+                  >
+                    <span>{map.name}</span>
+                    <small>{typeName}</small>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+
+        <div className="go-to-map-preview">
+          <div className="go-to-map-preview-image">
+            {goToMapPreviewUrl ? (
+              <img src={goToMapPreviewUrl} alt="" />
+            ) : (
+              <span>No Map Image</span>
+            )}
+          </div>
+
+          <strong>{selectedGoToMap?.name ?? 'Select a Map'}</strong>
+          {selectedGoToMap && (
+            <span>Type: {selectedGoToMapType}</span>
+          )}
+        </div>
+      </div>
+
+      <div className="dialog-buttons">
+        <button type="button" onClick={closeGoToMapDialog}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!selectedGoToMap}
+          onClick={() => void handleConfirmGoToMap()}
+        >
+          Go
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
 {showUnsavedChangesDialog && (
   <div className="dialog-backdrop">
