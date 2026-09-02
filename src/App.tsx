@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import './App.css';
 import type {
@@ -12,6 +12,9 @@ import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
+import type {
+  LocationMapMetadata,
+} from './components/MapViewport';
 import FeatureTypesDialog from './components/FeatureTypesDialog';
 import type { Project } from './models/Project';
 import type { Map as RegionMap } from './models/Map';
@@ -146,7 +149,26 @@ const pendingProjectActionRef =
   const [showNewLocationDialog, setShowNewLocationDialog] =
     useState(false);
 
+  const [showLocationChoiceDialog, setShowLocationChoiceDialog] =
+    useState(false);
+
+  const [showExistingLocationDialog, setShowExistingLocationDialog] =
+    useState(false);
+
   const [newLocationName, setNewLocationName] = useState('');
+
+  const [newLocationTypeId, setNewLocationTypeId] =
+    useState('');
+
+  const [newLocationImage, setNewLocationImage] =
+    useState<File | null>(null);
+
+  const [projectMaps, setProjectMaps] = useState<RegionMap[]>([]);
+
+  const [locationSearch, setLocationSearch] = useState('');
+
+  const [locationTypeFilter, setLocationTypeFilter] =
+    useState('all');
 
   const [newLocationPosition, setNewLocationPosition] =
     useState<{ x: number; y: number } | null>(null);
@@ -185,6 +207,71 @@ const pendingProjectActionRef =
       mapId: activeMapId,
     });
   }, [activeMapId, activeProjectId, dispatch]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProjectLocationMaps() {
+      if (!activeProject) {
+        setProjectMaps([]);
+        return;
+      }
+
+      const storedMaps = await mapRepository.loadMaps();
+      if (cancelled) return;
+
+      const availableMaps = new Map<string, RegionMap>();
+      storedMaps.forEach((map) => availableMaps.set(map.id, map));
+      pendingMaps.forEach((map) => availableMaps.set(map.id, map));
+
+      const maps = activeProject.mapIds.flatMap((mapId) => {
+        const map = availableMaps.get(mapId);
+        return map ? [normalizeMap(map)] : [];
+      });
+
+      setProjectMaps(maps);
+    }
+
+    void loadProjectLocationMaps().catch((error) => {
+      if (cancelled) return;
+      console.error('Unable to load Project Maps:', error);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProject, pendingMaps]);
+
+  const locationMapMetadata = useMemo(() => {
+    if (!activeProject) return {};
+    const availableMaps = new Map<string, RegionMap>();
+    projectMaps.forEach((map) => availableMaps.set(map.id, map));
+    pendingMaps.forEach((map) => availableMaps.set(map.id, map));
+    if (activeMap) availableMaps.set(activeMap.id, activeMap);
+
+    const metadata: Record<string, LocationMapMetadata> = {};
+    activeFeatures.forEach((feature) => {
+      if (!feature.targetMapId) return;
+      const targetMap = availableMaps.get(feature.targetMapId);
+      if (!targetMap) return;
+      const typeName = activeProject.featureTypes.find((type) => {
+        return type.id === targetMap.featureTypeId;
+      })?.name ?? 'No Type';
+
+      metadata[feature.id] = {
+        mapId: targetMap.id,
+        mapName: targetMap.name,
+        typeName,
+      };
+    });
+    return metadata;
+  }, [
+    activeFeatures,
+    activeMap,
+    activeProject,
+    pendingMaps,
+    projectMaps,
+  ]);
 
   useEffect(() => {
     modulePresence.start();
@@ -534,6 +621,30 @@ async function loadMapWithFeatures(mapId: string) {
   return { map: normalizedMap, features };
 }
 
+function handleMapEntered(
+  map: RegionMap,
+  project: Project,
+  parentMapName?: string
+) {
+  const semanticType =
+    project.featureTypes.find(
+      (type) =>
+        type.id === map.featureTypeId
+    )?.name ?? '';
+
+  moduleEventBus.emit(
+    'Regions.LocationEntered',
+    {
+      area: 'Location',
+      parentMap:
+        parentMapName ?? '',
+      name: map.name,
+      type: semanticType,
+      mapId: map.id,
+    }
+  );
+}
+
 async function restorePersistedSource(
   projectId: string,
   mapId: string
@@ -607,22 +718,10 @@ async function navigateToFeatureTarget(
     setActiveFeatures(destination.features);
     setPendingFocusFeatureId(targetFeature.id);
     await loadMapImage(destination.map);
-    const semanticType =
-  project.featureTypes.find(
-    (type) =>
-      type.id ===
-      destination.map.featureTypeId
-  )?.name ?? '';
-
-moduleEventBus.emit(
-  'Regions.LocationEntered',
-  {
-    area: 'Location',
-    parentMap: sourceMapName,
-    name: destination.map.name,
-    type: semanticType,
-    mapId: destination.map.id,
-  }
+    handleMapEntered(
+  destination.map,
+  project,
+  sourceMapName
 );
   } catch (error) {
     const message = error instanceof Error
@@ -1142,30 +1241,34 @@ function handleCreateFeature() {
 function handleNewLocationRequest(x: number, y: number) {
   setNewLocationPosition({ x, y });
   setNewLocationName('');
-  setShowNewLocationDialog(true);
+  setNewLocationTypeId('');
+  setNewLocationImage(null);
+  setLocationSearch('');
+  setLocationTypeFilter('all');
+  setShowLocationChoiceDialog(true);
 }
 
-function handleCreateLocation() {
+function closeLocationDialogs() {
+  setShowLocationChoiceDialog(false);
+  setShowNewLocationDialog(false);
+  setShowExistingLocationDialog(false);
+  setNewLocationPosition(null);
+}
+
+function createLocationPair(
+  destinationMap: RegionMap,
+  sourceName: string
+) {
   if (!activeProject || !activeMap || !newLocationPosition) return;
-
-  const name = newLocationName.trim();
-  if (!name) return;
-
-  const now = new Date();
   const featureAId = crypto.randomUUID();
   const featureBId = crypto.randomUUID();
-  const childMap = createDefaultMap({
-    id: crypto.randomUUID(),
-    now,
-    parentMapId: activeMap.id,
-  });
-  const feature: Feature = {
+  const sourceFeature: Feature = {
     id: featureAId,
-    name,
+    name: sourceName,
     position: newLocationPosition,
     type: 'location',
     noteLinks: [],
-    targetMapId: childMap.id,
+    targetMapId: destinationMap.id,
     targetFeatureId: featureBId,
   };
   const returnFeature: Feature = {
@@ -1181,12 +1284,40 @@ function handleCreateLocation() {
     targetFeatureId: featureAId,
   };
 
-  childMap.featureIds = [returnFeature.id];
+  return { sourceFeature, returnFeature };
+}
 
-  setActiveFeatures((current) => [...current, feature]);
+async function handleCreateLocation() {
+  if (!activeProject || !activeMap || !newLocationPosition) return;
+
+  const name = newLocationName.trim();
+  if (!name) return;
+
+  const now = new Date();
+  const childMap = createDefaultMap({
+    id: crypto.randomUUID(),
+    now,
+    parentMapId: activeMap.id,
+  });
+  childMap.name = name;
+  childMap.featureTypeId = newLocationTypeId || undefined;
+
+  if (newLocationImage) {
+    const image = await hostedMapImageService.importLocalFile(
+      newLocationImage
+    );
+    childMap.imageFileId = image.id;
+  }
+
+  const pair = createLocationPair(childMap, name);
+  if (!pair) return;
+
+  childMap.featureIds = [pair.returnFeature.id];
+
+  setActiveFeatures((current) => [...current, pair.sourceFeature]);
   setActiveMap({
     ...activeMap,
-    featureIds: [...activeMap.featureIds, feature.id],
+    featureIds: [...activeMap.featureIds, pair.sourceFeature.id],
     updatedAt: now,
   });
   setActiveProject({
@@ -1195,12 +1326,59 @@ function handleCreateLocation() {
     updatedAt: now,
   });
   setPendingMaps((current) => [...current, childMap]);
-  setPendingFeatures((current) => [...current, returnFeature]);
+  setPendingFeatures((current) => [...current, pair.returnFeature]);
 
   markProjectDirty();
-  setShowNewLocationDialog(false);
-  setNewLocationPosition(null);
+  closeLocationDialogs();
   setNewLocationName('');
+}
+
+function handleCreateExistingLocation(destinationMap: RegionMap) {
+  if (!activeProject || !activeMap || !newLocationPosition) return;
+
+  const now = new Date();
+  const pair = createLocationPair(destinationMap, destinationMap.name);
+  if (!pair) return;
+
+  if (destinationMap.id === activeMap.id) {
+    setActiveFeatures((current) => [
+      ...current,
+      pair.sourceFeature,
+      pair.returnFeature,
+    ]);
+    setActiveMap({
+      ...activeMap,
+      featureIds: [
+        ...activeMap.featureIds,
+        pair.sourceFeature.id,
+        pair.returnFeature.id,
+      ],
+      updatedAt: now,
+    });
+  } else {
+    const updatedDestination = {
+      ...destinationMap,
+      featureIds: [...destinationMap.featureIds, pair.returnFeature.id],
+      updatedAt: now,
+    };
+    setActiveFeatures((current) => [...current, pair.sourceFeature]);
+    setActiveMap({
+      ...activeMap,
+      featureIds: [...activeMap.featureIds, pair.sourceFeature.id],
+      updatedAt: now,
+    });
+    setPendingMaps((current) => [
+      ...current.filter((map) => map.id !== updatedDestination.id),
+      updatedDestination,
+    ]);
+    setPendingFeatures((current) => [
+      ...current,
+      pair.returnFeature,
+    ]);
+  }
+
+  markProjectDirty();
+  closeLocationDialogs();
 }
 
 async function handleAssignMapFile(
@@ -1461,14 +1639,52 @@ const deletableProjects =
   </div>
 )}
 
-{showNewLocationDialog && (
+{showLocationChoiceDialog && (
   <div className="dialog-backdrop">
-    <div className="dialog">
+    <div className="dialog location-choice-dialog">
       <h2>New Location</h2>
+
+      <p>Choose a new or existing destination Map.</p>
+
+      <div className="location-choice-buttons">
+        <button
+          type="button"
+          onClick={() => {
+            setShowLocationChoiceDialog(false);
+            setShowNewLocationDialog(true);
+          }}
+        >
+          New...
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowLocationChoiceDialog(false);
+            setShowExistingLocationDialog(true);
+          }}
+        >
+          Existing...
+        </button>
+      </div>
+
+      <div className="dialog-buttons">
+        <button type="button" onClick={closeLocationDialogs}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showNewLocationDialog && activeProject && (
+  <div className="dialog-backdrop">
+    <div className="dialog location-editor-dialog">
+      <h2>New Location Map</h2>
 
       <input
         type="text"
-        placeholder="Location name"
+        placeholder="Map name"
         value={newLocationName}
         onChange={(event) => {
           setNewLocationName(event.target.value);
@@ -1479,13 +1695,38 @@ const deletableProjects =
         autoFocus
       />
 
+      <label>
+        Type
+        <select
+          value={newLocationTypeId}
+          onChange={(event) => {
+            setNewLocationTypeId(event.target.value);
+          }}
+        >
+          <option value="">No Type</option>
+          {activeProject.featureTypes.map((type) => (
+            <option key={type.id} value={type.id}>
+              {type.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Map Image (optional)
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            setNewLocationImage(event.target.files?.[0] ?? null);
+          }}
+        />
+      </label>
+
       <div className="dialog-buttons">
         <button
           type="button"
-          onClick={() => {
-            setShowNewLocationDialog(false);
-            setNewLocationPosition(null);
-          }}
+          onClick={closeLocationDialogs}
         >
           Cancel
         </button>
@@ -1493,9 +1734,83 @@ const deletableProjects =
         <button
           type="button"
           disabled={!newLocationName.trim()}
-          onClick={handleCreateLocation}
+          onClick={() => void handleCreateLocation()}
         >
           Create
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showExistingLocationDialog && activeProject && (
+  <div className="dialog-backdrop">
+    <div className="dialog existing-location-dialog">
+      <h2>Existing Location</h2>
+
+      <div className="location-map-filters">
+        <input
+          type="search"
+          placeholder="Search Maps"
+          value={locationSearch}
+          onChange={(event) => setLocationSearch(event.target.value)}
+          autoFocus
+        />
+
+        <select
+          value={locationTypeFilter}
+          onChange={(event) => {
+            setLocationTypeFilter(event.target.value);
+          }}
+        >
+          <option value="all">All Types</option>
+          <option value="none">No Type</option>
+          {activeProject.featureTypes.map((type) => (
+            <option key={type.id} value={type.id}>
+              {type.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="location-map-list">
+        {projectMaps
+          .filter((map) => {
+            const matchesName = map.name.toLocaleLowerCase().includes(
+              locationSearch.trim().toLocaleLowerCase()
+            );
+            const matchesType = locationTypeFilter === 'all' ||
+              (locationTypeFilter === 'none' && !map.featureTypeId) ||
+              map.featureTypeId === locationTypeFilter;
+            return matchesName && matchesType;
+          })
+          .sort((left, right) => left.name.localeCompare(right.name))
+          .map((map) => {
+            const typeName = activeProject.featureTypes.find((type) => {
+              return type.id === map.featureTypeId;
+            })?.name ?? 'No Type';
+
+            return (
+              <button
+                key={map.id}
+                type="button"
+                className="location-map-item"
+                onClick={() => handleCreateExistingLocation(map)}
+              >
+                <span>{map.name}</span>
+                <small>{typeName}</small>
+              </button>
+            );
+          })}
+
+        {projectMaps.length === 0 && (
+          <p>No Maps found.</p>
+        )}
+      </div>
+
+      <div className="dialog-buttons">
+        <button type="button" onClick={closeLocationDialogs}>
+          Cancel
         </button>
       </div>
     </div>
@@ -1712,6 +2027,7 @@ const deletableProjects =
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
         featureTypes={activeProject.featureTypes}
+        locationMapMetadata={locationMapMetadata}
         onMapMetadataChange={handleMapMetadataChange}
         focusFeatureId={pendingFocusFeatureId}
         onFocusFeatureComplete={() => setPendingFocusFeatureId(null)}

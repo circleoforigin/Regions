@@ -57,6 +57,12 @@ export interface FeaturePopupAction {
   onInvoke: () => void;
 }
 
+export interface LocationMapMetadata {
+  mapId: string;
+  mapName: string;
+  typeName: string;
+}
+
 interface MapViewportProps {
   imageUrl: string;
   mapName: string;
@@ -69,6 +75,7 @@ interface MapViewportProps {
 
 features: Feature[];
 featureTypes: FeatureTypeDefinition[];
+locationMapMetadata?: Record<string, LocationMapMetadata>;
 focusFeatureId?: string | null;
 
 onMapMetadataChange?: (
@@ -124,6 +131,7 @@ function MapViewport({
   imageRegistration,
   features,
   featureTypes,
+  locationMapMetadata = {},
   focusFeatureId,
   onFocusFeatureComplete,
   onEnterFeature,
@@ -979,6 +987,9 @@ function handleContextMenu(
   const hasLocationTarget = Boolean(
     selectedFeature?.targetMapId && selectedFeature.targetFeatureId
   );
+  const selectedLocationMap = selectedFeature
+    ? locationMapMetadata[selectedFeature.id]
+    : undefined;
 
   function saveSubtitle() {
   if (!selectedFeature) return;
@@ -1232,6 +1243,12 @@ function cancelSubtitleEdit() {
 
     <div className="feature-popup-controls">
       <div className="feature-popup-control">
+        {hasLocationTarget ? (
+          <span className="feature-popup-control-readonly">
+            Type: {selectedLocationMap?.typeName ?? 'No Type'}
+          </span>
+        ) : (
+          <>
         <button
           type="button"
           className="feature-popup-control-toggle"
@@ -1275,6 +1292,8 @@ function cancelSubtitleEdit() {
               </button>
             ))}
           </div>
+        )}
+          </>
         )}
       </div>
 

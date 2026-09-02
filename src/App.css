@@ -999,6 +999,81 @@
   opacity: 0.5;
 }
 
+.location-choice-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.location-choice-buttons button,
+.location-map-item {
+  padding: 10px 12px;
+  border: 1px solid #4a4a4a;
+  border-radius: 4px;
+  background: #292929;
+  color: #eeeeee;
+  cursor: pointer;
+}
+
+.location-editor-dialog label {
+  display: grid;
+  gap: 6px;
+  color: #cfcfcf;
+  font-size: 13px;
+}
+
+.location-editor-dialog select,
+.location-map-filters select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #4a4a4a;
+  border-radius: 4px;
+  background: #222222;
+  color: #eeeeee;
+}
+
+.existing-location-dialog {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.location-map-filters {
+  display: grid;
+  grid-template-columns: 1fr 150px;
+  gap: 8px;
+}
+
+.location-map-list {
+  display: grid;
+  gap: 6px;
+  max-height: min(420px, 55vh);
+  margin-top: 12px;
+  overflow-y: auto;
+}
+
+.location-map-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.location-map-item:hover {
+  background: #353535;
+}
+
+.location-map-item small {
+  color: #aaaaaa;
+}
+
+.feature-popup-control-readonly {
+  display: inline-block;
+  padding: 6px 8px;
+  color: #cccccc;
+  font-size: 12px;
+}
+
 .feature-types-dialog {
   width: min(420px, calc(100vw - 32px));
 }
