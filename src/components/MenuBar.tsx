@@ -22,6 +22,7 @@ interface MenuBarProps {
   onDeleteProject: () => void;
   onGoToMap: () => void;
   onGoToParentMap: () => void;
+  onAddPiece: () => void;
   onAssignMapImage: () => void;
   autoSave: boolean;
   onAutoSaveChange: (enabled: boolean) => void;
@@ -30,6 +31,10 @@ interface MenuBarProps {
   projectName?: string;
   mapActive: boolean;
   parentMapAvailable: boolean;
+  addPieceEnabled: boolean;
+  pieces: { id: string; name: string }[];
+  focusedPieceId?: string;
+  onFocusPiece: (pieceId: string | null) => void;
 
   zoomValue?: number;
   zoomMin?: number;
@@ -50,6 +55,7 @@ function MenuBar({
   onDeleteProject,
   onGoToMap,
   onGoToParentMap,
+  onAddPiece,
   onAssignMapImage,
   autoSave,
   onAutoSaveChange,
@@ -57,6 +63,10 @@ function MenuBar({
   projectName,
   mapActive,
   parentMapAvailable,
+  addPieceEnabled,
+  pieces,
+  focusedPieceId,
+  onFocusPiece,
 
   zoomValue,
   zoomMin,
@@ -80,9 +90,11 @@ function MenuBar({
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
+  const [pieceMenuOpen, setPieceMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (!fileMenuOpen && !mapMenuOpen && !settingsMenuOpen) return;
+    if (!fileMenuOpen && !mapMenuOpen &&
+        !settingsMenuOpen && !pieceMenuOpen) return;
 
     function handleOutsidePointerDown(
       event: PointerEvent
@@ -100,6 +112,7 @@ function MenuBar({
         setMapMenuOpen(false);
         setLayersMenuOpen(false);
         setSettingsMenuOpen(false);
+        setPieceMenuOpen(false);
       }
     }
 
@@ -114,13 +127,14 @@ function MenuBar({
         handleOutsidePointerDown
       );
     };
-  }, [fileMenuOpen, mapMenuOpen, settingsMenuOpen]);
+  }, [fileMenuOpen, mapMenuOpen, pieceMenuOpen, settingsMenuOpen]);
 
   function closeMenus() {
     setFileMenuOpen(false);
     setMapMenuOpen(false);
     setLayersMenuOpen(false);
     setSettingsMenuOpen(false);
+    setPieceMenuOpen(false);
   }
 
   function handleNewProject() {
@@ -162,6 +176,7 @@ function MenuBar({
             setMapMenuOpen(false);
             setLayersMenuOpen(false);
             setSettingsMenuOpen(false);
+            setPieceMenuOpen(false);
           }}
         >
           Project
@@ -238,6 +253,7 @@ function MenuBar({
             setLayersMenuOpen(false);
             setFileMenuOpen(false);
             setSettingsMenuOpen(false);
+            setPieceMenuOpen(false);
           }}
         >
           Map
@@ -269,6 +285,20 @@ function MenuBar({
               }}
             >
               Go to Parent Map
+            </button>
+
+            <div className="dropdown-separator" />
+
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={!addPieceEnabled}
+              onClick={() => {
+                closeMenus();
+                onAddPiece();
+              }}
+            >
+              Add Piece
             </button>
 
             <div className="dropdown-separator" />
@@ -340,6 +370,7 @@ function MenuBar({
             setFileMenuOpen(false);
             setMapMenuOpen(false);
             setLayersMenuOpen(false);
+            setPieceMenuOpen(false);
           }}
         >
           Settings
@@ -385,6 +416,55 @@ function MenuBar({
       )}
 
       <div className="menu-bar-spacer" />
+
+      <div className="menu-piece-control">
+        <button
+          type="button"
+          disabled={pieces.length === 0}
+          onClick={() => {
+            setPieceMenuOpen((open) => !open);
+            setFileMenuOpen(false);
+            setMapMenuOpen(false);
+            setLayersMenuOpen(false);
+            setSettingsMenuOpen(false);
+          }}
+        >
+          {pieces.find((piece) => piece.id === focusedPieceId)?.name ??
+            'Piece'}{' '}
+          <span aria-hidden="true">▾</span>
+        </button>
+
+        {pieceMenuOpen && (
+          <div className="dropdown-menu menu-piece-dropdown">
+            <button
+              type="button"
+              className="dropdown-item"
+              onClick={() => {
+                setPieceMenuOpen(false);
+                onFocusPiece(null);
+              }}
+            >
+              {!focusedPieceId ? '✓ ' : ''}No Focus
+            </button>
+            {[...pieces]
+              .sort((left, right) => left.name.localeCompare(right.name))
+              .map((piece) => (
+                <button
+                  key={piece.id}
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setPieceMenuOpen(false);
+                    onFocusPiece(piece.id);
+                  }}
+                >
+                  {piece.id === focusedPieceId ? '✓ ' : ''}
+                  {piece.name}
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
 
 {zoomValue !== undefined &&
   zoomMin !== undefined &&

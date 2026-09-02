@@ -1,4 +1,5 @@
 import type { FeatureTypeDefinition } from './FeatureTypeDefinition';
+import type { Piece } from './Piece';
 
 export interface Project {
   id: string;
@@ -10,6 +11,8 @@ export interface Project {
   activeMapId?: string;
 
   featureTypes: FeatureTypeDefinition[];
+  pieces: Piece[];
+  focusedPieceId?: string;
 
   createdAt: Date;
   updatedAt: Date;

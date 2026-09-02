@@ -21,6 +21,7 @@ import type { Map as RegionMap } from './models/Map';
 import type { Feature } from './models/Feature';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
+import type { Piece, PieceShape } from './models/Piece';
 import { featureRepository } from './features/FeatureRepository';
 
 import { mapRepository} from './maps/MapRepository';
@@ -32,6 +33,11 @@ import {
 import { useRegionsState } from './state/RegionsStateContext';
 
 type ProjectActionOutcome = 'unchanged' | 'saved' | 'discarded';
+type SpatialNavigationSource =
+  | 'manual'
+  | 'go-to-map'
+  | 'piece'
+  | 'piece-focus';
 
 function App() {
   const { dispatch } = useRegionsState();
@@ -205,6 +211,24 @@ const pendingProjectActionRef =
 
   const [navigationError, setNavigationError] =
     useState<string | null>(null);
+
+  const [viewportCenter, setViewportCenter] =
+    useState({ x: 0, y: 0 });
+
+  const [focusPiecePosition, setFocusPiecePosition] =
+    useState<{ x: number; y: number } | null>(null);
+
+  const [focusPieceRequestId, setFocusPieceRequestId] = useState(0);
+
+  const [editingPieceId, setEditingPieceId] =
+    useState<string | null>(null);
+
+  const [pieceNameDraft, setPieceNameDraft] = useState('');
+  const [pieceShapeDraft, setPieceShapeDraft] =
+    useState<PieceShape>('circle');
+  const [pieceFillDraft, setPieceFillDraft] = useState('#e4e4e4');
+  const [pieceBorderDraft, setPieceBorderDraft] = useState('#222222');
+  const [pieceToDelete, setPieceToDelete] = useState<Piece | null>(null);
 
   const [showFeatureTypesDialog, setShowFeatureTypesDialog] =
     useState(false);
@@ -500,6 +524,8 @@ function handleNewProject() {
 
       featureTypes: [],
 
+      pieces: [],
+
       createdAt:
         now,
 
@@ -654,8 +680,16 @@ async function loadMapWithFeatures(mapId: string) {
 function handleMapEntered(
   map: RegionMap,
   project: Project,
-  parentMapName?: string
+  parentMapName?: string,
+  source: SpatialNavigationSource = 'manual'
 ) {
+  const hasFocusedPiece = project.pieces.some((piece) => {
+    return piece.id === project.focusedPieceId;
+  });
+  const pieceIsAuthoritative = source === 'piece' ||
+    source === 'piece-focus';
+  if (hasFocusedPiece && !pieceIsAuthoritative) return;
+
   const semanticType =
     project.featureTypes.find(
       (type) =>
@@ -864,16 +898,20 @@ async function goDirectlyToMap(
   if (!activeProject || !activeMap) return;
 
   setNavigationError(null);
+
   let project = activeProject;
+  let sourceMapName = activeMap.name;
 
   try {
     if (discardChanges) {
-      const source = await restorePersistedSource(
-        activeProject.id,
-        activeMap.id
-      );
-      project = source.project;
-    }
+  const source = await restorePersistedSource(
+    activeProject.id,
+    activeMap.id
+  );
+
+  project = source.project;
+  sourceMapName = source.map.name;
+}
 
     const destination = await loadMapWithFeatures(mapId);
     setActiveProject({ ...project, activeMapId: destination.map.id });
@@ -881,6 +919,7 @@ async function goDirectlyToMap(
     setActiveFeatures(destination.features);
     setPendingFocusFeatureId(null);
     await loadMapImage(destination.map);
+    handleMapEntered(destination.map, project, sourceMapName, 'go-to-map');
     closeGoToMapDialog();
   } catch (error) {
     const message = error instanceof Error
@@ -913,6 +952,204 @@ async function handleConfirmGoToMap() {
   }
 
   await goDirectlyToMap(destinationId, false);
+}
+
+function getNextPieceName(pieces: Piece[]): string {
+  const names = new Set(pieces.map((piece) => piece.name));
+  if (!names.has('Piece')) return 'Piece';
+  let suffix = 2;
+  while (names.has(`Piece ${suffix}`)) suffix += 1;
+  return `Piece ${suffix}`;
+}
+
+function handleAddPiece() {
+  if (!activeProject || !activeMap || !activeMapImageUrl) return;
+
+  const piece: Piece = {
+    id: crypto.randomUUID(),
+    kind: 'piece',
+    name: getNextPieceName(activeProject.pieces),
+    mapId: activeMap.id,
+    position: viewportCenter,
+    appearance: {
+      shape: 'circle',
+      fillColor: '#e4e4e4',
+      borderColor: '#222222',
+    },
+  };
+  setActiveProject({
+    ...activeProject,
+    pieces: [...activeProject.pieces, piece],
+  });
+  markProjectDirty();
+}
+
+function updatePiecePosition(pieceId: string, position: Feature['position']) {
+  if (!activeProject) return;
+  setActiveProject({
+    ...activeProject,
+    pieces: activeProject.pieces.map((piece) => {
+      return piece.id === pieceId ? { ...piece, position } : piece;
+    }),
+  });
+  markProjectDirty();
+}
+
+async function handlePieceDrop(
+  pieceId: string,
+  position: Feature['position'],
+  location?: Feature
+) {
+  if (!activeProject || !activeMap) return;
+  const piece = activeProject.pieces.find((item) => item.id === pieceId);
+  if (!piece) return;
+
+  if (!location?.targetMapId || !location.targetFeatureId) {
+    updatePiecePosition(pieceId, position);
+    return;
+  }
+
+  try {
+    const destination = await loadMapWithFeatures(location.targetMapId);
+    const targetFeature = destination.features.find((feature) => {
+      return feature.id === location.targetFeatureId;
+    });
+    if (!targetFeature) {
+      throw new Error('The target Feature could not be resolved.');
+    }
+
+    const movedPiece = {
+      ...piece,
+      mapId: destination.map.id,
+      position: targetFeature.position,
+    };
+    const updatedProject = {
+      ...activeProject,
+      pieces: activeProject.pieces.map((item) => {
+        return item.id === pieceId ? movedPiece : item;
+      }),
+      activeMapId: pieceId === activeProject.focusedPieceId
+        ? destination.map.id
+        : activeProject.activeMapId,
+    };
+    setActiveProject(updatedProject);
+    markProjectDirty();
+
+    if (pieceId !== activeProject.focusedPieceId) return;
+    setActiveMap(destination.map);
+    setActiveFeatures(destination.features);
+    setPendingFocusFeatureId(null);
+    await loadMapImage(destination.map);
+    setFocusPiecePosition(movedPiece.position);
+    setFocusPieceRequestId((current) => current + 1);
+    handleMapEntered(
+      destination.map,
+      updatedProject,
+      activeMap.name,
+      'piece'
+    );
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : 'Unable to move this Piece through the Location.';
+    console.error('Unable to traverse Location with Piece:', error);
+    setNavigationError(message);
+  }
+}
+
+async function handleFocusPiece(pieceId: string | null) {
+  if (!activeProject) return;
+  if (pieceId === null) {
+    if (!activeProject.focusedPieceId) return;
+    setActiveProject({ ...activeProject, focusedPieceId: undefined });
+    markProjectDirty();
+    return;
+  }
+  const piece = activeProject.pieces.find((item) => item.id === pieceId);
+  if (!piece) return;
+
+  const focusChanged = activeProject.focusedPieceId !== piece.id;
+  const updatedProject = focusChanged
+    ? { ...activeProject, focusedPieceId: piece.id }
+    : activeProject;
+  if (focusChanged) {
+    setActiveProject(updatedProject);
+    markProjectDirty();
+  }
+
+  try {
+    let destinationMap = activeMap;
+    if (activeMap?.id !== piece.mapId) {
+      const destination = await loadMapWithFeatures(piece.mapId);
+      destinationMap = destination.map;
+      setActiveProject({ ...updatedProject, activeMapId: piece.mapId });
+      setActiveMap(destination.map);
+      setActiveFeatures(destination.features);
+      setPendingFocusFeatureId(null);
+      await loadMapImage(destination.map);
+    }
+
+    if (!destinationMap) return;
+    setFocusPiecePosition(piece.position);
+    setFocusPieceRequestId((current) => current + 1);
+    if (focusChanged) {
+      handleMapEntered(destinationMap, updatedProject, undefined, 'piece-focus');
+    }
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : 'Unable to focus this Piece.';
+    console.error('Unable to focus Piece:', error);
+    setNavigationError(message);
+  }
+}
+
+function handleEditPiece(piece: Piece) {
+  setEditingPieceId(piece.id);
+  setPieceNameDraft(piece.name);
+  setPieceShapeDraft(piece.appearance.shape);
+  setPieceFillDraft(piece.appearance.fillColor);
+  setPieceBorderDraft(piece.appearance.borderColor);
+}
+
+function handleSavePiece() {
+  if (!activeProject || !editingPieceId) return;
+  const name = pieceNameDraft.trim();
+  if (!name) return;
+  setActiveProject({
+    ...activeProject,
+    pieces: activeProject.pieces.map((piece) => {
+      return piece.id === editingPieceId
+        ? {
+            ...piece,
+            name,
+            appearance: {
+              shape: pieceShapeDraft,
+              fillColor: pieceFillDraft,
+              borderColor: pieceBorderDraft,
+            },
+          }
+        : piece;
+    }),
+  });
+  setEditingPieceId(null);
+  markProjectDirty();
+}
+
+function handleDeletePiece() {
+  if (!activeProject || !pieceToDelete) return;
+  const focusedPieceId = activeProject.focusedPieceId === pieceToDelete.id
+    ? undefined
+    : activeProject.focusedPieceId;
+  setActiveProject({
+    ...activeProject,
+    pieces: activeProject.pieces.filter((piece) => {
+      return piece.id !== pieceToDelete.id;
+    }),
+    focusedPieceId,
+  });
+  setPieceToDelete(null);
+  markProjectDirty();
 }
 
 async function handleSelectProject(project: Project) {
@@ -1947,6 +2184,7 @@ const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
   }
   onGoToMap={handleOpenGoToMap}
   onGoToParentMap={handleGoToParentMap}
+  onAddPiece={handleAddPiece}
   onAssignMapImage={() => assignMapInputRef.current?.click()}
   autoSave={autoSave}
   onAutoSaveChange={setAutoSave}
@@ -1956,6 +2194,10 @@ const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
   }
   mapActive={activeMap !== null}
   parentMapAvailable={Boolean(activeMap?.parentMapId)}
+  addPieceEnabled={Boolean(activeProject && activeMap && activeMapImageUrl)}
+  pieces={activeProject?.pieces ?? []}
+  focusedPieceId={activeProject?.focusedPieceId}
+  onFocusPiece={(pieceId) => void handleFocusPiece(pieceId)}
   zoomValue={
     zoomControl?.value
   }
@@ -2120,6 +2362,88 @@ const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
           }
         >
           Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{editingPieceId && (
+  <div className="dialog-backdrop">
+    <div className="dialog piece-editor-dialog">
+      <h2>Edit Piece</h2>
+
+      <label>
+        Name
+        <input
+          type="text"
+          value={pieceNameDraft}
+          onChange={(event) => setPieceNameDraft(event.target.value)}
+          autoFocus
+        />
+      </label>
+
+      <label>
+        Shape
+        <select
+          value={pieceShapeDraft}
+          onChange={(event) => {
+            setPieceShapeDraft(event.target.value as PieceShape);
+          }}
+        >
+          <option value="circle">Circle</option>
+          <option value="square">Square</option>
+          <option value="diamond">Diamond</option>
+          <option value="triangle">Triangle</option>
+          <option value="hexagon">Hexagon</option>
+        </select>
+      </label>
+
+      <label>
+        Fill Color
+        <input
+          type="color"
+          value={pieceFillDraft}
+          onChange={(event) => setPieceFillDraft(event.target.value)}
+        />
+      </label>
+
+      <label>
+        Border Color
+        <input
+          type="color"
+          value={pieceBorderDraft}
+          onChange={(event) => setPieceBorderDraft(event.target.value)}
+        />
+      </label>
+
+      <div className="dialog-buttons">
+        <button type="button" onClick={() => setEditingPieceId(null)}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!pieceNameDraft.trim()}
+          onClick={handleSavePiece}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{pieceToDelete && (
+  <div className="dialog-backdrop">
+    <div className="dialog">
+      <h2>Delete Piece</h2>
+      <p>Delete &quot;{pieceToDelete.name}&quot;?</p>
+      <div className="dialog-buttons">
+        <button type="button" onClick={() => setPieceToDelete(null)}>
+          Cancel
+        </button>
+        <button type="button" onClick={handleDeletePiece}>
+          Delete
         </button>
       </div>
     </div>
@@ -2566,6 +2890,10 @@ const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
         mapTypeId={activeMap.featureTypeId}
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
+        pieces={activeProject.pieces.filter((piece) => {
+          return piece.mapId === activeMap.id;
+        })}
+        focusedPieceId={activeProject.focusedPieceId}
         featureTypes={activeProject.featureTypes}
         locationMapMetadata={locationMapMetadata}
         onMapMetadataChange={handleMapMetadataChange}
@@ -2578,6 +2906,16 @@ const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
         onShowLabelChange={handleShowLabelChange}
         onFeatureTypeChange={handleFeatureTypeChange}
         onFeatureMove={handleFeatureMove}
+        onPieceDrop={(pieceId, position, location) => {
+          void handlePieceDrop(pieceId, position, location);
+        }}
+        onEditPiece={handleEditPiece}
+        onDeletePiece={setPieceToDelete}
+        onFocusPiece={(pieceId) => void handleFocusPiece(pieceId)}
+        onViewportCenterChange={setViewportCenter}
+        focusPiecePosition={focusPiecePosition}
+        focusPieceRequestId={focusPieceRequestId}
+        onFocusPieceComplete={() => setFocusPiecePosition(null)}
         onDeleteFeature={handleDeleteFeature}
         onNewFeatureRequest={handleNewFeatureRequest}
         onNewLocationRequest={handleNewLocationRequest}

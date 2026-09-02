@@ -6,6 +6,7 @@ import MapKey from './MapKey';
 import RichTextEditor from './RichTextEditor';
 import type { RichTextDocument } from '../models/RichText';
 import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
+import type { Piece } from '../models/Piece';
 
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
@@ -74,6 +75,8 @@ interface MapViewportProps {
 };
 
 features: Feature[];
+pieces?: Piece[];
+focusedPieceId?: string;
 featureTypes: FeatureTypeDefinition[];
 locationMapMetadata?: Record<string, LocationMapMetadata>;
 focusFeatureId?: string | null;
@@ -102,6 +105,18 @@ onFeatureTypeChange?: (
   featureTypeId: string | undefined
 ) => void;
 onFeatureMove?: (featureId: string, position: Point) => void;
+onPieceDrop?: (
+  pieceId: string,
+  position: Point,
+  location?: Feature
+) => void;
+onEditPiece?: (piece: Piece) => void;
+onDeletePiece?: (piece: Piece) => void;
+onFocusPiece?: (pieceId: string) => void;
+onViewportCenterChange?: (position: Point) => void;
+focusPiecePosition?: Point | null;
+focusPieceRequestId?: number;
+onFocusPieceComplete?: () => void;
 secondaryActions?: FeaturePopupAction[];
 
 onDeleteFeature?: (
@@ -139,6 +154,8 @@ function MapViewport({
   mapTypeId,
   imageRegistration,
   features,
+  pieces = [],
+  focusedPieceId,
   featureTypes,
   locationMapMetadata = {},
   focusFeatureId,
@@ -150,6 +167,14 @@ function MapViewport({
   onShowLabelChange,
   onFeatureTypeChange,
   onFeatureMove,
+  onPieceDrop,
+  onEditPiece,
+  onDeletePiece,
+  onFocusPiece,
+  onViewportCenterChange,
+  focusPiecePosition,
+  focusPieceRequestId,
+  onFocusPieceComplete,
   onDeleteFeature,
   secondaryActions = [],
   onNewFeatureRequest,
@@ -201,6 +226,24 @@ function MapViewport({
     pointerId: number;
     startPointer: Point;
     startOffset: Point;
+  } | null>(null);
+
+  const pieceDragRef = useRef<{
+    pieceId: string;
+    pointerId: number;
+    startPointer: Point;
+    startPosition: Point;
+    moved: boolean;
+  } | null>(null);
+
+  const [piecePreview, setPiecePreview] = useState<{
+    pieceId: string;
+    position: Point;
+  } | null>(null);
+  const [pieceContextMenu, setPieceContextMenu] = useState<{
+    pieceId: string;
+    x: number;
+    y: number;
   } | null>(null);
 
   const popupRef = useRef<HTMLDivElement | null>(null);
@@ -724,6 +767,54 @@ function isMovePositionValid(point: Point): boolean {
     dispatch,
   ]);
 
+  useEffect(() => {
+    if (!onViewportCenterChange || scale <= 0) return;
+    onViewportCenterChange({
+      x: -pan.x / scale,
+      y: -pan.y / scale,
+    });
+  }, [onViewportCenterChange, pan.x, pan.y, scale]);
+
+  useEffect(() => {
+    if (!focusPiecePosition || !focusPieceRequestId) return;
+    if (imageSize.width <= 0 || imageSize.height <= 0) return;
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) return;
+
+    const arrivalScale = minScale +
+      (maxScale - minScale) * NAVIGATION_ZOOM_RATIO;
+    const nextPan = clampPanToViewport(
+      {
+        x: -focusPiecePosition.x * arrivalScale,
+        y: -focusPiecePosition.y * arrivalScale,
+      },
+      arrivalScale,
+      { width: registeredWidth, height: registeredHeight },
+      viewportSize
+    );
+
+    dispatch({
+      type: 'viewport.set',
+      viewport: {
+        scale: arrivalScale,
+        panX: nextPan.x,
+        panY: nextPan.y,
+      },
+    });
+    onFocusPieceComplete?.();
+  }, [
+    dispatch,
+    focusPiecePosition,
+    focusPieceRequestId,
+    imageSize.height,
+    imageSize.width,
+    maxScale,
+    minScale,
+    onFocusPieceComplete,
+    registeredHeight,
+    registeredWidth,
+    viewportSize,
+  ]);
+
 function clampPopupOffset(offset: Point): Point {
   const distance = Math.hypot(offset.x, offset.y);
   if (distance <= 200) return offset;
@@ -774,6 +865,7 @@ function handleContextMenu(
 ) {
   event.preventDefault();
   if (state.editingMode === 'move-feature') return;
+  setPieceContextMenu(null);
   dispatch({ type: 'feature.clearSelection' });
   dispatch({ type: 'contextMenu.close' });
 
@@ -860,6 +952,7 @@ function handleContextMenu(
 
     dispatch({ type: 'feature.clearSelection' });
     dispatch({ type: 'contextMenu.close' });
+    setPieceContextMenu(null);
 
     event.currentTarget
       .setPointerCapture(
@@ -964,6 +1057,74 @@ function handleContextMenu(
           event.pointerId
         );
     }
+  }
+
+  function handlePiecePointerDown(
+    event: React.PointerEvent<HTMLButtonElement>,
+    piece: Piece
+  ) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPieceContextMenu(null);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pieceDragRef.current = {
+      pieceId: piece.id,
+      pointerId: event.pointerId,
+      startPointer: { x: event.clientX, y: event.clientY },
+      startPosition: piece.position,
+      moved: false,
+    };
+    setPiecePreview({ pieceId: piece.id, position: piece.position });
+  }
+
+  function handlePiecePointerMove(
+    event: React.PointerEvent<HTMLButtonElement>
+  ) {
+    const drag = pieceDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || scale <= 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const position = {
+      x: drag.startPosition.x +
+        (event.clientX - drag.startPointer.x) / scale,
+      y: drag.startPosition.y +
+        (event.clientY - drag.startPointer.y) / scale,
+    };
+    drag.moved = drag.moved || Math.hypot(
+      event.clientX - drag.startPointer.x,
+      event.clientY - drag.startPointer.y
+    ) > 2;
+    setPiecePreview({ pieceId: drag.pieceId, position });
+  }
+
+  function handlePiecePointerUp(
+    event: React.PointerEvent<HTMLButtonElement>
+  ) {
+    const drag = pieceDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const preview = piecePreview?.pieceId === drag.pieceId
+      ? piecePreview.position
+      : drag.startPosition;
+    pieceDragRef.current = null;
+    setPiecePreview(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (!drag.moved) return;
+
+    const previewScreen = mapToScreen(preview.x, preview.y);
+    const location = visibleFeatures.find((feature) => {
+      if (!isLocation(feature)) return false;
+      const target = mapToScreen(feature.position.x, feature.position.y);
+      return Math.hypot(
+        previewScreen.x - target.x,
+        previewScreen.y - target.y
+      ) <= FEATURE_MARKER_MIN_DISTANCE;
+    });
+    onPieceDrop?.(drag.pieceId, preview, location);
   }
 
   const selectedAnchor = selectedFeature
@@ -1119,6 +1280,58 @@ function cancelSubtitleEdit() {
 }}
 />
 
+{pieces.map((piece) => {
+  const position = piecePreview?.pieceId === piece.id
+    ? piecePreview.position
+    : piece.position;
+  const screenPosition = mapToScreen(position.x, position.y);
+  const className = [
+    'map-piece',
+    `map-piece-${piece.appearance.shape}`,
+    piece.id === focusedPieceId ? 'focused' : '',
+    piecePreview?.pieceId === piece.id ? 'dragging' : '',
+  ].filter(Boolean).join(' ');
+
+  return (
+    <Fragment key={piece.id}>
+      <button
+        type="button"
+        className={className}
+        title={piece.name}
+        style={{
+          left: screenPosition.x,
+          top: screenPosition.y,
+          backgroundColor: piece.appearance.fillColor,
+          borderColor: piece.appearance.borderColor,
+        }}
+        onPointerDown={(event) => handlePiecePointerDown(event, piece)}
+        onPointerMove={handlePiecePointerMove}
+        onPointerUp={handlePiecePointerUp}
+        onPointerCancel={handlePiecePointerUp}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const viewport = viewportRef.current;
+          if (!viewport) return;
+          const rect = viewport.getBoundingClientRect();
+          dispatch({ type: 'contextMenu.close' });
+          setPieceContextMenu({
+            pieceId: piece.id,
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+          });
+        }}
+      />
+      <span
+        className="map-piece-label"
+        style={{ left: screenPosition.x, top: screenPosition.y }}
+      >
+        {piece.name}
+      </span>
+    </Fragment>
+  );
+})}
+
 {visibleFeatures.map((feature) => {
   const isMoving = feature.id === movingFeatureId &&
     state.editingMode === 'move-feature';
@@ -1150,6 +1363,7 @@ function cancelSubtitleEdit() {
         }}
         onPointerDown={(event) => {
           if (state.editingMode === 'move-feature') return;
+          setPieceContextMenu(null);
           event.stopPropagation();
         }}
         onClick={() => {
@@ -1165,6 +1379,7 @@ function cancelSubtitleEdit() {
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
+          setPieceContextMenu(null);
           if (state.editingMode === 'move-feature') return;
           const viewport = viewportRef.current;
           const point = screenToMap(event.clientX, event.clientY);
@@ -1583,6 +1798,51 @@ function cancelSubtitleEdit() {
     )}
   </div>
 )}    
+
+{pieceContextMenu && (() => {
+  const piece = pieces.find((candidate) => {
+    return candidate.id === pieceContextMenu.pieceId;
+  });
+  if (!piece) return null;
+
+  return (
+    <div
+      className="map-context-menu piece-context-menu"
+      style={{ left: pieceContextMenu.x, top: pieceContextMenu.y }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        disabled={piece.id === focusedPieceId}
+        onClick={() => {
+          onFocusPiece?.(piece.id);
+          setPieceContextMenu(null);
+        }}
+      >
+        Set Focus
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onEditPiece?.(piece);
+          setPieceContextMenu(null);
+        }}
+      >
+        Edit...
+      </button>
+      <div className="map-context-separator" />
+      <button
+        type="button"
+        onClick={() => {
+          onDeletePiece?.(piece);
+          setPieceContextMenu(null);
+        }}
+      >
+        Delete
+      </button>
+    </div>
+  );
+})()}
 
     <MapKey
       mapName={mapName}

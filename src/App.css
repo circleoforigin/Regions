@@ -756,6 +756,63 @@
     1px 1px 1px #111111;
 }
 
+.map-piece {
+  position: absolute;
+  z-index: 8;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 3px solid;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  cursor: grab;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.7));
+}
+
+.map-piece.dragging {
+  cursor: grabbing;
+}
+
+.map-piece.focused {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.map-piece-circle {
+  border-radius: 50%;
+}
+
+.map-piece-diamond {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.map-piece-triangle {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.map-piece-hexagon {
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+}
+
+.map-piece-label {
+  position: absolute;
+  z-index: 9;
+  max-width: 160px;
+  transform: translate(-50%, 19px);
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px #000000;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.piece-context-menu {
+  z-index: 510;
+}
+
 /* =========================
    MAP KEY
    ========================= */
@@ -1260,15 +1317,16 @@
   font-size: 18px;
 }
 
-
-
 .go-to-map-preview-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  min-height: 260px;
+
   overflow: hidden;
+
   border: 1px solid #454545;
   background: #181818;
   color: #888888;
@@ -1278,6 +1336,52 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+  object-position: center;
+}
+
+.piece-editor-dialog label {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: #cccccc;
+  font-size: 13px;
+}
+
+.piece-editor-dialog select {
+  padding: 8px;
+  border: 1px solid #454545;
+  background: #181818;
+  color: #eeeeee;
+}
+
+.piece-editor-dialog input[type='color'] {
+  height: 36px;
+  padding: 2px;
+}
+
+.menu-piece-control {
+  position: relative;
+  margin-right: 12px;
+}
+
+.menu-piece-control > button {
+  min-width: 110px;
+  padding: 5px 9px;
+  border: 1px solid #454545;
+  background: #252525;
+  color: #eeeeee;
+  cursor: pointer;
+}
+
+.menu-piece-control > button:disabled {
+  color: #777777;
+  cursor: default;
+}
+
+.menu-piece-dropdown {
+  right: 0;
+  left: auto;
+  min-width: 170px;
 }
 
 @media (max-width: 680px) {
@@ -1288,10 +1392,6 @@
 
   .go-to-map-list {
     max-height: 220px;
-  }
-
-  .go-to-map-preview-image {
-    min-height: 200px;
   }
 }
 

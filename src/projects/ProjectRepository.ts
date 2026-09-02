@@ -10,8 +10,17 @@ const PROJECTS_COLLECTION =
   'projects';
 
 function normalizeProject(project: Project): Project {
+  const pieces = Array.isArray(project.pieces) ? project.pieces : [];
+  const focusedPieceId = pieces.some((piece) => {
+    return piece.id === project.focusedPieceId;
+  })
+    ? project.focusedPieceId
+    : undefined;
+
   return {
     ...project,
+    pieces,
+    focusedPieceId,
     featureTypes: Array.isArray(project.featureTypes)
       ? project.featureTypes
       : [],
