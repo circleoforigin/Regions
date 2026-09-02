@@ -30,6 +30,9 @@ function MapKey({
   const [editing, setEditing] =
     useState(false);
 
+  const [typeMenuOpen, setTypeMenuOpen] =
+    useState(false);
+
   const [editTarget, setEditTarget] =
     useState<'name' | 'type'>('name');
 
@@ -95,7 +98,7 @@ function MapKey({
       typeDraftRef.current ||
         undefined
     );
-
+    setTypeMenuOpen(false);
     setEditing(false);
   }
 
@@ -109,6 +112,7 @@ function MapKey({
     typeDraftRef.current =
       mapTypeId ?? '';
 
+    setTypeMenuOpen(false);
     setEditing(false);
   }  
 
@@ -142,105 +146,145 @@ function MapKey({
     save();
   }}
 >
-      {!editing ? (
-        <>
+      <>
+  {editing && editTarget === 'name' ? (
+    <input
+      className="map-key-name-input"
+      type="text"
+      value={nameDraft}
+      onChange={(event) => {
+        const value =
+          event.target.value;
+
+        setNameDraft(value);
+        nameDraftRef.current =
+          value;
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          save();
+        }
+
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          cancel();
+        }
+      }}
+      autoFocus
+    />
+  ) : (
+    <button
+      type="button"
+      className="map-key-name"
+      onClick={() => {
+        setEditTarget('name');
+        setEditing(true);
+        setTypeMenuOpen(false);
+      }}
+    >
+      {mapName}
+    </button>
+  )}
+
+  <span className="map-key-label">
+    Map
+  </span>
+
+  {editing && editTarget === 'type' ? (
+    <div className="map-key-type-editor">
+      <button
+        type="button"
+        className="map-key-type-toggle"
+        aria-expanded={typeMenuOpen}
+        autoFocus
+        onClick={() => {
+          setTypeMenuOpen(
+            (current) => !current
+          );
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            cancel();
+          }
+        }}
+      >
+        {
+          featureTypes.find(
+            (type) =>
+              type.id === typeDraft
+          )?.name ??
+          'Select Type:'
+        }{' '}
+        <span aria-hidden="true">
+          ▴
+        </span>
+      </button>
+
+      {typeMenuOpen && (
+        <div className="map-key-type-menu">
           <button
             type="button"
-            className="map-key-name"
+            className={
+              !typeDraft
+                ? 'selected'
+                : ''
+            }
             onClick={() => {
-              setEditTarget('name');
-              setEditing(true);
+              setTypeDraft('');
+              typeDraftRef.current = '';
+              setTypeMenuOpen(false);
             }}
           >
-            {mapName}
+            Select Type:
           </button>
 
-          <span className="map-key-label">
-            Map
-          </span>
+          {featureTypes.map(
+            (type) => (
+              <button
+                key={type.id}
+                type="button"
+                className={
+                  typeDraft === type.id
+                    ? 'selected'
+                    : ''
+                }
+                onClick={() => {
+                  setTypeDraft(
+                    type.id
+                  );
 
-          <button
-            type="button"
-            className="map-key-type"
-            onClick={() => {
-              setEditTarget('type');
-              setEditing(true);
-            }}
-          >
-            {selectedType?.name ??
-              'Select Type:'}
-          </button>
-        </>
-      ) : (
-        <div className="map-key-editor">
-          <input
-            className="map-key-name-input"
-            type="text"
-            value={nameDraft}
-            onChange={(event) => {
-              const value =
-                event.target.value;
+                  typeDraftRef.current =
+                    type.id;
 
-              setNameDraft(value);
-              nameDraftRef.current =
-                value;
-            }}
-            onKeyDown={(event) => {
-              if (
-                event.key === 'Enter'
-              ) {
-                event.preventDefault();
-                save();
-              }
-
-              if (
-                event.key === 'Escape'
-              ) {
-                event.preventDefault();
-                cancel();
-              }
-            }}
-            autoFocus={editTarget === 'name'}
-          />
-
-          <select
-            className="map-key-type-select"
-            value={typeDraft}
-            autoFocus={editTarget === 'type'}
-            onChange={(event) => {
-              const value =
-                event.target.value;
-
-              setTypeDraft(value);
-              typeDraftRef.current =
-                value;
-            }}
-            onKeyDown={(event) => {
-              if (
-                event.key === 'Escape'
-              ) {
-                event.preventDefault();
-                cancel();
-              }
-            }}
-          >
-            <option value="">
-              Select Type:
-            </option>
-
-            {featureTypes.map(
-              (type) => (
-                <option
-                  key={type.id}
-                  value={type.id}
-                >
-                  {type.name}
-                </option>
-              )
-            )}            
-          </select>
+                  setTypeMenuOpen(
+                    false
+                  );
+                }}
+              >
+                {type.name}
+              </button>
+            )
+          )}
         </div>
       )}
+    </div>
+  ) : (
+    <button
+      type="button"
+      className="map-key-type"
+      onClick={() => {
+        setEditTarget('type');
+        setEditing(true);
+        setTypeMenuOpen(true);
+      }}
+    >
+      {selectedType?.name ??
+        'Select Type:'}
+    </button>
+  )}
+</>
     </aside>
   );
 }

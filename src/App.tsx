@@ -1120,6 +1120,31 @@ function handleMapMetadataChange(
   markProjectDirty();
 }
 
+function handleFeatureNameChange(
+  featureId: string,
+  name: string
+) {
+  const trimmedName =
+    name.trim();
+
+  if (!trimmedName) {
+    return;
+  }
+
+  setActiveFeatures((current) =>
+    current.map((feature) =>
+      feature.id === featureId
+        ? {
+            ...feature,
+            name: trimmedName,
+          }
+        : feature
+    )
+  );
+
+  markProjectDirty();
+}
+
 function handleSubtitleChange(featureId: string, subtitle: string) {
   setActiveFeatures((current) =>
     current.map((feature) =>
@@ -2299,6 +2324,7 @@ const deletableProjects =
         focusFeatureId={pendingFocusFeatureId}
         onFocusFeatureComplete={() => setPendingFocusFeatureId(null)}
         onEnterFeature={(feature) => void handleEnterFeature(feature)}
+        onFeatureNameChange={handleFeatureNameChange}
         onSubtitleChange={handleSubtitleChange}
         onDescriptionChange={handleDescriptionChange}
         onShowLabelChange={handleShowLabelChange}

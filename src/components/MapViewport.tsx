@@ -78,6 +78,11 @@ featureTypes: FeatureTypeDefinition[];
 locationMapMetadata?: Record<string, LocationMapMetadata>;
 focusFeatureId?: string | null;
 
+onFeatureNameChange?: (
+  featureId: string,
+  name: string
+) => void;
+
 onMapMetadataChange?: (
   name: string,
   featureTypeId: string | undefined
@@ -139,6 +144,7 @@ function MapViewport({
   focusFeatureId,
   onFocusFeatureComplete,
   onEnterFeature,
+  onFeatureNameChange,
   onSubtitleChange,
   onDescriptionChange,
   onShowLabelChange,
@@ -206,6 +212,21 @@ function MapViewport({
     useState<string | null>(null);
   const [editingSubtitle, setEditingSubtitle] = useState(false);
   const [subtitleDraft, setSubtitleDraft] = useState('');
+  const [editingName, setEditingName] =
+    useState(false);
+  const [nameDraft, setNameDraft] =
+    useState('');
+
+  useEffect(() => {
+    setEditingName(false);
+    setNameDraft(
+      selectedFeature?.name ?? ''
+    );
+  }, [
+    selectedFeature?.id,
+    selectedFeature?.name,
+  ]);
+  
   useEffect(() => {
     setEditingSubtitle(false);
     setSubtitleDraft(selectedFeature?.subtitle ?? '');
@@ -996,6 +1017,39 @@ function handleContextMenu(
     ? locationMapMetadata[selectedFeature.id]
     : undefined;
 
+    function saveName() {
+  if (!selectedFeature) {
+    return;
+  }
+
+  const name =
+    nameDraft.trim();
+
+  if (!name) {
+    setNameDraft(
+      selectedFeature.name
+    );
+
+    setEditingName(false);
+    return;
+  }
+
+  onFeatureNameChange?.(
+    selectedFeature.id,
+    name
+  );
+
+  setEditingName(false);
+}
+
+function cancelNameEdit() {
+  setNameDraft(
+    selectedFeature?.name ?? ''
+  );
+
+  setEditingName(false);
+}
+
   function saveSubtitle() {
   if (!selectedFeature) return;
 
@@ -1170,12 +1224,16 @@ function cancelSubtitleEdit() {
 )}
 
 {selectedFeature && popupPosition && (
-  <div
-    ref={popupRef}
+ <div
+  ref={popupRef}
     className="feature-popup"
     style={{ left: popupPosition.x, top: popupPosition.y }}
     onPointerDown={(event) => event.stopPropagation()}
     onClick={(event) => event.stopPropagation()}
+    onContextMenu={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    }}
   >
     <div
       className="feature-popup-header"
@@ -1184,9 +1242,54 @@ function cancelSubtitleEdit() {
       onPointerUp={endPopupDrag}
       onPointerCancel={endPopupDrag}
     >
-      <div className="feature-popup-name">
-        {selectedFeature.name}
-      </div>
+      {editingName ? (
+  <input
+    className="feature-popup-name-input"
+    type="text"
+    value={nameDraft}
+    onChange={(event) => {
+      setNameDraft(
+        event.target.value
+      );
+    }}
+    onPointerDown={(event) => {
+      event.stopPropagation();
+    }}
+    onClick={(event) => {
+      event.stopPropagation();
+    }}
+    onBlur={saveName}
+    onKeyDown={(event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        saveName();
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelNameEdit();
+      }
+    }}
+    autoFocus
+  />
+) : (
+  <button
+    type="button"
+    className="feature-popup-name"
+    onPointerDown={(event) => {
+      event.stopPropagation();
+    }}
+    onClick={() => {
+      setNameDraft(
+        selectedFeature.name
+      );
+
+      setEditingName(true);
+    }}
+  >
+    {selectedFeature.name}
+  </button>
+)}
 
       {editingSubtitle ? (
   <input
