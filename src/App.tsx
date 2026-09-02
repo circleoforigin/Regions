@@ -203,7 +203,6 @@ const pendingProjectActionRef =
             { key: 'name', label: 'Name', type: 'string' },
             { key: 'type', label: 'Type', type: 'string' },
             { key: 'mapId', label: 'Map ID', type: 'string' },
-            { key: 'featureId', label: 'Feature ID', type: 'string' },
           ],
         },
       ]).catch(() => undefined);
@@ -608,17 +607,23 @@ async function navigateToFeatureTarget(
     setActiveFeatures(destination.features);
     setPendingFocusFeatureId(targetFeature.id);
     await loadMapImage(destination.map);
-    const semanticType = project.featureTypes.find((type) => {
-      return type.id === targetFeature.featureTypeId;
-    })?.name ?? '';
-    moduleEventBus.emit('Regions.LocationEntered', {
-      area: 'Location',
-      parentMap: sourceMapName,
-      name: targetFeature.name,
-      type: semanticType,
-      mapId: destination.map.id,
-      featureId: targetFeature.id,
-    });
+    const semanticType =
+  project.featureTypes.find(
+    (type) =>
+      type.id ===
+      destination.map.featureTypeId
+  )?.name ?? '';
+
+moduleEventBus.emit(
+  'Regions.LocationEntered',
+  {
+    area: 'Location',
+    parentMap: sourceMapName,
+    name: destination.map.name,
+    type: semanticType,
+    mapId: destination.map.id,
+  }
+);
   } catch (error) {
     const message = error instanceof Error
       ? error.message
@@ -956,6 +961,38 @@ async function handleDeleteSelectedProject(
       error
     );
   }
+}
+
+function handleMapMetadataChange(
+  name: string,
+  featureTypeId: string | undefined
+) {
+  if (!activeMap) {
+    return;
+  }
+
+  const trimmedName =
+    name.trim();
+
+  if (!trimmedName) {
+    return;
+  }
+
+  if (
+    activeMap.name === trimmedName &&
+    activeMap.featureTypeId === featureTypeId
+  ) {
+    return;
+  }
+
+  setActiveMap({
+    ...activeMap,
+    name: trimmedName,
+    featureTypeId,
+    updatedAt: new Date(),
+  });
+
+  markProjectDirty();
 }
 
 function handleSubtitleChange(featureId: string, subtitle: string) {
@@ -1671,6 +1708,7 @@ const deletableProjects =
         key={activeMap.id}
         imageUrl={activeMapImageUrl}
         mapName={activeMap.name}
+        mapTypeId={activeMap.featureTypeId}
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
         featureTypes={activeProject.featureTypes}

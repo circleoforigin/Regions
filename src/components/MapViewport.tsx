@@ -60,6 +60,7 @@ export interface FeaturePopupAction {
 interface MapViewportProps {
   imageUrl: string;
   mapName: string;
+  mapTypeId?: string;
   imageRegistration?: {
   scale: number;
   offsetX: number;
@@ -69,6 +70,11 @@ interface MapViewportProps {
 features: Feature[];
 featureTypes: FeatureTypeDefinition[];
 focusFeatureId?: string | null;
+
+onMapMetadataChange?: (
+  name: string,
+  featureTypeId: string | undefined
+) => void;
 
 onFocusFeatureComplete?: () => void;
 
@@ -114,6 +120,7 @@ onNewLocationRequest?: (
 function MapViewport({
   imageUrl,
   mapName,
+  mapTypeId,
   imageRegistration,
   features,
   featureTypes,
@@ -129,6 +136,7 @@ function MapViewport({
   onNewFeatureRequest,
   onNewLocationRequest,
   onZoomStateChange,
+  onMapMetadataChange,
 }: MapViewportProps) {
   const { state, dispatch } = useRegionsState();
   const { scale, panX, panY } = state.viewport;
@@ -1434,8 +1442,16 @@ function cancelSubtitleEdit() {
 )}    
 
     <MapKey
-        mapName={mapName}
-        side={displayedMapKeySide}
+      mapName={mapName}
+      mapTypeId={mapTypeId}
+      featureTypes={featureTypes}
+      side={displayedMapKeySide}
+      onSave={(name, featureTypeId) => {
+        onMapMetadataChange?.(
+          name,
+          featureTypeId
+        );
+      }}
     />
 
     </div>
