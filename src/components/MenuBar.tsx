@@ -22,6 +22,7 @@ interface MenuBarProps {
   onDeleteProject: () => void;
   onGoToMap: () => void;
   onGoToParentMap: () => void;
+  onDeleteMap: () => void;
   onAddPiece: () => void;
   onAssignMapImage: () => void;
   autoSave: boolean;
@@ -55,6 +56,7 @@ function MenuBar({
   onDeleteProject,
   onGoToMap,
   onGoToParentMap,
+  onDeleteMap,
   onAddPiece,
   onAssignMapImage,
   autoSave,
@@ -357,6 +359,19 @@ function MenuBar({
                 </div>
               )}
             </div>
+
+            <div className="dropdown-separator" />
+
+            <button
+              type="button"
+              className="dropdown-item"
+              onClick={() => {
+                closeMenus();
+                onDeleteMap();
+              }}
+            >
+              Delete Map...
+            </button>
           </div>
         )}
       </div>

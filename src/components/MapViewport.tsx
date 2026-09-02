@@ -68,6 +68,12 @@ interface MapViewportProps {
   imageUrl: string;
   mapName: string;
   mapTypeId?: string;
+  parentMapName: string;
+  parentMapId?: string;
+  isWorldRoot: boolean;
+  parentMapOptions: { id: string; name: string }[];
+  onParentMapChange: (mapId: string) => void;
+  onMakeWorldRoot: () => void;
   imageRegistration?: {
   scale: number;
   offsetX: number;
@@ -152,6 +158,12 @@ function MapViewport({
   imageUrl,
   mapName,
   mapTypeId,
+  parentMapName,
+  parentMapId,
+  isWorldRoot,
+  parentMapOptions,
+  onParentMapChange,
+  onMakeWorldRoot,
   imageRegistration,
   features,
   pieces = [],
@@ -1847,6 +1859,12 @@ function cancelSubtitleEdit() {
     <MapKey
       mapName={mapName}
       mapTypeId={mapTypeId}
+      parentName={parentMapName}
+      parentMapId={parentMapId}
+      isWorldRoot={isWorldRoot}
+      parentOptions={parentMapOptions}
+      onParentChange={onParentMapChange}
+      onMakeWorldRoot={onMakeWorldRoot}
       featureTypes={featureTypes}
       side={displayedMapKeySide}
       onSave={(name, featureTypeId) => {

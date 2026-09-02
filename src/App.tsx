@@ -39,6 +39,20 @@ type SpatialNavigationSource =
   | 'piece'
   | 'piece-focus';
 
+interface IncomingLocationReference {
+  mapId: string;
+  feature: Feature;
+}
+
+interface MapDeletionAnalysis {
+  map: RegionMap;
+  isWorldRoot: boolean;
+  childMaps: RegionMap[];
+  pieces: Piece[];
+  incomingLocations: IncomingLocationReference[];
+  ownedFeatureCount: number;
+}
+
 function App() {
   const { dispatch } = useRegionsState();
   const [
@@ -199,6 +213,9 @@ const pendingProjectActionRef =
   const [pendingFeatures, setPendingFeatures] =
     useState<Feature[]>([]);
 
+  const [pendingMapDeletionIds, setPendingMapDeletionIds] =
+    useState<Set<string>>(() => new Set());
+
   const [
     pendingFeatureDeletionIds,
     setPendingFeatureDeletionIds,
@@ -229,6 +246,18 @@ const pendingProjectActionRef =
   const [pieceFillDraft, setPieceFillDraft] = useState('#e4e4e4');
   const [pieceBorderDraft, setPieceBorderDraft] = useState('#222222');
   const [pieceToDelete, setPieceToDelete] = useState<Piece | null>(null);
+
+  const [showDeleteMapDialog, setShowDeleteMapDialog] = useState(false);
+  const [deleteMapSearch, setDeleteMapSearch] = useState('');
+  const [deleteMapTypeFilter, setDeleteMapTypeFilter] = useState('all');
+  const [selectedDeleteMapId, setSelectedDeleteMapId] =
+    useState<string | null>(null);
+  const [confirmDeleteMap, setConfirmDeleteMap] = useState(false);
+  const [mapDeletionAnalysis, setMapDeletionAnalysis] =
+    useState<MapDeletionAnalysis | null>(null);
+  const deleteMapAnalysisRunIdRef = useRef(0);
+  const [mapToMakeRoot, setMapToMakeRoot] =
+    useState<RegionMap | null>(null);
 
   const [showFeatureTypesDialog, setShowFeatureTypesDialog] =
     useState(false);
@@ -271,6 +300,7 @@ const pendingProjectActionRef =
       pendingMaps.forEach((map) => availableMaps.set(map.id, map));
 
       const maps = activeProject.mapIds.flatMap((mapId) => {
+        if (pendingMapDeletionIds.has(mapId)) return [];
         const map = availableMaps.get(mapId);
         return map ? [normalizeMap(map)] : [];
       });
@@ -286,7 +316,7 @@ const pendingProjectActionRef =
     return () => {
       cancelled = true;
     };
-  }, [activeProject, pendingMaps]);
+  }, [activeProject, pendingMapDeletionIds, pendingMaps]);
 
   const locationMapMetadata = useMemo(() => {
     if (!activeProject) return {};
@@ -725,6 +755,7 @@ async function restorePersistedSource(
   setPendingFeatureDeletionIds(
     new Set()
   );
+  setPendingMapDeletionIds(new Set());
   setPendingFocusFeatureId(null);
   await loadMapImage(source.map);
   return { project, ...source };
@@ -1152,13 +1183,235 @@ function handleDeletePiece() {
   markProjectDirty();
 }
 
+async function loadEffectiveMapFeatures(map: RegionMap): Promise<Feature[]> {
+  if (map.id === activeMap?.id) return activeFeatures;
+  const storedFeatures = await featureRepository.loadFeatures(map.featureIds);
+  const storedById = new Map(
+    storedFeatures.map((feature) => [feature.id, feature])
+  );
+  const pendingById = new Map(
+    pendingFeatures.map((feature) => [feature.id, feature])
+  );
+  return map.featureIds
+    .map((featureId) => {
+      return pendingById.get(featureId) ?? storedById.get(featureId);
+    })
+    .filter((feature): feature is Feature => Boolean(feature))
+    .filter((feature) => !pendingFeatureDeletionIds.has(feature.id));
+}
+
+async function analyzeMapDeletion(map: RegionMap) {
+  if (!activeProject) return;
+  const runId = ++deleteMapAnalysisRunIdRef.current;
+  const childMaps = projectMaps.filter((candidate) => {
+    return candidate.parentMapId === map.id;
+  });
+  const pieces = activeProject.pieces.filter((piece) => {
+    return piece.mapId === map.id;
+  });
+  const deletedFeatureIds = new Set(map.featureIds);
+  const incomingLocations: IncomingLocationReference[] = [];
+
+  await Promise.all(projectMaps.map(async (ownerMap) => {
+    if (ownerMap.id === map.id) return;
+    const features = await loadEffectiveMapFeatures(ownerMap);
+    features.forEach((feature) => {
+      const targetsMap = feature.targetMapId === map.id;
+      const targetsOwnedFeature = Boolean(
+        feature.targetFeatureId &&
+        deletedFeatureIds.has(feature.targetFeatureId)
+      );
+      if (!targetsMap && !targetsOwnedFeature) return;
+      incomingLocations.push({ mapId: ownerMap.id, feature });
+    });
+  }));
+
+  if (runId !== deleteMapAnalysisRunIdRef.current) return;
+  setMapDeletionAnalysis({
+    map,
+    isWorldRoot: activeProject.rootMapId === map.id,
+    childMaps,
+    pieces,
+    incomingLocations,
+    ownedFeatureCount: map.featureIds.length,
+  });
+}
+
+function selectDeleteMap(map: RegionMap) {
+  setSelectedDeleteMapId(map.id);
+  setConfirmDeleteMap(false);
+  setMapDeletionAnalysis(null);
+  void loadGoToMapPreview(map);
+  void analyzeMapDeletion(map).catch((error) => {
+    console.error('Unable to analyze Map deletion:', error);
+  });
+}
+
+function handleOpenDeleteMap() {
+  if (!activeProject || !activeMap) return;
+  setDeleteMapSearch('');
+  setDeleteMapTypeFilter('all');
+  setShowDeleteMapDialog(true);
+  selectDeleteMap(activeMap);
+}
+
+function closeDeleteMapDialog() {
+  deleteMapAnalysisRunIdRef.current += 1;
+  clearGoToMapPreview();
+  setShowDeleteMapDialog(false);
+  setSelectedDeleteMapId(null);
+  setMapDeletionAnalysis(null);
+  setConfirmDeleteMap(false);
+}
+
+async function stageDeleteMap() {
+  if (!activeProject || !activeMap || !mapDeletionAnalysis) return;
+  const analysis = mapDeletionAnalysis;
+  if (analysis.isWorldRoot ||
+      analysis.childMaps.length > 0 ||
+      analysis.pieces.length > 0) return;
+
+  const deletedMap = analysis.map;
+  const deletedFeatureIds = new Set(deletedMap.featureIds);
+  const pendingFeatureIds = new Set(
+    pendingFeatures.map((feature) => feature.id)
+  );
+  const convertedFeatures = analysis.incomingLocations.map(({ feature }) => {
+    return {
+      ...feature,
+      type: 'feature' as const,
+      targetMapId: undefined,
+      targetFeatureId: undefined,
+    };
+  });
+  const convertedById = new Map(
+    convertedFeatures.map((feature) => [feature.id, feature])
+  );
+
+  if (deletedMap.id !== activeMap.id) {
+    setActiveFeatures((current) => current.map((feature) => {
+      return convertedById.get(feature.id) ?? feature;
+    }));
+  }
+  setPendingFeatures((current) => {
+    const retained = current.filter((feature) => {
+      return !deletedFeatureIds.has(feature.id) &&
+        !convertedById.has(feature.id);
+    });
+    return [...retained, ...convertedFeatures];
+  });
+  setPendingFeatureDeletionIds((current) => {
+    const next = new Set(current);
+    deletedFeatureIds.forEach((featureId) => {
+      if (!pendingFeatureIds.has(featureId)) next.add(featureId);
+    });
+    return next;
+  });
+  setPendingMaps((current) => {
+    return current.filter((map) => map.id !== deletedMap.id);
+  });
+  setPendingMapDeletionIds((current) => {
+    const next = new Set(current);
+    next.add(deletedMap.id);
+    return next;
+  });
+
+  let fallbackMapId = activeProject.activeMapId;
+  if (deletedMap.id === activeMap.id) {
+    fallbackMapId = deletedMap.parentMapId ?? activeProject.rootMapId;
+  }
+  const updatedProject = {
+    ...activeProject,
+    mapIds: activeProject.mapIds.filter((mapId) => mapId !== deletedMap.id),
+    activeMapId: fallbackMapId,
+  };
+  setActiveProject(updatedProject);
+  closeDeleteMapDialog();
+  markProjectDirty();
+
+  if (deletedMap.id !== activeMap.id || !fallbackMapId) return;
+  try {
+    const fallbackMap = projectMaps.find((map) => map.id === fallbackMapId);
+    const destination = fallbackMap
+      ? { map: fallbackMap, features: await loadEffectiveMapFeatures(fallbackMap) }
+      : await loadMapWithFeatures(fallbackMapId);
+    setActiveMap(destination.map);
+    setActiveFeatures(destination.features.map((feature) => {
+      return convertedById.get(feature.id) ?? feature;
+    }));
+    setPendingFocusFeatureId(null);
+    await loadMapImage(destination.map);
+    handleMapEntered(destination.map, updatedProject, deletedMap.name, 'manual');
+  } catch (error) {
+    console.error('Unable to load fallback Map:', error);
+    setNavigationError('The Map was staged for deletion, but its fallback failed.');
+  }
+}
+
+function getDescendantMapIds(mapId: string): Set<string> {
+  const descendants = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    projectMaps.forEach((map) => {
+      if (descendants.has(map.id) || map.id === mapId) return;
+      if (map.parentMapId === mapId ||
+          (map.parentMapId && descendants.has(map.parentMapId))) {
+        descendants.add(map.id);
+        changed = true;
+      }
+    });
+  }
+  return descendants;
+}
+
+function handleMapParentChange(parentMapId: string) {
+  if (!activeMap || activeMap.id === activeProject?.rootMapId) return;
+  if (parentMapId === activeMap.id) return;
+  if (getDescendantMapIds(activeMap.id).has(parentMapId)) return;
+  setActiveMap({ ...activeMap, parentMapId, updatedAt: new Date() });
+  markProjectDirty();
+}
+
+function handleConfirmMakeWorldRoot() {
+  if (!activeProject || !activeMap || !mapToMakeRoot) return;
+  const oldRoot = projectMaps.find((map) => {
+    return map.id === activeProject.rootMapId;
+  });
+  if (!oldRoot || oldRoot.id === mapToMakeRoot.id) {
+    setMapToMakeRoot(null);
+    return;
+  }
+
+  const now = new Date();
+  const newRoot = { ...mapToMakeRoot, parentMapId: undefined, updatedAt: now };
+  const updatedOldRoot = { ...oldRoot, parentMapId: newRoot.id, updatedAt: now };
+  setActiveProject({ ...activeProject, rootMapId: newRoot.id });
+  setActiveMap(newRoot);
+  setPendingMaps((current) => [
+    ...current.filter((map) => {
+      return map.id !== updatedOldRoot.id && map.id !== newRoot.id;
+    }),
+    updatedOldRoot,
+  ]);
+  setMapToMakeRoot(null);
+  markProjectDirty();
+}
+
 async function handleSelectProject(project: Project) {
   closeGoToMapDialog();
+  deleteMapAnalysisRunIdRef.current += 1;
+  setShowDeleteMapDialog(false);
+  setSelectedDeleteMapId(null);
+  setMapDeletionAnalysis(null);
+  setConfirmDeleteMap(false);
+  setMapToMakeRoot(null);
   setPendingMaps([]);
   setPendingFeatures([]);
   setPendingFeatureDeletionIds(
     new Set()
-  ); 
+  );
+  setPendingMapDeletionIds(new Set());
   setPendingFocusFeatureId(null);
   setNavigationError(null);
   setActiveProject(
@@ -1216,6 +1469,7 @@ async function saveActiveProject(): Promise<boolean> {
   const features = activeFeatures;
   const maps = pendingMaps;
   const featuresToSave = pendingFeatures;
+  const mapsToDelete = pendingMapDeletionIds;
   const generation = dirtyGenerationRef.current;
   const savedAt = new Date();
   const updatedProject: Project = {
@@ -1244,6 +1498,14 @@ async function saveActiveProject(): Promise<boolean> {
       );
 
       await Promise.all(
+        maps.map((pendingMap) => {
+          return mapRepository.saveMap(pendingMap);
+        })
+      );
+
+      await projectRepository.saveProject(updatedProject);
+
+      await Promise.all(
         Array.from(
           pendingFeatureDeletionIds
         ).map((featureId) => {
@@ -1254,12 +1516,10 @@ async function saveActiveProject(): Promise<boolean> {
       );
 
       await Promise.all(
-        maps.map((pendingMap) => {
-          return mapRepository.saveMap(pendingMap);
+        Array.from(mapsToDelete).map((mapId) => {
+          return mapRepository.deleteMap(mapId);
         })
       );
-
-      await projectRepository.saveProject(updatedProject);
 
       if (dirtyGenerationRef.current === generation) {
         if (updatedMap) setActiveMap(updatedMap);
@@ -1269,6 +1529,7 @@ async function saveActiveProject(): Promise<boolean> {
         setPendingFeatureDeletionIds(
           new Set()
         );
+        setPendingMapDeletionIds(new Set());
         setProjectDirty(false);
       } else {
         setSaveCompletionRevision((current) => current + 1);
@@ -1307,6 +1568,12 @@ function handleSaveProject() {
 
 function closeProject() {
   closeGoToMapDialog();
+  deleteMapAnalysisRunIdRef.current += 1;
+  setShowDeleteMapDialog(false);
+  setSelectedDeleteMapId(null);
+  setMapDeletionAnalysis(null);
+  setConfirmDeleteMap(false);
+  setMapToMakeRoot(null);
   setActiveProject(
     null
   );
@@ -1321,6 +1588,7 @@ function closeProject() {
   setPendingFeatureDeletionIds(
     new Set()
   );
+  setPendingMapDeletionIds(new Set());
   setPendingFocusFeatureId(null);
   setNavigationError(null);
   clearActiveMapImage();
@@ -1368,6 +1636,7 @@ async function finishPendingProjectAction(
     setPendingFeatureDeletionIds(
       new Set()
     );
+    setPendingMapDeletionIds(new Set());
     resetProjectDirty();
     outcome = 'discarded';
   }
@@ -2163,6 +2432,41 @@ const selectedGoToMap = goToMapMaps.find((map) => {
 const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
   return type.id === selectedGoToMap?.featureTypeId;
 })?.name ?? 'No Type';
+const deleteMapMaps = projectMaps
+  .filter((map) => {
+    const search = deleteMapSearch.trim().toLocaleLowerCase();
+    const matchesSearch = map.name.toLocaleLowerCase().includes(search);
+    const matchesType = deleteMapTypeFilter === 'all' ||
+      (deleteMapTypeFilter === 'none' && !map.featureTypeId) ||
+      map.featureTypeId === deleteMapTypeFilter;
+    return matchesSearch && matchesType;
+  })
+  .sort((left, right) => left.name.localeCompare(right.name));
+const selectedDeleteMap = projectMaps.find((map) => {
+  return map.id === selectedDeleteMapId;
+}) ?? null;
+const selectedDeleteMapType = activeProject?.featureTypes.find((type) => {
+  return type.id === selectedDeleteMap?.featureTypeId;
+})?.name ?? 'No Type';
+const deletionBlocked = Boolean(
+  mapDeletionAnalysis?.isWorldRoot ||
+  mapDeletionAnalysis?.childMaps.length ||
+  mapDeletionAnalysis?.pieces.length
+);
+const activeMapDescendants = activeMap
+  ? getDescendantMapIds(activeMap.id)
+  : new Set<string>();
+const parentMapOptions = projectMaps
+  .filter((map) => {
+    return map.id !== activeMap?.id && !activeMapDescendants.has(map.id);
+  })
+  .sort((left, right) => left.name.localeCompare(right.name));
+const parentMapName = activeMap?.parentMapId
+  ? projectMaps.find((map) => map.id === activeMap.parentMapId)?.name ??
+    'Missing Map'
+  : activeMap?.id === activeProject?.rootMapId
+    ? 'World Root'
+    : 'Unassigned';
 
   return (
     <div className="regions-app">
@@ -2184,6 +2488,7 @@ const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
   }
   onGoToMap={handleOpenGoToMap}
   onGoToParentMap={handleGoToParentMap}
+  onDeleteMap={handleOpenDeleteMap}
   onAddPiece={handleAddPiece}
   onAssignMapImage={() => assignMapInputRef.current?.click()}
   autoSave={autoSave}
@@ -2315,6 +2620,168 @@ const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
           onClick={() => void handleConfirmGoToMap()}
         >
           Go
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showDeleteMapDialog && activeProject && (
+  <div className="dialog-backdrop">
+    <div className="dialog delete-map-dialog">
+      <h2>Delete Map</h2>
+
+      <div className="go-to-map-layout">
+        <div className="go-to-map-browser">
+          <input
+            type="search"
+            placeholder="Search Maps"
+            value={deleteMapSearch}
+            onChange={(event) => setDeleteMapSearch(event.target.value)}
+            autoFocus
+          />
+
+          <select
+            value={deleteMapTypeFilter}
+            onChange={(event) => {
+              setDeleteMapTypeFilter(event.target.value);
+            }}
+          >
+            <option value="all">All Types</option>
+            <option value="none">No Type</option>
+            {activeProject.featureTypes.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
+
+          <div className="go-to-map-list">
+            {deleteMapMaps.map((map) => (
+              <button
+                key={map.id}
+                type="button"
+                className={[
+                  'go-to-map-item',
+                  map.id === selectedDeleteMapId ? 'selected' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => selectDeleteMap(map)}
+              >
+                <span>{map.name}</span>
+                <small>
+                  {activeProject.featureTypes.find((type) => {
+                    return type.id === map.featureTypeId;
+                  })?.name ?? 'No Type'}
+                </small>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="go-to-map-preview delete-map-analysis">
+          <div className="go-to-map-preview-image">
+            {goToMapPreviewUrl ? (
+              <img src={goToMapPreviewUrl} alt="" />
+            ) : (
+              <span>No Map Image</span>
+            )}
+          </div>
+
+          <strong>{selectedDeleteMap?.name ?? 'Select a Map'}</strong>
+          {selectedDeleteMap && <span>Type: {selectedDeleteMapType}</span>}
+          {selectedDeleteMap && (
+            <span>
+              Parent: {selectedDeleteMap.id === activeProject.rootMapId
+                ? 'World Root'
+                : projectMaps.find((map) => {
+                    return map.id === selectedDeleteMap.parentMapId;
+                  })?.name ?? 'Unassigned'}
+            </span>
+          )}
+
+          {mapDeletionAnalysis &&
+            mapDeletionAnalysis.map.id === selectedDeleteMap?.id && (
+            <div className="delete-map-details">
+              <span>
+                Owns {mapDeletionAnalysis.ownedFeatureCount} feature(s)
+              </span>
+              <span>
+                Converts {mapDeletionAnalysis.incomingLocations.length}
+                {' '}incoming Location(s)
+              </span>
+              {mapDeletionAnalysis.isWorldRoot && (
+                <strong className="delete-map-blocker">
+                  This Map is the World Root and cannot be deleted.
+                </strong>
+              )}
+              {mapDeletionAnalysis.childMaps.length > 0 && (
+                <strong className="delete-map-blocker">
+                  This Map has child Maps. Reparent or delete them first.
+                </strong>
+              )}
+              {mapDeletionAnalysis.pieces.length > 0 && (
+                <strong className="delete-map-blocker">
+                  This Map contains Pieces. Move or delete them first.
+                </strong>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {confirmDeleteMap && selectedDeleteMap && !deletionBlocked && (
+        <div className="delete-map-confirmation">
+          <strong>Delete “{selectedDeleteMap.name}”?</strong>
+          <span>
+            Its Features will be deleted when the Project is saved.
+          </span>
+          <span>
+            Incoming Locations will remain as ordinary Features.
+          </span>
+          <span>
+            This cannot be undone after the Project is saved.
+          </span>
+        </div>
+      )}
+
+      <div className="dialog-buttons">
+        <button type="button" onClick={closeDeleteMapDialog}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!mapDeletionAnalysis || deletionBlocked}
+          onClick={() => {
+            if (confirmDeleteMap) {
+              void stageDeleteMap();
+              return;
+            }
+            setConfirmDeleteMap(true);
+          }}
+        >
+          {confirmDeleteMap ? 'Confirm Delete' : 'Delete...'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{mapToMakeRoot && activeProject && (
+  <div className="dialog-backdrop">
+    <div className="dialog">
+      <h2>Make World Root</h2>
+      <p>
+        Make “{mapToMakeRoot.name}” the World Root?
+      </p>
+      <p>
+        The current World Root will become its child Map.
+      </p>
+      <div className="dialog-buttons">
+        <button type="button" onClick={() => setMapToMakeRoot(null)}>
+          Cancel
+        </button>
+        <button type="button" onClick={handleConfirmMakeWorldRoot}>
+          Make World Root
         </button>
       </div>
     </div>
@@ -2888,6 +3355,12 @@ const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
         imageUrl={activeMapImageUrl}
         mapName={activeMap.name}
         mapTypeId={activeMap.featureTypeId}
+        parentMapName={parentMapName}
+        parentMapId={activeMap.parentMapId}
+        isWorldRoot={activeProject.rootMapId === activeMap.id}
+        parentMapOptions={parentMapOptions}
+        onParentMapChange={handleMapParentChange}
+        onMakeWorldRoot={() => setMapToMakeRoot(activeMap)}
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
         pieces={activeProject.pieces.filter((piece) => {

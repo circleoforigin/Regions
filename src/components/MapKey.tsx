@@ -13,6 +13,12 @@ interface MapKeyProps {
   mapTypeId?: string;
   featureTypes: FeatureTypeDefinition[];
   side: 'left' | 'right';
+  parentName: string;
+  parentMapId?: string;
+  isWorldRoot: boolean;
+  parentOptions: { id: string; name: string }[];
+  onParentChange: (mapId: string) => void;
+  onMakeWorldRoot: () => void;
 
   onSave: (
     name: string,
@@ -25,6 +31,12 @@ function MapKey({
   mapTypeId,
   featureTypes,
   side,
+  parentName,
+  parentMapId,
+  isWorldRoot,
+  parentOptions,
+  onParentChange,
+  onMakeWorldRoot,
   onSave,
 }: MapKeyProps) {
   const [editing, setEditing] =
@@ -32,6 +44,7 @@ function MapKey({
 
   const [typeMenuOpen, setTypeMenuOpen] =
     useState(false);
+  const [parentMenuOpen, setParentMenuOpen] = useState(false);
 
   const [editTarget, setEditTarget] =
     useState<'name' | 'type'>('name');
@@ -69,6 +82,7 @@ function MapKey({
       mapTypeId ?? '';
 
     setEditing(false);
+    setParentMenuOpen(false);
   }, [
     mapName,
     mapTypeId,
@@ -284,6 +298,51 @@ function MapKey({
         'Select Type:'}
     </button>
   )}
+
+  <div className="map-key-parent-row">
+    {isWorldRoot ? (
+      <span className="map-key-parent">Parent: World Root</span>
+    ) : (
+      <div className="map-key-parent-editor">
+        <button
+          type="button"
+          className="map-key-parent"
+          aria-expanded={parentMenuOpen}
+          onClick={() => setParentMenuOpen((open) => !open)}
+        >
+          Parent: {parentName} <span aria-hidden="true">▴</span>
+        </button>
+
+        {parentMenuOpen && (
+          <div className="map-key-parent-menu">
+            {parentOptions.map((map) => (
+              <button
+                key={map.id}
+                type="button"
+                className={map.id === parentMapId ? 'selected' : ''}
+                onClick={() => {
+                  onParentChange(map.id);
+                  setParentMenuOpen(false);
+                }}
+              >
+                {map.name}
+              </button>
+            ))}
+            <div className="map-key-parent-separator" />
+            <button
+              type="button"
+              onClick={() => {
+                setParentMenuOpen(false);
+                onMakeWorldRoot();
+              }}
+            >
+              Make World Root...
+            </button>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
 </>
     </aside>
   );
