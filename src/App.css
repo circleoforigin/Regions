@@ -1358,6 +1358,11 @@ button.map-key-parent:hover {
   background: #353535;
 }
 
+.location-map-item.selected {
+  border-color: #8aa7c7;
+  background: #354353;
+}
+
 .location-map-item small {
   color: #aaaaaa;
 }

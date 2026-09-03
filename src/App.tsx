@@ -189,6 +189,9 @@ const pendingProjectActionRef =
   const [showExistingLocationDialog, setShowExistingLocationDialog] =
     useState(false);
 
+  const [selectedExistingMapId, setSelectedExistingMapId] =
+    useState<string | null>(null);
+
   const [newLocationName, setNewLocationName] = useState('');
 
   const [newLocationTypeId, setNewLocationTypeId] =
@@ -2425,6 +2428,7 @@ function closeLocationDialogs() {
   setShowLocationChoiceDialog(false);
   setShowNewLocationDialog(false);
   setShowExistingLocationDialog(false);
+  setSelectedExistingMapId(null);
   setNewLocationPosition(null);
 }
 
@@ -2589,6 +2593,15 @@ function handleCreateExistingLocation(destinationMap: RegionMap) {
 
   markProjectDirty();
   closeLocationDialogs();
+}
+
+function handleConfirmExistingNavigationFeature() {
+  if (!selectedExistingMapId) return;
+  const destinationMap = projectMaps.find((map) => {
+    return map.id === selectedExistingMapId;
+  });
+  if (!destinationMap) return;
+  handleCreateExistingLocation(destinationMap);
 }
 
 async function handleAssignMapFile(
@@ -3298,6 +3311,7 @@ const pendingArrivalPiece = pendingArrival?.pieceId
           type="button"
           onClick={() => {
             setShowLocationChoiceDialog(false);
+            setSelectedExistingMapId(null);
             setShowExistingLocationDialog(true);
           }}
         >
@@ -3461,10 +3475,11 @@ const pendingArrivalPiece = pendingArrival?.pieceId
               <button
                 key={map.id}
                 type="button"
-                className="location-map-item"
-                disabled={navigationFeatureKind === 'connection' &&
-                  !newConnectionName.trim()}
-                onClick={() => handleCreateExistingLocation(map)}
+                className={[
+                  'location-map-item',
+                  map.id === selectedExistingMapId ? 'selected' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => setSelectedExistingMapId(map.id)}
               >
                 <span>{map.name}</span>
                 <small>{typeName}</small>
@@ -3480,6 +3495,15 @@ const pendingArrivalPiece = pendingArrival?.pieceId
       <div className="dialog-buttons">
         <button type="button" onClick={closeLocationDialogs}>
           Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!selectedExistingMapId ||
+            (navigationFeatureKind === 'connection' &&
+              !newConnectionName.trim())}
+          onClick={handleConfirmExistingNavigationFeature}
+        >
+          Create
         </button>
       </div>
     </div>
