@@ -11,6 +11,16 @@ import type { Piece } from '../models/Piece';
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
 const NAVIGATION_ZOOM_RATIO = 0.5;
+const EDGE_SCROLL_ZONE_PX = 60;
+const EDGE_SCROLL_DELAY_MS = 250;
+const EDGE_SCROLL_MAX_SPEED = 600;
+const EDGE_SCROLL_SUPPRESS_SELECTOR = [
+  '.feature-popup',
+  '.map-key',
+  '.map-context-menu',
+  '.piece-context-menu',
+  '.dialog-backdrop',
+].join(',');
 
 interface Point {
   x: number;
@@ -48,7 +58,15 @@ function clampPanToViewport(
 }
 
 function isLocation(feature: Feature): boolean {
-  return Boolean(feature.targetMapId && feature.targetFeatureId);
+  return feature.type === 'location';
+}
+
+function isConnection(feature: Feature): boolean {
+  return feature.type === 'connection';
+}
+
+function isNavigableFeature(feature: Feature): boolean {
+  return isLocation(feature) || isConnection(feature);
 }
 
 export interface FeaturePopupAction {
@@ -139,6 +157,18 @@ onNewLocationRequest?: (
   y: number
 ) => void;
 
+onNewConnectionRequest?: (
+  x: number,
+  y: number
+) => void;
+
+pendingArrivalPlacement?: {
+  connection?: Feature;
+  piece?: Piece;
+};
+onPendingArrivalCommit?: (position: Point) => void;
+onPendingArrivalCancel?: () => void;
+
   onZoomStateChange?: (
     state: {
       value: number;
@@ -191,6 +221,10 @@ function MapViewport({
   secondaryActions = [],
   onNewFeatureRequest,
   onNewLocationRequest,
+  onNewConnectionRequest,
+  pendingArrivalPlacement,
+  onPendingArrivalCommit,
+  onPendingArrivalCancel,
   onZoomStateChange,
   onMapMetadataChange,
 }: MapViewportProps) {
@@ -204,7 +238,7 @@ function MapViewport({
   const layerVisibility =
     state.layerVisibility ?? defaultLayerVisibility;
   const isFeatureVisible = (feature: Feature) => {
-    return isLocation(feature)
+    return isNavigableFeature(feature)
       ? layerVisibility.locations
       : layerVisibility.features;
   };
@@ -212,7 +246,10 @@ function MapViewport({
     return feature.id === state.selectedFeatureId &&
       isFeatureVisible(feature);
   });
-  const visibleFeatures = features.filter(isFeatureVisible);
+  const visibleFeatures = features.filter((feature) => {
+    return isFeatureVisible(feature) &&
+      feature.id !== pendingArrivalPlacement?.connection?.id;
+  });
   const registration = imageRegistration ?? {
   scale: 1,
   offsetX: 0,
@@ -245,10 +282,23 @@ function MapViewport({
     pointerId: number;
     startPointer: Point;
     startPosition: Point;
+    grabOffset: Point;
     moved: boolean;
   } | null>(null);
 
+  const latestPointerRef = useRef<Point | null>(null);
+  const pointerInsideViewportRef = useRef(false);
+  const edgeActivationStartedAtRef = useRef<number | null>(null);
+  const edgePreviousFrameRef = useRef<number | null>(null);
+  const edgeScrollFrameRef = useRef<number | null>(null);
+  const edgeScrollTickRef = useRef<((timestamp: number) => void) | null>(null);
+  const panRef = useRef(pan);
+
   const [piecePreview, setPiecePreview] = useState<{
+    pieceId: string;
+    position: Point;
+  } | null>(null);
+  const piecePreviewRef = useRef<{
     pieceId: string;
     position: Point;
   } | null>(null);
@@ -257,6 +307,17 @@ function MapViewport({
     x: number;
     y: number;
   } | null>(null);
+  const [arrivalPreviewState, setArrivalPreviewState] = useState<{
+    key: string;
+    position: Point;
+  } | null>(null);
+  const arrivalPlacementKey = [
+    pendingArrivalPlacement?.connection?.id,
+    pendingArrivalPlacement?.piece?.id,
+  ].filter(Boolean).join(':');
+  const arrivalPreview = arrivalPreviewState?.key === arrivalPlacementKey
+    ? arrivalPreviewState.position
+    : null;
 
   const popupRef = useRef<HTMLDivElement | null>(null);
   const focusCompleteRef = useRef(onFocusFeatureComplete);
@@ -396,7 +457,7 @@ function MapViewport({
   const viewedMapKeySide = getMapKeySide(pan.x, scale);
   const displayedMapKeySide = viewedMapKeySide ?? mapKeySide;
 
-  function screenToMap(
+function screenToMap(
   clientX: number,
   clientY: number
 ): Point | null {
@@ -424,6 +485,153 @@ function MapViewport({
     ) / scale,
   };
 }
+
+function screenToMapWithPan(
+  clientX: number,
+  clientY: number,
+  currentPan: Point
+): Point | null {
+  const viewport = viewportRef.current;
+  if (!viewport || scale <= 0) return null;
+  const rect = viewport.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left - rect.width / 2 - currentPan.x) / scale,
+    y: (clientY - rect.top - rect.height / 2 - currentPan.y) / scale,
+  };
+}
+
+function stopEdgeScrolling() {
+  if (edgeScrollFrameRef.current !== null) {
+    cancelAnimationFrame(edgeScrollFrameRef.current);
+  }
+  edgeScrollFrameRef.current = null;
+  edgeActivationStartedAtRef.current = null;
+  edgePreviousFrameRef.current = null;
+}
+
+function scheduleEdgeScrolling() {
+  if (edgeScrollFrameRef.current !== null) return;
+  edgeScrollFrameRef.current = requestAnimationFrame((timestamp) => {
+    edgeScrollTickRef.current?.(timestamp);
+  });
+}
+
+function trackEdgePointer(clientX: number, clientY: number) {
+  const viewport = viewportRef.current;
+  if (!viewport) return;
+  const rect = viewport.getBoundingClientRect();
+  const inside = clientX >= rect.left && clientX <= rect.right &&
+    clientY >= rect.top && clientY <= rect.bottom;
+  latestPointerRef.current = { x: clientX, y: clientY };
+  pointerInsideViewportRef.current = inside;
+  if (!inside) {
+    stopEdgeScrolling();
+    return;
+  }
+  scheduleEdgeScrolling();
+}
+
+function getEdgeVelocity(position: number, size: number): number {
+  if (position < EDGE_SCROLL_ZONE_PX) {
+    return (1 - Math.max(0, position) / EDGE_SCROLL_ZONE_PX) *
+      EDGE_SCROLL_MAX_SPEED;
+  }
+  const trailingDistance = size - position;
+  if (trailingDistance < EDGE_SCROLL_ZONE_PX) {
+    return -(1 - Math.max(0, trailingDistance) /
+      EDGE_SCROLL_ZONE_PX) * EDGE_SCROLL_MAX_SPEED;
+  }
+  return 0;
+}
+
+useEffect(() => {
+  panRef.current = { x: pan.x, y: pan.y };
+}, [pan.x, pan.y]);
+
+useEffect(() => {
+  edgeScrollTickRef.current = (timestamp) => {
+  edgeScrollFrameRef.current = null;
+  const viewport = viewportRef.current;
+  const pointer = latestPointerRef.current;
+  if (!viewport || !pointerInsideViewportRef.current || !pointer) {
+    stopEdgeScrolling();
+    return;
+  }
+  if (dragRef.current) {
+    edgeActivationStartedAtRef.current = null;
+    edgePreviousFrameRef.current = null;
+    return;
+  }
+  const hovered = document.elementFromPoint(pointer.x, pointer.y);
+  if (hovered instanceof Element &&
+      hovered.closest(EDGE_SCROLL_SUPPRESS_SELECTOR)) {
+    edgeActivationStartedAtRef.current = null;
+    edgePreviousFrameRef.current = null;
+    return;
+  }
+  const rect = viewport.getBoundingClientRect();
+  const velocityX = getEdgeVelocity(pointer.x - rect.left, rect.width);
+  const velocityY = getEdgeVelocity(pointer.y - rect.top, rect.height);
+  if (velocityX === 0 && velocityY === 0) {
+    edgeActivationStartedAtRef.current = null;
+    edgePreviousFrameRef.current = null;
+    return;
+  }
+  if (edgeActivationStartedAtRef.current === null) {
+    edgeActivationStartedAtRef.current = timestamp;
+    edgePreviousFrameRef.current = timestamp;
+    scheduleEdgeScrolling();
+    return;
+  }
+  if (timestamp - edgeActivationStartedAtRef.current <
+      EDGE_SCROLL_DELAY_MS) {
+    edgePreviousFrameRef.current = timestamp;
+    scheduleEdgeScrolling();
+    return;
+  }
+  const previousTimestamp = edgePreviousFrameRef.current ?? timestamp;
+  const deltaSeconds = Math.min(0.05, (timestamp - previousTimestamp) / 1000);
+  edgePreviousFrameRef.current = timestamp;
+  const nextPan = clampPan({
+    x: panRef.current.x + velocityX * deltaSeconds,
+    y: panRef.current.y + velocityY * deltaSeconds,
+  });
+  panRef.current = nextPan;
+  updateMapKeySide(nextPan.x, scale);
+  dispatch({
+    type: 'viewport.setPan',
+    panX: nextPan.x,
+    panY: nextPan.y,
+  });
+
+  const pieceDrag = pieceDragRef.current;
+  if (pieceDrag) {
+    const pointerMap = screenToMapWithPan(pointer.x, pointer.y, nextPan);
+    if (pointerMap) {
+      const preview = {
+        pieceId: pieceDrag.pieceId,
+        position: {
+          x: pointerMap.x + pieceDrag.grabOffset.x,
+          y: pointerMap.y + pieceDrag.grabOffset.y,
+        },
+      };
+      piecePreviewRef.current = preview;
+      setPiecePreview(preview);
+    }
+  }
+  if (pendingArrivalPlacement) {
+    const point = screenToMapWithPan(pointer.x, pointer.y, nextPan);
+    if (point) {
+      setArrivalPreviewState({ key: arrivalPlacementKey, position: point });
+    }
+  }
+  if (state.editingMode === 'move-feature' && movingFeatureId) {
+    const point = screenToMapWithPan(pointer.x, pointer.y, nextPan);
+    if (point) dispatch({ type: 'featureMove.preview', position: point });
+  }
+    scheduleEdgeScrolling();
+  };
+});
 
 function mapToScreen(
   mapX: number,
@@ -676,7 +884,26 @@ function isMovePositionValid(point: Point): boolean {
       width: 0,
       height: 0,
     });
+    latestPointerRef.current = null;
+    pointerInsideViewportRef.current = false;
+    edgeActivationStartedAtRef.current = null;
+    edgePreviousFrameRef.current = null;
+    if (edgeScrollFrameRef.current !== null) {
+      cancelAnimationFrame(edgeScrollFrameRef.current);
+      edgeScrollFrameRef.current = null;
+    }
   }, [imageUrl, dispatch]);
+
+  useEffect(() => {
+    return () => {
+      if (edgeScrollFrameRef.current !== null) {
+        cancelAnimationFrame(edgeScrollFrameRef.current);
+      }
+      edgeScrollFrameRef.current = null;
+      latestPointerRef.current = null;
+      pointerInsideViewportRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     focusCompleteRef.current = onFocusFeatureComplete;
@@ -694,7 +921,7 @@ function isMovePositionValid(point: Point): boolean {
       return feature.id === movingFeatureId;
     });
     const movingLayerIsVisible = movingFeature &&
-      (isLocation(movingFeature)
+      (isNavigableFeature(movingFeature)
         ? layerVisibility.locations
         : layerVisibility.features);
     if (movingLayerIsVisible) return;
@@ -719,6 +946,17 @@ function isMovePositionValid(point: Point): boolean {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [dispatch, state.editingMode]);
+
+  useEffect(() => {
+    if (!pendingArrivalPlacement || !onPendingArrivalCancel) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      onPendingArrivalCancel();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onPendingArrivalCancel, pendingArrivalPlacement]);
 
   useEffect(() => {
     const popup = popupRef.current;
@@ -876,6 +1114,7 @@ function handleContextMenu(
     React.MouseEvent<HTMLDivElement>
 ) {
   event.preventDefault();
+  if (pendingArrivalPlacement) return;
   if (state.editingMode === 'move-feature') return;
   setPieceContextMenu(null);
   dispatch({ type: 'feature.clearSelection' });
@@ -944,14 +1183,15 @@ function handleContextMenu(
     event:
       React.PointerEvent<HTMLDivElement>
   ) {
-    if (
-      event.button !== 0
-    ) {
+    trackEdgePointer(event.clientX, event.clientY);
+    if (event.button === 0 && pendingArrivalPlacement) {
+      const point = screenToMap(event.clientX, event.clientY);
+      if (!point || !isPointInsideMap(point)) return;
+      event.preventDefault();
+      onPendingArrivalCommit?.(point);
       return;
     }
-
-    if (state.editingMode === 'move-feature') 
-    {
+    if (event.button === 0 && state.editingMode === 'move-feature') {
       const point = screenToMap(event.clientX, event.clientY);
       if (!point || !movingFeatureId) return;
       dispatch({ type: 'featureMove.preview', position: point });
@@ -962,9 +1202,25 @@ function handleContextMenu(
       return;
     }
 
+    if (event.button !== 0 && event.button !== 1) return;
+
+    if (editingName) {
+      saveName();
+    }
+
+    if (editingSubtitle) {
+      saveSubtitle();
+    }
+
     dispatch({ type: 'feature.clearSelection' });
     dispatch({ type: 'contextMenu.close' });
     setPieceContextMenu(null);
+
+    if (event.button === 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    stopEdgeScrolling();
 
     event.currentTarget
       .setPointerCapture(
@@ -996,6 +1252,13 @@ function handleContextMenu(
     event:
       React.PointerEvent<HTMLDivElement>
   ) {
+    trackEdgePointer(event.clientX, event.clientY);
+    if (pendingArrivalPlacement) {
+      const point = screenToMap(event.clientX, event.clientY);
+      if (point) {
+        setArrivalPreviewState({ key: arrivalPlacementKey, position: point });
+      }
+    }
     if (state.editingMode === 'move-feature') {
       const point = screenToMap(event.clientX, event.clientY);
       if (point) dispatch({ type: 'featureMove.preview', position: point });
@@ -1069,6 +1332,7 @@ function handleContextMenu(
           event.pointerId
         );
     }
+    scheduleEdgeScrolling();
   }
 
   function handlePiecePointerDown(
@@ -1080,14 +1344,22 @@ function handleContextMenu(
     event.stopPropagation();
     setPieceContextMenu(null);
     event.currentTarget.setPointerCapture(event.pointerId);
+    trackEdgePointer(event.clientX, event.clientY);
+    const pointerMap = screenToMap(event.clientX, event.clientY);
     pieceDragRef.current = {
       pieceId: piece.id,
       pointerId: event.pointerId,
       startPointer: { x: event.clientX, y: event.clientY },
       startPosition: piece.position,
+      grabOffset: {
+        x: piece.position.x - (pointerMap?.x ?? piece.position.x),
+        y: piece.position.y - (pointerMap?.y ?? piece.position.y),
+      },
       moved: false,
     };
-    setPiecePreview({ pieceId: piece.id, position: piece.position });
+    const preview = { pieceId: piece.id, position: piece.position };
+    piecePreviewRef.current = preview;
+    setPiecePreview(preview);
   }
 
   function handlePiecePointerMove(
@@ -1097,17 +1369,20 @@ function handleContextMenu(
     if (!drag || drag.pointerId !== event.pointerId || scale <= 0) return;
     event.preventDefault();
     event.stopPropagation();
+    trackEdgePointer(event.clientX, event.clientY);
+    const pointerMap = screenToMap(event.clientX, event.clientY);
+    if (!pointerMap) return;
     const position = {
-      x: drag.startPosition.x +
-        (event.clientX - drag.startPointer.x) / scale,
-      y: drag.startPosition.y +
-        (event.clientY - drag.startPointer.y) / scale,
+      x: pointerMap.x + drag.grabOffset.x,
+      y: pointerMap.y + drag.grabOffset.y,
     };
     drag.moved = drag.moved || Math.hypot(
       event.clientX - drag.startPointer.x,
       event.clientY - drag.startPointer.y
     ) > 2;
-    setPiecePreview({ pieceId: drag.pieceId, position });
+    const preview = { pieceId: drag.pieceId, position };
+    piecePreviewRef.current = preview;
+    setPiecePreview(preview);
   }
 
   function handlePiecePointerUp(
@@ -1117,10 +1392,11 @@ function handleContextMenu(
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
-    const preview = piecePreview?.pieceId === drag.pieceId
-      ? piecePreview.position
+    const preview = piecePreviewRef.current?.pieceId === drag.pieceId
+      ? piecePreviewRef.current.position
       : drag.startPosition;
     pieceDragRef.current = null;
+    piecePreviewRef.current = null;
     setPiecePreview(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -1129,7 +1405,7 @@ function handleContextMenu(
 
     const previewScreen = mapToScreen(preview.x, preview.y);
     const location = visibleFeatures.find((feature) => {
-      if (!isLocation(feature)) return false;
+      if (!isNavigableFeature(feature)) return false;
       const target = mapToScreen(feature.position.x, feature.position.y);
       return Math.hypot(
         previewScreen.x - target.x,
@@ -1183,8 +1459,10 @@ function handleContextMenu(
   const selectedFeatureType = featureTypes.find((type) => {
     return type.id === selectedFeature?.featureTypeId;
   });
-  const hasLocationTarget = Boolean(
-    selectedFeature?.targetMapId && selectedFeature.targetFeatureId
+  const hasNavigationTarget = Boolean(
+    selectedFeature &&
+    isNavigableFeature(selectedFeature) &&
+    selectedFeature.targetMapId
   );
   const selectedLocationMap = selectedFeature
     ? locationMapMetadata[selectedFeature.id]
@@ -1260,6 +1538,16 @@ function cancelSubtitleEdit() {
       onPointerCancel={
         endDrag
       }
+      onPointerEnter={(event) => {
+        trackEdgePointer(event.clientX, event.clientY);
+      }}
+      onPointerLeave={() => {
+        pointerInsideViewportRef.current = false;
+        stopEdgeScrolling();
+      }}
+      onAuxClick={(event) => {
+        if (event.button === 1) event.preventDefault();
+      }}
       onContextMenu={
         handleContextMenu
       }
@@ -1344,6 +1632,56 @@ function cancelSubtitleEdit() {
   );
 })}
 
+{pendingArrivalPlacement && (() => {
+  const position = arrivalPreview ?? {
+    x: registration.offsetX,
+    y: registration.offsetY,
+  };
+  const screenPosition = mapToScreen(position.x, position.y);
+  const valid = isPointInsideMap(position);
+  const heldPiece = pendingArrivalPlacement.piece;
+  const heldConnection = pendingArrivalPlacement.connection;
+  return (
+    <>
+      <div className="arrival-placement-layer" />
+      {heldConnection && (
+        <button
+          type="button"
+          className={[
+            'map-feature-marker',
+            'map-feature-connection',
+            'arrival-placement',
+            valid ? '' : 'invalid',
+          ].filter(Boolean).join(' ')}
+          style={{ left: screenPosition.x, top: screenPosition.y }}
+          title="Place Connection endpoint"
+        >
+          <span className="map-feature-dot" />
+        </button>
+      )}
+      {heldPiece && (
+        <button
+          type="button"
+          className={[
+            'map-piece',
+            `map-piece-${heldPiece.appearance.shape}`,
+            'dragging',
+            'arrival-placement',
+            valid ? '' : 'invalid',
+          ].filter(Boolean).join(' ')}
+          style={{
+            left: screenPosition.x,
+            top: screenPosition.y,
+            backgroundColor: heldPiece.appearance.fillColor,
+            borderColor: heldPiece.appearance.borderColor,
+          }}
+          title="Place Piece arrival"
+        />
+      )}
+    </>
+  );
+})()}
+
 {visibleFeatures.map((feature) => {
   const isMoving = feature.id === movingFeatureId &&
     state.editingMode === 'move-feature';
@@ -1357,6 +1695,7 @@ function cancelSubtitleEdit() {
   const moveIsValid = !isMoving || isMovePositionValid(position);
   const markerClasses = [
     'map-feature-marker',
+    isConnection(feature) ? 'map-feature-connection' : '',
     state.selectedFeatureId === feature.id ? 'selected' : '',
     isMoving ? 'moving' : '',
     moveIsValid ? '' : 'invalid',
@@ -1578,7 +1917,7 @@ function cancelSubtitleEdit() {
 
     <div className="feature-popup-controls">
       <div className="feature-popup-control">
-        {hasLocationTarget ? (
+        {hasNavigationTarget ? (
           <span className="feature-popup-control-readonly">
             Type: {selectedLocationMap?.typeName ?? 'No Type'}
           </span>
@@ -1649,7 +1988,7 @@ function cancelSubtitleEdit() {
 
         {actionsExpanded && (
           <div className="feature-popup-control-menu actions-menu">
-            {hasLocationTarget && (
+            {hasNavigationTarget && (
               <button
                 type="button"
                 onClick={() => onEnterFeature?.(selectedFeature)}
@@ -1669,7 +2008,7 @@ function cancelSubtitleEdit() {
               </button>
             ))}
 
-            {!hasLocationTarget && secondaryActions.length === 0 && (
+            {!hasNavigationTarget && secondaryActions.length === 0 && (
               <span className="feature-popup-no-actions">
                 No actions available.
               </span>
@@ -1725,7 +2064,7 @@ function cancelSubtitleEdit() {
   dispatch({ type: 'contextMenu.close' });
 }}
     >
-      New Feature...
+      Add Feature...
     </button>
 
     <button
@@ -1739,7 +2078,17 @@ function cancelSubtitleEdit() {
   dispatch({ type: 'contextMenu.close' });
 }}
     >
-      New Location...
+      Add Location...
+    </button>
+
+    <button
+      type="button"
+      onClick={() => {
+        onNewConnectionRequest?.(contextMenu.mapX, contextMenu.mapY);
+        dispatch({ type: 'contextMenu.close' });
+      }}
+    >
+      Add Connection...
     </button>
       </>
     ) : (

@@ -17,7 +17,7 @@ export interface Feature {
 
   position: FeaturePosition;
 
-  type: 'feature' | 'location';
+  type: 'feature' | 'location' | 'connection';
   description?: RichTextDocument | string;
   featureTypeId?: string;
   showLabel?: boolean;
@@ -26,4 +26,5 @@ export interface Feature {
 
   targetMapId?: string;
   targetFeatureId?: string;
+  connectionPlacementPending?: boolean;
 }

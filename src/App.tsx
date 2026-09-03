@@ -53,6 +53,20 @@ interface MapDeletionAnalysis {
   ownedFeatureCount: number;
 }
 
+type NavigationFeatureKind = 'location' | 'connection';
+type ArrivalMode = 'manual-placement' | 'connection' | 'legacy-location';
+
+interface PendingArrivalIntent {
+  mode: ArrivalMode;
+  pieceId?: string;
+  sourceMapId: string;
+  sourceMapName: string;
+  sourcePosition?: Feature['position'];
+  destinationMapId: string;
+  sourceFeatureId: string;
+  destinationFeatureId?: string;
+}
+
 function App() {
   const { dispatch } = useRegionsState();
   const [
@@ -207,6 +221,11 @@ const pendingProjectActionRef =
 
   const [newLocationPosition, setNewLocationPosition] =
     useState<{ x: number; y: number } | null>(null);
+  const [navigationFeatureKind, setNavigationFeatureKind] =
+    useState<NavigationFeatureKind>('location');
+  const [newConnectionName, setNewConnectionName] = useState('');
+  const [pendingArrival, setPendingArrival] =
+    useState<PendingArrivalIntent | null>(null);
 
   const [pendingMaps, setPendingMaps] = useState<RegionMap[]>([]);
 
@@ -708,6 +727,25 @@ async function loadMapWithFeatures(mapId: string) {
   return { map: normalizedMap, features };
 }
 
+function getMapArrivalCenter(map: RegionMap): Feature['position'] {
+  return {
+    x: map.imageRegistration?.offsetX ?? 0,
+    y: map.imageRegistration?.offsetY ?? 0,
+  };
+}
+
+async function loadEffectiveMapWithFeatures(mapId: string) {
+  const effectiveMap = activeMap?.id === mapId
+    ? activeMap
+    : pendingMaps.find((map) => map.id === mapId) ??
+      projectMaps.find((map) => map.id === mapId);
+  if (!effectiveMap) return loadMapWithFeatures(mapId);
+  return {
+    map: normalizeMap(effectiveMap),
+    features: await loadEffectiveMapFeatures(effectiveMap),
+  };
+}
+
 function handleMapEntered(
   map: RegionMap,
   project: Project,
@@ -758,6 +796,7 @@ async function restorePersistedSource(
   );
   setPendingMapDeletionIds(new Set());
   setPendingFocusFeatureId(null);
+  setPendingArrival(null);
   await loadMapImage(source.map);
   return { project, ...source };
 }
@@ -792,16 +831,20 @@ async function navigateToFeatureTarget(
       feature = persistedFeature;
     }
 
-    if (!feature.targetMapId || !feature.targetFeatureId) {
+    if (!feature.targetMapId ||
+        (feature.type !== 'location' && feature.type !== 'connection')) {
       throw new Error('This Feature has no valid navigation target.');
     }
 
-    const destination = await loadMapWithFeatures(feature.targetMapId);
-    const targetFeature = destination.features.find((candidate) => {
-      return candidate.id === feature.targetFeatureId;
-    });
-
-    if (!targetFeature) {
+    const destination = discardChanges
+      ? await loadMapWithFeatures(feature.targetMapId)
+      : await loadEffectiveMapWithFeatures(feature.targetMapId);
+    const targetFeature = feature.targetFeatureId
+      ? destination.features.find((candidate) => {
+          return candidate.id === feature.targetFeatureId;
+        })
+      : undefined;
+    if (feature.targetFeatureId && !targetFeature) {
       throw new Error('The target Feature could not be resolved.');
     }
 
@@ -815,13 +858,32 @@ async function navigateToFeatureTarget(
     });
     setActiveMap(destination.map);
     setActiveFeatures(destination.features);
-    setPendingFocusFeatureId(targetFeature.id);
+    setPendingFocusFeatureId(targetFeature?.connectionPlacementPending
+      ? null
+      : targetFeature?.id ?? null);
     await loadMapImage(destination.map);
+    if (targetFeature?.connectionPlacementPending) {
+      setFocusPiecePosition(getMapArrivalCenter(destination.map));
+      setFocusPieceRequestId((current) => current + 1);
+      setPendingArrival({
+        mode: 'connection',
+        sourceMapId,
+        sourceMapName,
+        destinationMapId: destination.map.id,
+        sourceFeatureId: feature.id,
+        destinationFeatureId: targetFeature.id,
+      });
+      return;
+    }
+    if (!targetFeature) {
+      setFocusPiecePosition(getMapArrivalCenter(destination.map));
+      setFocusPieceRequestId((current) => current + 1);
+    }
     handleMapEntered(
-  destination.map,
-  project,
-  sourceMapName
-);
+      destination.map,
+      project,
+      sourceMapName
+    );
   } catch (error) {
     const message = error instanceof Error
       ? error.message
@@ -832,7 +894,8 @@ async function navigateToFeatureTarget(
 }
 
 async function handleEnterFeature(feature: Feature) {
-  if (!feature.targetMapId || !feature.targetFeatureId) return;
+  if (!feature.targetMapId ||
+      (feature.type !== 'location' && feature.type !== 'connection')) return;
   dispatch({ type: 'featureMove.cancel' });
 
   if (projectDirty && !autoSave) {
@@ -850,23 +913,47 @@ async function handleEnterFeature(feature: Feature) {
   await navigateToFeatureTarget(feature, false);
 }
 
-function handleGoToParentMap() {
-  if (!activeMap?.parentMapId) return;
-
-  const returnFeatures = activeFeatures.filter((feature) => {
-    return feature.targetMapId === activeMap.parentMapId &&
-      Boolean(feature.targetFeatureId);
+async function navigateToParentMap(discardChanges: boolean) {
+  if (!activeProject || !activeMap?.parentMapId) return;
+  let project = activeProject;
+  let sourceMap = activeMap;
+  if (discardChanges) {
+    const restored = await restorePersistedSource(activeProject.id, activeMap.id);
+    project = restored.project;
+    sourceMap = restored.map;
+  }
+  if (!sourceMap.parentMapId) return;
+  const destination = discardChanges
+    ? await loadMapWithFeatures(sourceMap.parentMapId)
+    : await loadEffectiveMapWithFeatures(sourceMap.parentMapId);
+  const updatedProject = { ...project, activeMapId: destination.map.id };
+  dispatch({
+    type: 'navigation.push',
+    entry: { mapId: sourceMap.id },
   });
-  const returnFeature = returnFeatures.sort((left, right) => {
-    return left.id.localeCompare(right.id);
-  })[0];
+  setActiveProject(updatedProject);
+  setActiveMap(destination.map);
+  setActiveFeatures(destination.features);
+  setPendingFocusFeatureId(null);
+  await loadMapImage(destination.map);
+  setFocusPiecePosition(getMapArrivalCenter(destination.map));
+  setFocusPieceRequestId((current) => current + 1);
+  handleMapEntered(destination.map, updatedProject, sourceMap.name, 'manual');
+}
 
-  if (!returnFeature) {
-    setNavigationError('No valid return Location was found.');
+async function handleGoToParentMap() {
+  if (!activeMap?.parentMapId) return;
+  if (projectDirty && !autoSave) {
+    requestProjectAction((outcome) => {
+      void navigateToParentMap(outcome === 'discarded');
+    });
     return;
   }
-
-  void handleEnterFeature(returnFeature);
+  if (projectDirty || saveInProgressRef.current) {
+    const saved = await saveActiveProject();
+    if (!saved) return;
+  }
+  await navigateToParentMap(false);
 }
 
 function clearGoToMapPreview() {
@@ -1036,18 +1123,57 @@ async function handlePieceDrop(
   const piece = activeProject.pieces.find((item) => item.id === pieceId);
   if (!piece) return;
 
-  if (!location?.targetMapId || !location.targetFeatureId) {
+  const navigable = location?.type === 'location' ||
+    location?.type === 'connection';
+  if (!navigable || !location?.targetMapId) {
     updatePiecePosition(pieceId, position);
     return;
   }
 
   try {
-    const destination = await loadMapWithFeatures(location.targetMapId);
-    const targetFeature = destination.features.find((feature) => {
-      return feature.id === location.targetFeatureId;
-    });
-    if (!targetFeature) {
+    const destination = await loadEffectiveMapWithFeatures(
+      location.targetMapId
+    );
+    const targetFeature = location.targetFeatureId
+      ? destination.features.find((feature) => {
+          return feature.id === location.targetFeatureId;
+        })
+      : undefined;
+    if (location.targetFeatureId && !targetFeature) {
       throw new Error('The target Feature could not be resolved.');
+    }
+    const isFocused = pieceId === activeProject.focusedPieceId;
+    const needsManualPlacement = !targetFeature ||
+      targetFeature.connectionPlacementPending;
+    if (needsManualPlacement) {
+      if (!isFocused) {
+        setNavigationError(
+          'Focus this Piece before resolving a manual arrival.'
+        );
+        return;
+      }
+      const updatedProject = {
+        ...activeProject,
+        activeMapId: destination.map.id,
+      };
+      setActiveProject(updatedProject);
+      setActiveMap(destination.map);
+      setActiveFeatures(destination.features);
+      setPendingFocusFeatureId(null);
+      await loadMapImage(destination.map);
+      setFocusPiecePosition(getMapArrivalCenter(destination.map));
+      setFocusPieceRequestId((current) => current + 1);
+      setPendingArrival({
+        mode: targetFeature ? 'connection' : 'manual-placement',
+        pieceId,
+        sourceMapId: activeMap.id,
+        sourceMapName: activeMap.name,
+        sourcePosition: piece.position,
+        destinationMapId: destination.map.id,
+        sourceFeatureId: location.id,
+        destinationFeatureId: targetFeature?.id,
+      });
+      return;
     }
 
     const movedPiece = {
@@ -1060,14 +1186,14 @@ async function handlePieceDrop(
       pieces: activeProject.pieces.map((item) => {
         return item.id === pieceId ? movedPiece : item;
       }),
-      activeMapId: pieceId === activeProject.focusedPieceId
+      activeMapId: isFocused
         ? destination.map.id
         : activeProject.activeMapId,
     };
     setActiveProject(updatedProject);
     markProjectDirty();
 
-    if (pieceId !== activeProject.focusedPieceId) return;
+    if (!isFocused) return;
     setActiveMap(destination.map);
     setActiveFeatures(destination.features);
     setPendingFocusFeatureId(null);
@@ -1086,6 +1212,68 @@ async function handlePieceDrop(
       : 'Unable to move this Piece through the Location.';
     console.error('Unable to traverse Location with Piece:', error);
     setNavigationError(message);
+  }
+}
+
+async function commitPendingArrival(position: Feature['position']) {
+  if (!pendingArrival || !activeProject || !activeMap) return;
+  if (pendingArrival.destinationFeatureId) {
+    updateFeatureEverywhere(
+      pendingArrival.destinationFeatureId,
+      (feature) => ({
+        ...feature,
+        position,
+        connectionPlacementPending: undefined,
+      })
+    );
+  }
+  let updatedProject = activeProject;
+  if (pendingArrival.pieceId) {
+    updatedProject = {
+      ...activeProject,
+      pieces: activeProject.pieces.map((piece) => {
+        return piece.id === pendingArrival.pieceId
+          ? { ...piece, mapId: activeMap.id, position }
+          : piece;
+      }),
+      activeMapId: activeMap.id,
+    };
+    setActiveProject(updatedProject);
+    setFocusPiecePosition(position);
+    setFocusPieceRequestId((current) => current + 1);
+  }
+  setPendingArrival(null);
+  markProjectDirty();
+  handleMapEntered(
+    activeMap,
+    updatedProject,
+    pendingArrival.sourceMapName,
+    pendingArrival.pieceId ? 'piece' : 'manual'
+  );
+}
+
+async function cancelPendingArrival() {
+  if (!pendingArrival || !activeProject) return;
+  try {
+    const source = await loadEffectiveMapWithFeatures(
+      pendingArrival.sourceMapId
+    );
+    setActiveProject({
+      ...activeProject,
+      activeMapId: source.map.id,
+    });
+    setActiveMap(source.map);
+    setActiveFeatures(source.features);
+    setPendingFocusFeatureId(pendingArrival.sourceFeatureId);
+    setPendingArrival(null);
+    await loadMapImage(source.map);
+    if (pendingArrival.sourcePosition) {
+      setFocusPiecePosition(pendingArrival.sourcePosition);
+      setFocusPieceRequestId((current) => current + 1);
+    }
+  } catch (error) {
+    console.error('Unable to cancel pending arrival:', error);
+    setNavigationError('Unable to return to the source Map.');
   }
 }
 
@@ -1306,6 +1494,7 @@ async function stageDeleteMap() {
       type: 'feature' as const,
       targetMapId: undefined,
       targetFeatureId: undefined,
+      connectionPlacementPending: undefined,
     };
   });
   const convertedById = new Map(
@@ -1441,6 +1630,7 @@ async function handleSelectProject(project: Project) {
   );
   setPendingMapDeletionIds(new Set());
   setPendingFocusFeatureId(null);
+  setPendingArrival(null);
   setNavigationError(null);
   setActiveProject(
     project
@@ -1619,6 +1809,7 @@ function closeProject() {
   );
   setPendingMapDeletionIds(new Set());
   setPendingFocusFeatureId(null);
+  setPendingArrival(null);
   setNavigationError(null);
   clearActiveMapImage();
   resetProjectDirty();
@@ -1666,6 +1857,7 @@ async function finishPendingProjectAction(
       new Set()
     );
     setPendingMapDeletionIds(new Set());
+    setPendingArrival(null);
     resetProjectDirty();
     outcome = 'discarded';
   }
@@ -1792,6 +1984,19 @@ function handleMapMetadataChange(
   markProjectDirty();
 }
 
+function updateFeatureEverywhere(
+  featureId: string,
+  update: (feature: Feature) => Feature
+) {
+  const updateList = (features: Feature[]) => {
+    return features.map((feature) => {
+      return feature.id === featureId ? update(feature) : feature;
+    });
+  };
+  setActiveFeatures(updateList);
+  setPendingFeatures(updateList);
+}
+
 function handleFeatureNameChange(
   featureId: string,
   name: string
@@ -1803,31 +2008,17 @@ function handleFeatureNameChange(
     return;
   }
 
-  setActiveFeatures((current) =>
-    current.map((feature) =>
-      feature.id === featureId
-        ? {
-            ...feature,
-            name: trimmedName,
-          }
-        : feature
-    )
-  );
+  updateFeatureEverywhere(featureId, (feature) => {
+    return { ...feature, name: trimmedName };
+  });
 
   markProjectDirty();
 }
 
 function handleSubtitleChange(featureId: string, subtitle: string) {
-  setActiveFeatures((current) =>
-    current.map((feature) =>
-      feature.id === featureId
-        ? {
-            ...feature,
-            subtitle: subtitle || undefined,
-          }
-        : feature
-    )
-  );
+  updateFeatureEverywhere(featureId, (feature) => {
+    return { ...feature, subtitle: subtitle || undefined };
+  });
 
   markProjectDirty();
 }
@@ -1836,16 +2027,16 @@ function handleDescriptionChange(
   featureId: string,
   description: RichTextDocument
 ) {
-  setActiveFeatures((current) => current.map((feature) => {
-    return feature.id === featureId ? { ...feature, description } : feature;
-  }));
+  updateFeatureEverywhere(featureId, (feature) => {
+    return { ...feature, description };
+  });
   markProjectDirty();
 }
 
 function handleShowLabelChange(featureId: string, showLabel: boolean) {
-  setActiveFeatures((current) => current.map((feature) => {
-    return feature.id === featureId ? { ...feature, showLabel } : feature;
-  }));
+  updateFeatureEverywhere(featureId, (feature) => {
+    return { ...feature, showLabel };
+  });
   markProjectDirty();
 }
 
@@ -1853,12 +2044,12 @@ function handleFeatureTypeChange(
   featureId: string,
   featureTypeId: string | undefined
 ) {
-  const feature = activeFeatures.find((item) => item.id === featureId);
+  const feature = activeFeatures.find((item) => item.id === featureId) ??
+    pendingFeatures.find((item) => item.id === featureId);
   if (!feature || feature.featureTypeId === featureTypeId) return;
-  setActiveFeatures((current) => current.map((feature) => {
-    if (feature.id !== featureId) return feature;
-    return { ...feature, featureTypeId };
-  }));
+  updateFeatureEverywhere(featureId, (candidate) => {
+    return { ...candidate, featureTypeId };
+  });
   markProjectDirty();
 }
 
@@ -1906,10 +2097,12 @@ function handleDeleteFeatureType(id: string) {
     ...activeProject,
     featureTypes: activeProject.featureTypes.filter((type) => type.id !== id),
   });
-  setActiveFeatures((current) => current.map((feature) => {
+  const clearType = (current: Feature[]) => current.map((feature) => {
     if (feature.featureTypeId !== id) return feature;
     return { ...feature, featureTypeId: undefined };
-  }));
+  });
+  setActiveFeatures(clearType);
+  setPendingFeatures(clearType);
   markProjectDirty();
 }
 
@@ -1917,9 +2110,9 @@ function handleFeatureMove(
   featureId: string,
   position: Feature['position']
 ) {
-  setActiveFeatures((current) => current.map((feature) => {
-    return feature.id === featureId ? { ...feature, position } : feature;
-  }));
+  updateFeatureEverywhere(featureId, (feature) => {
+    return { ...feature, position };
+  });
   markProjectDirty();
 }
 
@@ -1931,10 +2124,11 @@ async function handleDeleteFeature(
   }
 
   const confirmed = window.confirm(
-    feature.targetMapId &&
-      feature.targetFeatureId
-      ? `Delete Location "${feature.name}" and its paired Location?`
-      : `Delete Feature "${feature.name}"?`
+    feature.type === 'connection'
+      ? `Delete Connection "${feature.name}" and its paired Connection?`
+      : feature.type === 'location'
+        ? `Delete Location "${feature.name}"?`
+        : `Delete Feature "${feature.name}"?`
   );
 
   if (!confirmed) {
@@ -1943,8 +2137,9 @@ async function handleDeleteFeature(
 
   const now = new Date();
 
-  // Ordinary Feature: only remove this Feature.
+  // Ordinary Features and Locations only remove themselves.
   if (
+    feature.type !== 'connection' ||
     !feature.targetMapId ||
     !feature.targetFeatureId
   ) {
@@ -1984,7 +2179,7 @@ async function handleDeleteFeature(
     feature.targetFeatureId;
 
   /*
-   * Same-map Location.
+   * Same-map Connection.
    *
    * Both ends of the connection live in
    * activeFeatures / activeMap.
@@ -2031,7 +2226,7 @@ async function handleDeleteFeature(
   }
 
   /*
-   * Different-map Location.
+   * Different-map Connection.
    *
    * Load the destination Map so its paired
    * return Feature can be removed from that
@@ -2068,7 +2263,7 @@ async function handleDeleteFeature(
     };
 
     /*
-     * Remove the visible/source Location
+     * Remove the visible/source Connection
      * from the current Map.
      */
     setActiveFeatures((current) =>
@@ -2103,7 +2298,7 @@ async function handleDeleteFeature(
     ]);
 
     /*
-     * If either Location was newly created
+     * If either Connection was newly created
      * and hasn't been saved yet, remove it
      * from pendingFeatures as well.
      */
@@ -2154,12 +2349,12 @@ setPendingFeatureDeletionIds(
     markProjectDirty();
   } catch (error) {
     console.error(
-      'Unable to delete Location:',
+      'Unable to delete Connection:',
       error
     );
 
     setNavigationError(
-      'Unable to delete this Location.'
+      'Unable to delete this Connection.'
     );
   }
 }
@@ -2203,8 +2398,22 @@ function handleCreateFeature() {
 }
 
 function handleNewLocationRequest(x: number, y: number) {
+  setNavigationFeatureKind('location');
   setNewLocationPosition({ x, y });
   setNewLocationName('');
+  setNewConnectionName('');
+  setNewLocationTypeId('');
+  setNewLocationImage(null);
+  setLocationSearch('');
+  setLocationTypeFilter('all');
+  setShowLocationChoiceDialog(true);
+}
+
+function handleNewConnectionRequest(x: number, y: number) {
+  setNavigationFeatureKind('connection');
+  setNewLocationPosition({ x, y });
+  setNewLocationName('');
+  setNewConnectionName('');
   setNewLocationTypeId('');
   setNewLocationImage(null);
   setLocationSearch('');
@@ -2219,36 +2428,48 @@ function closeLocationDialogs() {
   setNewLocationPosition(null);
 }
 
-function createLocationPair(
+function createLocationFeature(
   destinationMap: RegionMap,
   sourceName: string
-) {
-  if (!activeProject || !activeMap || !newLocationPosition) return;
-  const featureAId = crypto.randomUUID();
-  const featureBId = crypto.randomUUID();
-  const sourceFeature: Feature = {
-    id: featureAId,
+): Feature | null {
+  if (!activeProject || !activeMap || !newLocationPosition) return null;
+  return {
+    id: crypto.randomUUID(),
     name: sourceName,
     position: newLocationPosition,
     type: 'location',
     noteLinks: [],
     targetMapId: destinationMap.id,
-    targetFeatureId: featureBId,
   };
-  const returnFeature: Feature = {
-    id: featureBId,
-    name: 'Return',
-    position: {
-      x: 0,
-      y: 0,
-    },
-    type: 'location',
+}
+
+function createConnectionPair(
+  destinationMap: RegionMap,
+  sourceName: string
+) {
+  if (!activeMap || !newLocationPosition) return null;
+  const sourceId = crypto.randomUUID();
+  const destinationId = crypto.randomUUID();
+  const sourceFeature: Feature = {
+    id: sourceId,
+    name: sourceName,
+    position: newLocationPosition,
+    type: 'connection',
+    noteLinks: [],
+    targetMapId: destinationMap.id,
+    targetFeatureId: destinationId,
+  };
+  const destinationFeature: Feature = {
+    id: destinationId,
+    name: `Return to ${activeMap.name}`,
+    position: getMapArrivalCenter(destinationMap),
+    type: 'connection',
     noteLinks: [],
     targetMapId: activeMap.id,
-    targetFeatureId: featureAId,
+    targetFeatureId: sourceId,
+    connectionPlacementPending: true,
   };
-
-  return { sourceFeature, returnFeature };
+  return { sourceFeature, destinationFeature };
 }
 
 async function handleCreateLocation() {
@@ -2273,15 +2494,24 @@ async function handleCreateLocation() {
     childMap.imageFileId = image.id;
   }
 
-  const pair = createLocationPair(childMap, name);
-  if (!pair) return;
+  const sourceName = navigationFeatureKind === 'connection'
+    ? newConnectionName.trim()
+    : name;
+  if (!sourceName) return;
+  const location = navigationFeatureKind === 'location'
+    ? createLocationFeature(childMap, sourceName)
+    : null;
+  const connection = navigationFeatureKind === 'connection'
+    ? createConnectionPair(childMap, sourceName)
+    : null;
+  const sourceFeature = location ?? connection?.sourceFeature;
+  if (!sourceFeature) return;
+  if (connection) childMap.featureIds = [connection.destinationFeature.id];
 
-  childMap.featureIds = [pair.returnFeature.id];
-
-  setActiveFeatures((current) => [...current, pair.sourceFeature]);
+  setActiveFeatures((current) => [...current, sourceFeature]);
   setActiveMap({
     ...activeMap,
-    featureIds: [...activeMap.featureIds, pair.sourceFeature.id],
+    featureIds: [...activeMap.featureIds, sourceFeature.id],
     updatedAt: now,
   });
   setActiveProject({
@@ -2290,7 +2520,12 @@ async function handleCreateLocation() {
     updatedAt: now,
   });
   setPendingMaps((current) => [...current, childMap]);
-  setPendingFeatures((current) => [...current, pair.returnFeature]);
+  if (connection) {
+    setPendingFeatures((current) => [
+      ...current,
+      connection.destinationFeature,
+    ]);
+  }
 
   markProjectDirty();
   closeLocationDialogs();
@@ -2301,34 +2536,45 @@ function handleCreateExistingLocation(destinationMap: RegionMap) {
   if (!activeProject || !activeMap || !newLocationPosition) return;
 
   const now = new Date();
-  const pair = createLocationPair(destinationMap, destinationMap.name);
-  if (!pair) return;
+  const sourceName = navigationFeatureKind === 'connection'
+    ? newConnectionName.trim()
+    : destinationMap.name;
+  if (!sourceName) return;
+  const location = navigationFeatureKind === 'location'
+    ? createLocationFeature(destinationMap, sourceName)
+    : null;
+  const connection = navigationFeatureKind === 'connection'
+    ? createConnectionPair(destinationMap, sourceName)
+    : null;
+  const sourceFeature = location ?? connection?.sourceFeature;
+  if (!sourceFeature) return;
 
-  if (destinationMap.id === activeMap.id) {
-    setActiveFeatures((current) => [
-      ...current,
-      pair.sourceFeature,
-      pair.returnFeature,
-    ]);
+  if (!connection || destinationMap.id === activeMap.id) {
+    const additions = connection
+      ? [sourceFeature, connection.destinationFeature]
+      : [sourceFeature];
+    setActiveFeatures((current) => [...current, ...additions]);
     setActiveMap({
       ...activeMap,
       featureIds: [
         ...activeMap.featureIds,
-        pair.sourceFeature.id,
-        pair.returnFeature.id,
+        ...additions.map((feature) => feature.id),
       ],
       updatedAt: now,
     });
   } else {
     const updatedDestination = {
       ...destinationMap,
-      featureIds: [...destinationMap.featureIds, pair.returnFeature.id],
+      featureIds: [
+        ...destinationMap.featureIds,
+        connection.destinationFeature.id,
+      ],
       updatedAt: now,
     };
-    setActiveFeatures((current) => [...current, pair.sourceFeature]);
+    setActiveFeatures((current) => [...current, sourceFeature]);
     setActiveMap({
       ...activeMap,
-      featureIds: [...activeMap.featureIds, pair.sourceFeature.id],
+      featureIds: [...activeMap.featureIds, sourceFeature.id],
       updatedAt: now,
     });
     setPendingMaps((current) => [
@@ -2337,7 +2583,7 @@ function handleCreateExistingLocation(destinationMap: RegionMap) {
     ]);
     setPendingFeatures((current) => [
       ...current,
-      pair.returnFeature,
+      connection.destinationFeature,
     ]);
   }
 
@@ -2491,6 +2737,16 @@ const parentMapName = activeMap?.parentMapId
   : activeMap?.id === activeProject?.rootMapId
     ? 'World Root'
     : 'Unassigned';
+const pendingArrivalConnection = pendingArrival?.destinationFeatureId
+  ? activeFeatures.find((feature) => {
+      return feature.id === pendingArrival.destinationFeatureId;
+    })
+  : undefined;
+const pendingArrivalPiece = pendingArrival?.pieceId
+  ? activeProject?.pieces.find((piece) => {
+      return piece.id === pendingArrival.pieceId;
+    })
+  : undefined;
 
   return (
     <div className="regions-app">
@@ -2724,8 +2980,8 @@ const parentMapName = activeMap?.parentMapId
           </span>
           <span>
             {mapDeletionAnalysis.incomingLocations.length} connected
-            {' '}Location(s) on other Maps will be converted into normal
-            {' '}Features.
+            {' '}Location(s) or Connection(s) on other Maps will be
+            {' '}converted into normal Features.
           </span>
           <span>
             This cannot be undone after the Project is saved.
@@ -3019,7 +3275,11 @@ const parentMapName = activeMap?.parentMapId
 {showLocationChoiceDialog && (
   <div className="dialog-backdrop">
     <div className="dialog location-choice-dialog">
-      <h2>New Location</h2>
+      <h2>
+        New {navigationFeatureKind === 'connection'
+          ? 'Connection'
+          : 'Location'}
+      </h2>
 
       <p>Choose a new or existing destination Map.</p>
 
@@ -3057,7 +3317,21 @@ const parentMapName = activeMap?.parentMapId
 {showNewLocationDialog && activeProject && (
   <div className="dialog-backdrop">
     <div className="dialog location-editor-dialog">
-      <h2>New Location Map</h2>
+      <h2>
+        New {navigationFeatureKind === 'connection'
+          ? 'Connection'
+          : 'Location Map'}
+      </h2>
+
+      {navigationFeatureKind === 'connection' && (
+        <input
+          type="text"
+          placeholder="Connection name"
+          value={newConnectionName}
+          onChange={(event) => setNewConnectionName(event.target.value)}
+          autoFocus
+        />
+      )}
 
       <input
         type="text"
@@ -3069,7 +3343,7 @@ const parentMapName = activeMap?.parentMapId
         onKeyDown={(event) => {
           if (event.key === 'Enter') handleCreateLocation();
         }}
-        autoFocus
+        autoFocus={navigationFeatureKind === 'location'}
       />
 
       <label>
@@ -3110,7 +3384,9 @@ const parentMapName = activeMap?.parentMapId
 
         <button
           type="button"
-          disabled={!newLocationName.trim()}
+          disabled={!newLocationName.trim() ||
+            (navigationFeatureKind === 'connection' &&
+              !newConnectionName.trim())}
           onClick={() => void handleCreateLocation()}
         >
           Create
@@ -3123,7 +3399,21 @@ const parentMapName = activeMap?.parentMapId
 {showExistingLocationDialog && activeProject && (
   <div className="dialog-backdrop">
     <div className="dialog existing-location-dialog">
-      <h2>Existing Location</h2>
+      <h2>
+        Existing {navigationFeatureKind === 'connection'
+          ? 'Connection'
+          : 'Location'}
+      </h2>
+
+      {navigationFeatureKind === 'connection' && (
+        <input
+          type="text"
+          placeholder="Connection name"
+          value={newConnectionName}
+          onChange={(event) => setNewConnectionName(event.target.value)}
+          autoFocus
+        />
+      )}
 
       <div className="location-map-filters">
         <input
@@ -3131,7 +3421,7 @@ const parentMapName = activeMap?.parentMapId
           placeholder="Search Maps"
           value={locationSearch}
           onChange={(event) => setLocationSearch(event.target.value)}
-          autoFocus
+          autoFocus={navigationFeatureKind === 'location'}
         />
 
         <select
@@ -3172,6 +3462,8 @@ const parentMapName = activeMap?.parentMapId
                 key={map.id}
                 type="button"
                 className="location-map-item"
+                disabled={navigationFeatureKind === 'connection' &&
+                  !newConnectionName.trim()}
                 onClick={() => handleCreateExistingLocation(map)}
               >
                 <span>{map.name}</span>
@@ -3438,6 +3730,17 @@ const parentMapName = activeMap?.parentMapId
         onDeleteFeature={handleDeleteFeature}
         onNewFeatureRequest={handleNewFeatureRequest}
         onNewLocationRequest={handleNewLocationRequest}
+        onNewConnectionRequest={handleNewConnectionRequest}
+        pendingArrivalPlacement={pendingArrival ? {
+          connection: pendingArrivalConnection,
+          piece: pendingArrivalPiece,
+        } : undefined}
+        onPendingArrivalCommit={(position) => {
+          void commitPendingArrival(position);
+        }}
+        onPendingArrivalCancel={() => {
+          void cancelPendingArrival();
+        }}
         onZoomStateChange={setZoomControl}
       />
     ) : (
