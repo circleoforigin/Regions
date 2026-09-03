@@ -1335,8 +1335,9 @@ button.map-key-parent:hover {
   font-size: 12px;
 }
 
-.go-to-map-dialog {
-  width: min(820px, calc(100vw - 40px));
+.go-to-map-dialog,
+.delete-map-dialog {
+  width: min(900px, calc(100vw - 40px));
   max-height: calc(100vh - 40px);
   box-sizing: border-box;
 }

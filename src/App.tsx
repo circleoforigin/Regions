@@ -1350,7 +1350,10 @@ async function stageDeleteMap() {
     activeMapId: fallbackMapId,
   };
   setActiveProject(updatedProject);
-  closeDeleteMapDialog();
+  setSelectedDeleteMapId(null);
+  setMapDeletionAnalysis(null);
+  setConfirmDeleteMap(false);
+  clearGoToMapPreview();
   markProjectDirty();
 
   if (deletedMap.id !== activeMap.id || !fallbackMapId) return;
