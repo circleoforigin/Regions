@@ -9,13 +9,23 @@ import {
 const PROJECTS_COLLECTION =
   'projects';
 
+export function ensureValidPieceFocus(
+  pieces: Project['pieces'],
+  focusedPieceId?: string
+): string | undefined {
+  if (pieces.length === 0) return undefined;
+  if (pieces.some((piece) => piece.id === focusedPieceId)) {
+    return focusedPieceId;
+  }
+  return pieces[0].id;
+}
+
 function normalizeProject(project: Project): Project {
   const pieces = Array.isArray(project.pieces) ? project.pieces : [];
-  const focusedPieceId = pieces.some((piece) => {
-    return piece.id === project.focusedPieceId;
-  })
-    ? project.focusedPieceId
-    : undefined;
+  const focusedPieceId = ensureValidPieceFocus(
+    pieces,
+    project.focusedPieceId
+  );
 
   return {
     ...project,

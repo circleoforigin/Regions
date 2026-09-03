@@ -451,16 +451,6 @@ function MenuBar({
 
         {pieceMenuOpen && (
           <div className="dropdown-menu menu-piece-dropdown">
-            <button
-              type="button"
-              className="dropdown-item"
-              onClick={() => {
-                setPieceMenuOpen(false);
-                onFocusPiece(null);
-              }}
-            >
-              {!focusedPieceId ? '✓ ' : ''}No Focus
-            </button>
             {[...pieces]
               .sort((left, right) => left.name.localeCompare(right.name))
               .map((piece) => (

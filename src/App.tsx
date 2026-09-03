@@ -26,7 +26,10 @@ import { featureRepository } from './features/FeatureRepository';
 
 import { mapRepository} from './maps/MapRepository';
 import { createDefaultMap } from './maps/DefaultMap';
-import { projectRepository } from './projects/ProjectRepository';;
+import {
+  ensureValidPieceFocus,
+  projectRepository,
+} from './projects/ProjectRepository';;
 import {
   hostedMapImageService,
 } from './services/maps/HostedMapImageService';
@@ -296,6 +299,14 @@ const pendingProjectActionRef =
 
     dispatch({ type: 'session.reset' });
   }, [activeProjectId, dispatch]);
+
+  useEffect(() => {
+    if (!navigationError) return;
+    const timeoutId = window.setTimeout(() => {
+      setNavigationError(null);
+    }, 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [navigationError]);
 
   useEffect(() => {
     if (!activeProjectId) return;
@@ -753,14 +764,15 @@ function handleMapEntered(
   map: RegionMap,
   project: Project,
   parentMapName?: string,
-  source: SpatialNavigationSource = 'manual'
+  source: SpatialNavigationSource = 'manual',
+  sourcePieceId?: string
 ) {
-  const hasFocusedPiece = project.pieces.some((piece) => {
-    return piece.id === project.focusedPieceId;
-  });
-  const pieceIsAuthoritative = source === 'piece' ||
-    source === 'piece-focus';
-  if (hasFocusedPiece && !pieceIsAuthoritative) return;
+  if (project.pieces.length > 0) {
+    const pieceNavigation = source === 'piece' ||
+      source === 'piece-focus';
+    if (!pieceNavigation) return;
+    if (sourcePieceId !== project.focusedPieceId) return;
+  }
 
   const semanticType =
     project.featureTypes.find(
@@ -1102,6 +1114,10 @@ function handleAddPiece() {
   setActiveProject({
     ...activeProject,
     pieces: [...activeProject.pieces, piece],
+    focusedPieceId: ensureValidPieceFocus(
+      [...activeProject.pieces, piece],
+      activeProject.focusedPieceId
+    ),
   });
   markProjectDirty();
 }
@@ -1149,12 +1165,6 @@ async function handlePieceDrop(
     const needsManualPlacement = !targetFeature ||
       targetFeature.connectionPlacementPending;
     if (needsManualPlacement) {
-      if (!isFocused) {
-        setNavigationError(
-          'Focus this Piece before resolving a manual arrival.'
-        );
-        return;
-      }
       const updatedProject = {
         ...activeProject,
         activeMapId: destination.map.id,
@@ -1207,7 +1217,8 @@ async function handlePieceDrop(
       destination.map,
       updatedProject,
       activeMap.name,
-      'piece'
+      'piece',
+      pieceId
     );
   } catch (error) {
     const message = error instanceof Error
@@ -1251,7 +1262,8 @@ async function commitPendingArrival(position: Feature['position']) {
     activeMap,
     updatedProject,
     pendingArrival.sourceMapName,
-    pendingArrival.pieceId ? 'piece' : 'manual'
+    pendingArrival.pieceId ? 'piece' : 'manual',
+    pendingArrival.pieceId
   );
 }
 
@@ -1283,9 +1295,6 @@ async function cancelPendingArrival() {
 async function handleFocusPiece(pieceId: string | null) {
   if (!activeProject) return;
   if (pieceId === null) {
-    if (!activeProject.focusedPieceId) return;
-    setActiveProject({ ...activeProject, focusedPieceId: undefined });
-    markProjectDirty();
     return;
   }
   const piece = activeProject.pieces.find((item) => item.id === pieceId);
@@ -1316,7 +1325,13 @@ async function handleFocusPiece(pieceId: string | null) {
     setFocusPiecePosition(piece.position);
     setFocusPieceRequestId((current) => current + 1);
     if (focusChanged) {
-      handleMapEntered(destinationMap, updatedProject, undefined, 'piece-focus');
+      handleMapEntered(
+        destinationMap,
+        updatedProject,
+        undefined,
+        'piece-focus',
+        piece.id
+      );
     }
   } catch (error) {
     const message = error instanceof Error
@@ -1361,15 +1376,16 @@ function handleSavePiece() {
 
 function handleDeletePiece() {
   if (!activeProject || !pieceToDelete) return;
-  const focusedPieceId = activeProject.focusedPieceId === pieceToDelete.id
-    ? undefined
-    : activeProject.focusedPieceId;
+  const pieces = activeProject.pieces.filter((piece) => {
+    return piece.id !== pieceToDelete.id;
+  });
   setActiveProject({
     ...activeProject,
-    pieces: activeProject.pieces.filter((piece) => {
-      return piece.id !== pieceToDelete.id;
-    }),
-    focusedPieceId,
+    pieces,
+    focusedPieceId: ensureValidPieceFocus(
+      pieces,
+      activeProject.focusedPieceId
+    ),
   });
   setPieceToDelete(null);
   markProjectDirty();
@@ -3301,7 +3317,10 @@ const pendingArrivalPiece = pendingArrival?.pieceId
           type="button"
           onClick={() => {
             setShowLocationChoiceDialog(false);
-            setShowNewLocationDialog(true);
+
+            requestAnimationFrame(() => {
+              setShowNewLocationDialog(true);
+            });
           }}
         >
           New...
@@ -3311,8 +3330,11 @@ const pendingArrivalPiece = pendingArrival?.pieceId
           type="button"
           onClick={() => {
             setShowLocationChoiceDialog(false);
-            setSelectedExistingMapId(null);
-            setShowExistingLocationDialog(true);
+
+            requestAnimationFrame(() => {
+              setSelectedExistingMapId(null);
+              setShowExistingLocationDialog(true);
+            });
           }}
         >
           Existing...
