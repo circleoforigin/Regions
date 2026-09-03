@@ -14,6 +14,7 @@ import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
 import type {
   LocationMapMetadata,
+  MapViewportHandle,
 } from './components/MapViewport';
 import FeatureTypesDialog from './components/FeatureTypesDialog';
 import type { Project } from './models/Project';
@@ -72,6 +73,7 @@ interface PendingArrivalIntent {
 
 function App() {
   const { dispatch } = useRegionsState();
+  const mapViewportRef = useRef<MapViewportHandle | null>(null);
   const [
     activeProject,
     setActiveProject,
@@ -548,6 +550,7 @@ function resetProjectDirty() {
 }
 
 function openNewProjectDialog() {
+  mapViewportRef.current?.cancelInteractions();
   setNewProjectName('');
   setShowNewProjectDialog(true);
 }
@@ -624,6 +627,7 @@ function handleNewProject() {
   }
 
   async function openLoadProjectDialog() {
+  mapViewportRef.current?.cancelInteractions();
   try {
     const projects =
       await projectRepository
@@ -1018,6 +1022,7 @@ function closeGoToMapDialog() {
 
 function handleOpenGoToMap() {
   if (!activeProject || !activeMap) return;
+  mapViewportRef.current?.cancelInteractions();
   setGoToMapSearch('');
   setGoToMapTypeFilter('all');
   setSelectedGoToMapId(activeMap.id);
@@ -1343,6 +1348,7 @@ async function handleFocusPiece(pieceId: string | null) {
 }
 
 function handleEditPiece(piece: Piece) {
+  mapViewportRef.current?.cancelInteractions();
   setEditingPieceId(piece.id);
   setPieceNameDraft(piece.name);
   setPieceShapeDraft(piece.appearance.shape);
@@ -1462,6 +1468,7 @@ function selectDeleteMap(map: RegionMap) {
 
 function handleOpenDeleteMap() {
   if (!activeProject || !activeMap) return;
+  mapViewportRef.current?.cancelInteractions();
   setDeleteMapSearch('');
   setDeleteMapTypeFilter('all');
   setShowDeleteMapDialog(true);
@@ -1851,6 +1858,7 @@ function requestProjectAction(
   pendingProjectActionRef.current =
     action;
 
+  mapViewportRef.current?.cancelInteractions();
   setShowUnsavedChangesDialog(
     true
   );
@@ -1904,6 +1912,7 @@ function cancelPendingProjectAction() {
 }
 
 async function handleDeleteProject() {
+  mapViewportRef.current?.cancelInteractions();
   try {
     const projects =
       await projectRepository
@@ -2379,6 +2388,7 @@ setPendingFeatureDeletionIds(
 }
 
 function handleNewFeatureRequest(x: number, y: number) {
+  mapViewportRef.current?.cancelInteractions();
   setNewFeaturePosition({ x, y });
   setNewFeatureName('');
   setShowNewFeatureDialog(true);
@@ -2417,6 +2427,7 @@ function handleCreateFeature() {
 }
 
 function handleNewLocationRequest(x: number, y: number) {
+  mapViewportRef.current?.cancelInteractions();
   setNavigationFeatureKind('location');
   setNewLocationPosition({ x, y });
   setNewLocationName('');
@@ -2429,6 +2440,7 @@ function handleNewLocationRequest(x: number, y: number) {
 }
 
 function handleNewConnectionRequest(x: number, y: number) {
+  mapViewportRef.current?.cancelInteractions();
   setNavigationFeatureKind('connection');
   setNewLocationPosition({ x, y });
   setNewLocationName('');
@@ -2802,7 +2814,10 @@ const pendingArrivalPiece = pendingArrival?.pieceId
   onAssignMapImage={() => assignMapInputRef.current?.click()}
   autoSave={autoSave}
   onAutoSaveChange={setAutoSave}
-  onManageFeatureTypes={() => setShowFeatureTypesDialog(true)}
+  onManageFeatureTypes={() => {
+    mapViewportRef.current?.cancelInteractions();
+    setShowFeatureTypesDialog(true);
+  }}
   projectName={
     activeProject?.name
   }
@@ -3735,6 +3750,7 @@ const pendingArrivalPiece = pendingArrival?.pieceId
       </div>
     ) : activeMapImageUrl ? (
       <MapViewport
+        ref={mapViewportRef}
         key={activeMap.id}
         imageUrl={activeMapImageUrl}
         mapName={activeMap.name}
@@ -3744,7 +3760,10 @@ const pendingArrivalPiece = pendingArrival?.pieceId
         isWorldRoot={activeProject.rootMapId === activeMap.id}
         parentMapOptions={parentMapOptions}
         onParentMapChange={handleMapParentChange}
-        onMakeWorldRoot={() => setMapToMakeRoot(activeMap)}
+        onMakeWorldRoot={() => {
+          mapViewportRef.current?.cancelInteractions();
+          setMapToMakeRoot(activeMap);
+        }}
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
         pieces={activeProject.pieces.filter((piece) => {
@@ -3767,7 +3786,10 @@ const pendingArrivalPiece = pendingArrival?.pieceId
           void handlePieceDrop(pieceId, position, location);
         }}
         onEditPiece={handleEditPiece}
-        onDeletePiece={setPieceToDelete}
+        onDeletePiece={(piece) => {
+          mapViewportRef.current?.cancelInteractions();
+          setPieceToDelete(piece);
+        }}
         onFocusPiece={(pieceId) => void handleFocusPiece(pieceId)}
         onViewportCenterChange={setViewportCenter}
         focusPiecePosition={focusPiecePosition}

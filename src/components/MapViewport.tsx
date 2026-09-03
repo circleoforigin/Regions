@@ -1,5 +1,12 @@
 import type { Feature } from '../models/Feature';
-import { Fragment, useEffect, useRef, useState} from 'react';
+import {
+  Fragment,
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { useRegionsState } from '../state/RegionsStateContext';
 import { defaultLayerVisibility } from '../state/RegionsState';
 import MapKey from './MapKey';
@@ -184,6 +191,11 @@ onPendingArrivalCancel?: () => void;
   ) => void;
 }
 
+export interface MapViewportHandle {
+  cancelInteractions(): void;
+}
+
+const MapViewport = forwardRef<MapViewportHandle, MapViewportProps>(
 function MapViewport({
   imageUrl,
   mapName,
@@ -227,7 +239,7 @@ function MapViewport({
   onPendingArrivalCancel,
   onZoomStateChange,
   onMapMetadataChange,
-}: MapViewportProps) {
+}: MapViewportProps, ref) {
   const { state, dispatch } = useRegionsState();
   const { scale, panX, panY } = state.viewport;
   const pan = { x: panX, y: panY };
@@ -265,6 +277,7 @@ function MapViewport({
   const dragRef =
     useRef<{
       pointerId: number;
+      target: HTMLDivElement;
       startPointer: Point;
       startPan: Point;
     } | null>(
@@ -273,6 +286,7 @@ function MapViewport({
 
   const popupDragRef = useRef<{
     pointerId: number;
+    target: HTMLDivElement;
     startPointer: Point;
     startOffset: Point;
   } | null>(null);
@@ -280,6 +294,7 @@ function MapViewport({
   const pieceDragRef = useRef<{
     pieceId: string;
     pointerId: number;
+    target: HTMLButtonElement;
     startPointer: Point;
     startPosition: Point;
     grabOffset: Point;
@@ -334,6 +349,7 @@ function MapViewport({
     useState('');
 
   useEffect(() => {
+    popupDragRef.current = null;
     setEditingName(false);
     setNameDraft(
       selectedFeature?.name ?? ''
@@ -344,6 +360,7 @@ function MapViewport({
   ]);
   
   useEffect(() => {
+    popupDragRef.current = null;
     setEditingSubtitle(false);
     setSubtitleDraft(selectedFeature?.subtitle ?? '');
     }, [selectedFeature?.id, selectedFeature?.subtitle]);
@@ -508,6 +525,53 @@ function stopEdgeScrolling() {
   edgeActivationStartedAtRef.current = null;
   edgePreviousFrameRef.current = null;
 }
+
+function releasePointerCaptureSafely(
+  target: Element,
+  pointerId: number
+) {
+  try {
+    if (target.hasPointerCapture(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+  } catch {
+    // The target may be unmounting or may have already lost capture.
+  }
+}
+
+function cancelViewportInteractions() {
+  if (dragRef.current) {
+    releasePointerCaptureSafely(
+      dragRef.current.target,
+      dragRef.current.pointerId
+    );
+  }
+  if (popupDragRef.current) {
+    releasePointerCaptureSafely(
+      popupDragRef.current.target,
+      popupDragRef.current.pointerId
+    );
+  }
+  if (pieceDragRef.current) {
+    releasePointerCaptureSafely(
+      pieceDragRef.current.target,
+      pieceDragRef.current.pointerId
+    );
+  }
+  dragRef.current = null;
+  popupDragRef.current = null;
+  pieceDragRef.current = null;
+  piecePreviewRef.current = null;
+  latestPointerRef.current = null;
+  pointerInsideViewportRef.current = false;
+  stopEdgeScrolling();
+  setPiecePreview(null);
+  setDragging(false);
+}
+
+useImperativeHandle(ref, () => ({
+  cancelInteractions: cancelViewportInteractions,
+}));
 
 function scheduleEdgeScrolling() {
   if (edgeScrollFrameRef.current !== null) return;
@@ -884,14 +948,7 @@ function isMovePositionValid(point: Point): boolean {
       width: 0,
       height: 0,
     });
-    latestPointerRef.current = null;
-    pointerInsideViewportRef.current = false;
-    edgeActivationStartedAtRef.current = null;
-    edgePreviousFrameRef.current = null;
-    if (edgeScrollFrameRef.current !== null) {
-      cancelAnimationFrame(edgeScrollFrameRef.current);
-      edgeScrollFrameRef.current = null;
-    }
+    cancelViewportInteractions();
   }, [imageUrl, dispatch]);
 
   useEffect(() => {
@@ -902,6 +959,10 @@ function isMovePositionValid(point: Point): boolean {
       edgeScrollFrameRef.current = null;
       latestPointerRef.current = null;
       pointerInsideViewportRef.current = false;
+      dragRef.current = null;
+      popupDragRef.current = null;
+      pieceDragRef.current = null;
+      piecePreviewRef.current = null;
     };
   }, []);
 
@@ -1083,6 +1144,7 @@ function handlePopupPointerDown(
   event.currentTarget.setPointerCapture(event.pointerId);
   popupDragRef.current = {
     pointerId: event.pointerId,
+    target: event.currentTarget,
     startPointer: { x: event.clientX, y: event.clientY },
     startOffset: popupOffset,
   };
@@ -1105,8 +1167,11 @@ function endPopupDrag(event: React.PointerEvent<HTMLDivElement>) {
   if (popupDragRef.current?.pointerId !== event.pointerId) return;
 
   popupDragRef.current = null;
-  if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-  event.currentTarget.releasePointerCapture(event.pointerId);
+  releasePointerCaptureSafely(event.currentTarget, event.pointerId);
+}
+
+function cancelPopupDrag() {
+  popupDragRef.current = null;
 }
 
 function handleContextMenu(
@@ -1230,6 +1295,7 @@ function handleContextMenu(
     dragRef.current = {
       pointerId:
         event.pointerId,
+      target: event.currentTarget,
 
       startPointer: {
         x:
@@ -1321,18 +1387,14 @@ function handleContextMenu(
       false
     );
 
-    if (
-      event.currentTarget
-        .hasPointerCapture(
-          event.pointerId
-        )
-    ) {
-      event.currentTarget
-        .releasePointerCapture(
-          event.pointerId
-        );
-    }
+    releasePointerCaptureSafely(event.currentTarget, event.pointerId);
     scheduleEdgeScrolling();
+  }
+
+  function cancelMapDrag() {
+    dragRef.current = null;
+    setDragging(false);
+    stopEdgeScrolling();
   }
 
   function handlePiecePointerDown(
@@ -1349,6 +1411,7 @@ function handleContextMenu(
     pieceDragRef.current = {
       pieceId: piece.id,
       pointerId: event.pointerId,
+      target: event.currentTarget,
       startPointer: { x: event.clientX, y: event.clientY },
       startPosition: piece.position,
       grabOffset: {
@@ -1398,9 +1461,7 @@ function handleContextMenu(
     pieceDragRef.current = null;
     piecePreviewRef.current = null;
     setPiecePreview(null);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
+    releasePointerCaptureSafely(event.currentTarget, event.pointerId);
     if (!drag.moved) return;
 
     const previewScreen = mapToScreen(preview.x, preview.y);
@@ -1413,6 +1474,13 @@ function handleContextMenu(
       ) <= FEATURE_MARKER_MIN_DISTANCE;
     });
     onPieceDrop?.(drag.pieceId, preview, location);
+  }
+
+  function cancelPieceDrag() {
+    pieceDragRef.current = null;
+    piecePreviewRef.current = null;
+    setPiecePreview(null);
+    stopEdgeScrolling();
   }
 
   const selectedAnchor = selectedFeature
@@ -1536,8 +1604,9 @@ function cancelSubtitleEdit() {
         endDrag
       }
       onPointerCancel={
-        endDrag
+        cancelMapDrag
       }
+      onLostPointerCapture={cancelMapDrag}
       onPointerEnter={(event) => {
         trackEdgePointer(event.clientX, event.clientY);
       }}
@@ -1607,7 +1676,8 @@ function cancelSubtitleEdit() {
         onPointerDown={(event) => handlePiecePointerDown(event, piece)}
         onPointerMove={handlePiecePointerMove}
         onPointerUp={handlePiecePointerUp}
-        onPointerCancel={handlePiecePointerUp}
+        onPointerCancel={cancelPieceDrag}
+        onLostPointerCapture={cancelPieceDrag}
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -1806,7 +1876,8 @@ function cancelSubtitleEdit() {
       onPointerDown={handlePopupPointerDown}
       onPointerMove={handlePopupPointerMove}
       onPointerUp={endPopupDrag}
-      onPointerCancel={endPopupDrag}
+      onPointerCancel={cancelPopupDrag}
+      onLostPointerCapture={cancelPopupDrag}
     >
       {editingName ? (
   <input
@@ -1846,6 +1917,7 @@ function cancelSubtitleEdit() {
       event.stopPropagation();
     }}
     onClick={() => {
+      popupDragRef.current = null;
       setNameDraft(
         selectedFeature.name
       );
@@ -1887,6 +1959,7 @@ function cancelSubtitleEdit() {
 
   onPointerDown={(event) => event.stopPropagation()}
     onClick={() => {
+      popupDragRef.current = null;
       setSubtitleDraft(selectedFeature.subtitle ?? '');
       setEditingSubtitle(true);
     }}
@@ -1904,6 +1977,7 @@ function cancelSubtitleEdit() {
       aria-label="Add subtitle"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={() => {
+        popupDragRef.current = null;
         setSubtitleDraft('');
         setEditingSubtitle(true);
       }}
@@ -2226,6 +2300,6 @@ function cancelSubtitleEdit() {
 
     </div>
   );
-}
+});
 
 export default MapViewport;
