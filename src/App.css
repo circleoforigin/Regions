@@ -1215,6 +1215,94 @@ button.map-key-parent:hover {
   background: #454545;
 }
 
+.section-geometry-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.section-geometry-layer polygon {
+  fill-opacity: 0.12;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.section-geometry-layer line {
+  stroke: #dddddd;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.section-geometry-layer .section-preview-edge {
+  stroke-dasharray: 5 4;
+  opacity: 0.75;
+}
+
+.section-node {
+  position: absolute;
+  z-index: 8;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 3px solid #dddddd;
+  border-radius: 50%;
+  background: #252525;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.section-node:hover {
+  width: 14px;
+  height: 14px;
+}
+
+.section-node.selected {
+  box-shadow: 0 0 0 3px #ffffff88;
+}
+
+.section-node.origin {
+  box-shadow: 0 0 0 3px #ffffff88;
+}
+
+.section-node.closable {
+  cursor: cell;
+  box-shadow: 0 0 0 4px #ffffffaa;
+}
+
+.map-viewport.section-drawing {
+  cursor: crosshair;
+}
+
+.section-context-menu {
+  z-index: 510;
+}
+
+.section-properties-dialog {
+  display: grid;
+  gap: 14px;
+}
+
+.section-properties-dialog label {
+  display: grid;
+  gap: 6px;
+}
+
+.section-properties-buttons .destructive {
+  margin-right: auto;
+  color: #f0a0a0;
+}
+
+.piece-parent-menu-label {
+  padding: 5px 14px 2px;
+  color: #999999;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
 .regions-empty-map {
   text-align: center;
 }

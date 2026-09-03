@@ -26,6 +26,7 @@ export function createDefaultMap(
     },
     parentMapId: options.parentMapId,
     featureIds: [],
+    sectionIds: [],
     createdAt: options.now,
     updatedAt: options.now,
   };

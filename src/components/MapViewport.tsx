@@ -14,6 +14,18 @@ import RichTextEditor from './RichTextEditor';
 import type { RichTextDocument } from '../models/RichText';
 import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
 import type { Piece } from '../models/Piece';
+import {
+  SECTION_DEFAULTS,
+  type Section,
+  type SectionEdge,
+  type SectionKind,
+  type SectionNode,
+  type SectionPoint,
+} from '../models/Section';
+import {
+  closestPointOnSegment,
+  pointToSegmentDistance,
+} from '../sections/SectionGeometry';
 
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
@@ -91,6 +103,7 @@ export interface LocationMapMetadata {
 
 interface MapViewportProps {
   imageUrl: string;
+  mapId: string;
   mapName: string;
   mapTypeId?: string;
   parentMapName: string;
@@ -143,7 +156,9 @@ onPieceDrop?: (
 ) => void;
 onEditPiece?: (piece: Piece) => void;
 onDeletePiece?: (piece: Piece) => void;
-onFocusPiece?: (pieceId: string) => void;
+  onFocusPiece?: (pieceId: string) => void;
+  pieceParentMapAvailable?: boolean;
+  onExitPieceToParent?: (pieceId: string, follow: boolean) => void;
 onViewportCenterChange?: (position: Point) => void;
 focusPiecePosition?: Point | null;
 focusPieceRequestId?: number;
@@ -174,7 +189,24 @@ pendingArrivalPlacement?: {
   piece?: Piece;
 };
 onPendingArrivalCommit?: (position: Point) => void;
-onPendingArrivalCancel?: () => void;
+  onPendingArrivalCancel?: () => void;
+  sections?: Section[];
+  sectionNodes?: SectionNode[];
+  sectionEdges?: SectionEdge[];
+  sectionMode?: SectionKind | null;
+  onSectionModeChange?: (mode: SectionKind | null) => void;
+  onCreateSection?: (
+    section: Section,
+    nodes: SectionNode[],
+    edges: SectionEdge[]
+  ) => void;
+  onUpdateSectionData?: (
+    sections: Section[],
+    nodes: SectionNode[],
+    edges: SectionEdge[]
+  ) => void;
+  onDeleteSection?: (sectionId: string) => void;
+  onSectionError?: (message: string) => void;
 
   onZoomStateChange?: (
     state: {
@@ -193,11 +225,13 @@ onPendingArrivalCancel?: () => void;
 
 export interface MapViewportHandle {
   cancelInteractions(): void;
+  cancelSectionDraft(): void;
 }
 
 const MapViewport = forwardRef<MapViewportHandle, MapViewportProps>(
 function MapViewport({
   imageUrl,
+  mapId,
   mapName,
   mapTypeId,
   parentMapName,
@@ -225,6 +259,8 @@ function MapViewport({
   onEditPiece,
   onDeletePiece,
   onFocusPiece,
+  pieceParentMapAvailable = false,
+  onExitPieceToParent,
   onViewportCenterChange,
   focusPiecePosition,
   focusPieceRequestId,
@@ -237,6 +273,15 @@ function MapViewport({
   pendingArrivalPlacement,
   onPendingArrivalCommit,
   onPendingArrivalCancel,
+  sections = [],
+  sectionNodes = [],
+  sectionEdges = [],
+  sectionMode = null,
+  onSectionModeChange,
+  onCreateSection,
+  onUpdateSectionData,
+  onDeleteSection,
+  onSectionError,
   onZoomStateChange,
   onMapMetadataChange,
 }: MapViewportProps, ref) {
@@ -322,6 +367,54 @@ function MapViewport({
     x: number;
     y: number;
   } | null>(null);
+  const [sectionDraft, setSectionDraft] = useState<{
+    kind: SectionKind;
+    sectionId: string;
+    nodes: SectionNode[];
+    edges: SectionEdge[];
+    attachedEdgeId?: string;
+  } | null>(null);
+  const [sectionPointer, setSectionPointer] =
+    useState<SectionPoint | null>(null);
+  const [sectionContextMenu, setSectionContextMenu] = useState<{
+    kind: 'node' | 'edge';
+    id: string;
+    x: number;
+    y: number;
+    point: SectionPoint;
+  } | null>(null);
+  const [movingSectionNode, setMovingSectionNode] = useState<{
+    nodeId: string;
+    original: SectionPoint;
+    position: SectionPoint;
+    pointerId?: number;
+  } | null>(null);
+  const [editingSection, setEditingSection] = useState<Section | null>(null);
+  const [sectionNameDraft, setSectionNameDraft] = useState('');
+  const [sectionColorDraft, setSectionColorDraft] = useState('#ffffff');
+
+  function isSectionVisible(section: Section) {
+    if (section.kind === 'area') return layerVisibility.areas !== false;
+    if (section.kind === 'zone') return layerVisibility.zones !== false;
+    if (section.kind === 'border') return layerVisibility.borders !== false;
+    return layerVisibility.boundary !== false;
+  }
+
+  const visibleSections = sections.filter(isSectionVisible);
+  const visibleEdgeIds = new Set(visibleSections.flatMap((section) => {
+    return section.edgeIds;
+  }));
+  const visibleEdges = sectionEdges.filter((edge) => {
+    return visibleEdgeIds.has(edge.id);
+  });
+  const visibleNodeIds = new Set(visibleEdges.flatMap((edge) => {
+    return [edge.startNodeId, edge.endNodeId];
+  }));
+  const displayedSectionNodes = sectionNodes.map((node) => {
+    if (movingSectionNode?.nodeId !== node.id) return node;
+    return { ...node, position: movingSectionNode.position };
+  });
+
   const [arrivalPreviewState, setArrivalPreviewState] = useState<{
     key: string;
     position: Point;
@@ -567,10 +660,16 @@ function cancelViewportInteractions() {
   stopEdgeScrolling();
   setPiecePreview(null);
   setDragging(false);
+  setMovingSectionNode(null);
+  setSectionContextMenu(null);
 }
 
 useImperativeHandle(ref, () => ({
   cancelInteractions: cancelViewportInteractions,
+  cancelSectionDraft() {
+    setSectionDraft(null);
+    setSectionPointer(null);
+  },
 }));
 
 function scheduleEdgeScrolling() {
@@ -949,6 +1048,11 @@ function isMovePositionValid(point: Point): boolean {
       height: 0,
     });
     cancelViewportInteractions();
+    setSectionDraft(null);
+    setSectionPointer(null);
+    setSectionContextMenu(null);
+    setMovingSectionNode(null);
+    setEditingSection(null);
   }, [imageUrl, dispatch]);
 
   useEffect(() => {
@@ -1018,6 +1122,23 @@ function isMovePositionValid(point: Point): boolean {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onPendingArrivalCancel, pendingArrivalPlacement]);
+
+  useEffect(() => {
+    if (!movingSectionNode && !sectionDraft) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (pendingArrivalPlacement) return;
+      event.preventDefault();
+      if (movingSectionNode) {
+        setMovingSectionNode(null);
+        return;
+      }
+      setSectionDraft(null);
+      setSectionPointer(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [movingSectionNode, pendingArrivalPlacement, sectionDraft]);
 
   useEffect(() => {
     const popup = popupRef.current;
@@ -1174,6 +1295,182 @@ function cancelPopupDrag() {
   popupDragRef.current = null;
 }
 
+function getSectionOwner(edgeOrNodeId: string) {
+  return visibleSections.find((section) => {
+    return section.edgeIds.some((edgeId) => {
+      if (edgeId === edgeOrNodeId) return true;
+      const edge = sectionEdges.find((item) => item.id === edgeId);
+      return edge?.startNodeId === edgeOrNodeId ||
+        edge?.endNodeId === edgeOrNodeId;
+    });
+  });
+}
+
+function appendDraftNode(position: SectionPoint) {
+  if (!sectionMode) return;
+  if (!sectionDraft) {
+    const node: SectionNode = {
+      id: crypto.randomUUID(),
+      mapId,
+      position,
+    };
+    setSectionDraft({
+      kind: sectionMode,
+      sectionId: crypto.randomUUID(),
+      nodes: [node],
+      edges: [],
+    });
+    return;
+  }
+  const previous = sectionDraft.nodes.at(-1);
+  if (!previous) return;
+  const node: SectionNode = {
+    id: crypto.randomUUID(),
+    mapId: previous.mapId,
+    position,
+  };
+  const edge: SectionEdge = {
+    id: crypto.randomUUID(),
+    mapId: previous.mapId,
+    startNodeId: previous.id,
+    endNodeId: node.id,
+  };
+  setSectionDraft({
+    ...sectionDraft,
+    nodes: [...sectionDraft.nodes, node],
+    edges: [...sectionDraft.edges, edge],
+  });
+}
+
+function completeSectionDraft() {
+  if (!sectionDraft || sectionDraft.nodes.length < 3) return;
+  const origin = sectionDraft.nodes[0];
+  const last = sectionDraft.nodes.at(-1);
+  if (!last) return;
+  const closingEdge: SectionEdge = {
+    id: crypto.randomUUID(),
+    mapId: origin.mapId,
+    startNodeId: last.id,
+    endNodeId: origin.id,
+  };
+  const edges = [...sectionDraft.edges, closingEdge];
+  const defaults = SECTION_DEFAULTS[sectionDraft.kind];
+  const now = new Date();
+  onCreateSection?.({
+    id: sectionDraft.sectionId,
+    mapId: origin.mapId,
+    kind: sectionDraft.kind,
+    name: defaults.name,
+    color: defaults.color,
+    edgeIds: edges.map((edge) => edge.id),
+    createdAt: now,
+    updatedAt: now,
+  }, sectionDraft.nodes, edges);
+  setSectionDraft(null);
+  setSectionPointer(null);
+}
+
+function deleteSectionNode(nodeId: string) {
+  const owner = getSectionOwner(nodeId);
+  if (!owner) return;
+  if (owner.edgeIds.length <= 3) {
+    onSectionError?.('A Section requires at least three nodes.');
+    return;
+  }
+  const ownerEdges = owner.edgeIds.map((id) => {
+    return sectionEdges.find((edge) => edge.id === id);
+  }).filter((edge): edge is SectionEdge => Boolean(edge));
+  const incoming = ownerEdges.find((edge) => edge.endNodeId === nodeId);
+  const outgoing = ownerEdges.find((edge) => edge.startNodeId === nodeId);
+  if (!incoming || !outgoing) return;
+  const shared = sections.some((section) => {
+    return section.id !== owner.id &&
+      (section.edgeIds.includes(incoming.id) ||
+        section.edgeIds.includes(outgoing.id));
+  });
+  if (shared) {
+    onSectionError?.('A shared Section node cannot be deleted yet.');
+    return;
+  }
+  const replacement: SectionEdge = {
+    id: crypto.randomUUID(),
+    mapId: incoming.mapId,
+    startNodeId: incoming.startNodeId,
+    endNodeId: outgoing.endNodeId,
+  };
+  const removeIds = new Set([incoming.id, outgoing.id]);
+  const insertAt = owner.edgeIds.indexOf(incoming.id);
+  const nextEdgeIds = owner.edgeIds.filter((id) => !removeIds.has(id));
+  nextEdgeIds.splice(insertAt, 0, replacement.id);
+  onUpdateSectionData?.(
+    sections.map((section) => section.id === owner.id
+      ? { ...section, edgeIds: nextEdgeIds, updatedAt: new Date() }
+      : section),
+    sectionNodes.filter((node) => node.id !== nodeId),
+    [...sectionEdges.filter((edge) => !removeIds.has(edge.id)), replacement]
+  );
+  setSectionContextMenu(null);
+}
+
+function addNodeToEdge(edgeId: string, position: SectionPoint) {
+  const edge = sectionEdges.find((item) => item.id === edgeId);
+  if (!edge) return;
+  const node: SectionNode = {
+    id: crypto.randomUUID(),
+    mapId: edge.mapId,
+    position,
+  };
+  const first: SectionEdge = {
+    ...edge,
+    id: crypto.randomUUID(),
+    endNodeId: node.id,
+  };
+  const second: SectionEdge = {
+    ...edge,
+    id: crypto.randomUUID(),
+    startNodeId: node.id,
+  };
+  onUpdateSectionData?.(
+    sections.map((section) => {
+      const index = section.edgeIds.indexOf(edgeId);
+      if (index < 0) return section;
+      const edgeIds = [...section.edgeIds];
+      edgeIds.splice(index, 1, first.id, second.id);
+      return { ...section, edgeIds, updatedAt: new Date() };
+    }),
+    [...sectionNodes, node],
+    [...sectionEdges.filter((item) => item.id !== edgeId), first, second]
+  );
+  setSectionContextMenu(null);
+}
+
+function startSectionFromEdge(edgeId: string) {
+  const edge = sectionEdges.find((item) => item.id === edgeId);
+  const owner = getSectionOwner(edgeId);
+  if (!edge || !owner) return;
+  const kind = owner.kind === 'area' || owner.kind === 'border'
+    ? owner.kind
+    : sectionMode;
+  if (!kind) return;
+  const start = sectionNodes.find((node) => node.id === edge.startNodeId);
+  const end = sectionNodes.find((node) => node.id === edge.endNodeId);
+  if (!start || !end) return;
+  const draft = {
+    kind,
+    sectionId: crypto.randomUUID(),
+    nodes: [start, end],
+    edges: [edge],
+    attachedEdgeId: edge.id,
+  };
+  if (kind === sectionMode) {
+    setSectionDraft(draft);
+  } else {
+    onSectionModeChange?.(kind);
+    requestAnimationFrame(() => setSectionDraft(draft));
+  }
+  setSectionContextMenu(null);
+}
+
 function handleContextMenu(
   event:
     React.MouseEvent<HTMLDivElement>
@@ -1206,6 +1503,37 @@ function handleContextMenu(
 
   const rect =
     viewport.getBoundingClientRect();
+
+  const edge = visibleEdges.find((candidate) => {
+    const start = displayedSectionNodes.find((node) => {
+      return node.id === candidate.startNodeId;
+    });
+    const end = displayedSectionNodes.find((node) => {
+      return node.id === candidate.endNodeId;
+    });
+    if (!start || !end) return false;
+    return pointToSegmentDistance(point, start.position, end.position) <=
+      8 / scale;
+  });
+  if (edge) {
+    const start = displayedSectionNodes.find((node) => {
+      return node.id === edge.startNodeId;
+    });
+    const end = displayedSectionNodes.find((node) => {
+      return node.id === edge.endNodeId;
+    });
+    if (start && end) {
+      setSectionContextMenu({
+        kind: 'edge',
+        id: edge.id,
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        point: closestPointOnSegment(point, start.position, end.position),
+      });
+      return;
+    }
+  }
+  setSectionContextMenu(null);
 
   dispatch({
     type: 'contextMenu.open',
@@ -1266,6 +1594,28 @@ function handleContextMenu(
       dispatch({ type: 'featureMove.cancel' });
       return;
     }
+    if (event.button === 0 && movingSectionNode) {
+      const point = screenToMap(event.clientX, event.clientY);
+      if (!point || !isPointInsideMap(point)) return;
+      onUpdateSectionData?.(
+        sections,
+        sectionNodes.map((node) => node.id === movingSectionNode.nodeId
+          ? { ...node, position: point }
+          : node),
+        sectionEdges
+      );
+      setMovingSectionNode(null);
+      return;
+    }
+    const target = event.target;
+    const mapBackground = target === event.currentTarget ||
+      target instanceof HTMLImageElement;
+    if (event.button === 0 && sectionMode && mapBackground) {
+      const point = screenToMap(event.clientX, event.clientY);
+      if (!point || !isPointInsideMap(point)) return;
+      appendDraftNode(point);
+      return;
+    }
 
     if (event.button !== 0 && event.button !== 1) return;
 
@@ -1280,6 +1630,7 @@ function handleContextMenu(
     dispatch({ type: 'feature.clearSelection' });
     dispatch({ type: 'contextMenu.close' });
     setPieceContextMenu(null);
+    setSectionContextMenu(null);
 
     if (event.button === 0) return;
 
@@ -1319,6 +1670,13 @@ function handleContextMenu(
       React.PointerEvent<HTMLDivElement>
   ) {
     trackEdgePointer(event.clientX, event.clientY);
+    if (sectionMode || movingSectionNode) {
+      const point = screenToMap(event.clientX, event.clientY);
+      setSectionPointer(point);
+      if (point && movingSectionNode) {
+        setMovingSectionNode({ ...movingSectionNode, position: point });
+      }
+    }
     if (pendingArrivalPlacement) {
       const point = screenToMap(event.clientX, event.clientY);
       if (point) {
@@ -1583,6 +1941,80 @@ function cancelSubtitleEdit() {
   setEditingSubtitle(false);
 }
 
+function handleSectionNodePointerDown(
+  event: React.PointerEvent<HTMLButtonElement>,
+  node: SectionNode
+) {
+  event.stopPropagation();
+  if (event.button !== 0) return;
+  if (event.shiftKey) {
+    event.preventDefault();
+    deleteSectionNode(node.id);
+    return;
+  }
+  if (!event.ctrlKey) return;
+  event.preventDefault();
+  event.currentTarget.setPointerCapture(event.pointerId);
+  setMovingSectionNode({
+    nodeId: node.id,
+    original: node.position,
+    position: node.position,
+    pointerId: event.pointerId,
+  });
+}
+
+function handleSectionNodePointerMove(
+  event: React.PointerEvent<HTMLButtonElement>
+) {
+  if (movingSectionNode?.pointerId !== event.pointerId) return;
+  const point = screenToMap(event.clientX, event.clientY);
+  if (!point) return;
+  setMovingSectionNode({ ...movingSectionNode, position: point });
+}
+
+function handleSectionNodePointerUp(
+  event: React.PointerEvent<HTMLButtonElement>
+) {
+  if (movingSectionNode?.pointerId !== event.pointerId) return;
+  releasePointerCaptureSafely(event.currentTarget, event.pointerId);
+  onUpdateSectionData?.(
+    sections,
+    sectionNodes.map((node) => node.id === movingSectionNode.nodeId
+      ? { ...node, position: movingSectionNode.position }
+      : node),
+    sectionEdges
+  );
+  setMovingSectionNode(null);
+}
+
+function cancelSectionNodeMove() {
+  setMovingSectionNode(null);
+}
+
+function openSectionProperties(section: Section) {
+  setEditingSection(section);
+  setSectionNameDraft(section.name);
+  setSectionColorDraft(section.color);
+  setSectionContextMenu(null);
+}
+
+function saveSectionProperties() {
+  if (!editingSection || !sectionNameDraft.trim()) return;
+  onUpdateSectionData?.(
+    sections.map((section) => section.id === editingSection.id
+      ? {
+          ...section,
+          name: sectionNameDraft.trim(),
+          color: sectionColorDraft,
+          updatedAt: new Date(),
+        }
+      : section),
+    sectionNodes,
+    sectionEdges
+  );
+  setEditingSection(null);
+}
+
   return (
     <div
       ref={viewportRef}
@@ -1590,6 +2022,7 @@ function cancelSubtitleEdit() {
         'map-viewport',
         dragging ? 'dragging' : '',
         state.editingMode === 'move-feature' ? 'moving-feature' : '',
+        sectionMode ? 'section-drawing' : '',
       ].filter(Boolean).join(' ')}
       onWheel={
         handleWheel
@@ -1648,6 +2081,128 @@ function cancelSubtitleEdit() {
     `translate(-50%, -50%) scale(${scale * registration.scale})`,
 }}
 />
+
+<svg className="section-geometry-layer" aria-hidden="true">
+  {visibleSections.map((section) => {
+    const points = section.edgeIds.map((edgeId) => {
+      const edge = sectionEdges.find((item) => item.id === edgeId);
+      const node = displayedSectionNodes.find((item) => {
+        return item.id === edge?.startNodeId;
+      });
+      return node ? mapToScreen(node.position.x, node.position.y) : null;
+    }).filter((point): point is Point => point !== null);
+    return (
+      <polygon
+        key={section.id}
+        points={points.map((point) => `${point.x},${point.y}`).join(' ')}
+        fill={section.color}
+        stroke={section.color}
+      />
+    );
+  })}
+  {sectionDraft?.edges.map((edge) => {
+    const start = sectionDraft.nodes.find((node) => {
+      return node.id === edge.startNodeId;
+    });
+    const end = sectionDraft.nodes.find((node) => {
+      return node.id === edge.endNodeId;
+    });
+    if (!start || !end) return null;
+    const a = mapToScreen(start.position.x, start.position.y);
+    const b = mapToScreen(end.position.x, end.position.y);
+    return <line key={edge.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />;
+  })}
+  {sectionDraft && sectionPointer && (() => {
+    const last = sectionDraft.nodes.at(-1);
+    if (!last) return null;
+    const a = mapToScreen(last.position.x, last.position.y);
+    const b = mapToScreen(sectionPointer.x, sectionPointer.y);
+    return <line className="section-preview-edge" x1={a.x} y1={a.y}
+      x2={b.x} y2={b.y} />;
+  })()}
+</svg>
+
+{displayedSectionNodes.filter((node) => {
+  return visibleNodeIds.has(node.id);
+}).map((node) => {
+  const position = mapToScreen(node.position.x, node.position.y);
+  const owner = getSectionOwner(node.id);
+  if (!owner) return null;
+  return (
+    <button
+      key={node.id}
+      type="button"
+      className={[
+        'section-node',
+        sectionContextMenu?.kind === 'node' &&
+          sectionContextMenu.id === node.id ? 'selected' : '',
+        movingSectionNode?.nodeId === node.id ? 'selected' : '',
+      ].filter(Boolean).join(' ')}
+      style={{
+        left: position.x,
+        top: position.y,
+        borderColor: owner.color,
+      }}
+      title={`${owner.name} node`}
+      onPointerDown={(event) => handleSectionNodePointerDown(event, node)}
+      onPointerMove={handleSectionNodePointerMove}
+      onPointerUp={handleSectionNodePointerUp}
+      onPointerCancel={cancelSectionNodeMove}
+      onLostPointerCapture={cancelSectionNodeMove}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const viewport = viewportRef.current;
+        if (!viewport) return;
+        const rect = viewport.getBoundingClientRect();
+        setSectionContextMenu({
+          kind: 'node',
+          id: node.id,
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+          point: node.position,
+        });
+      }}
+    />
+  );
+})}
+
+{sectionDraft?.nodes.map((node, index) => {
+  const position = mapToScreen(node.position.x, node.position.y);
+  const closable = index === 0 && sectionDraft.nodes.length >= 3;
+  return (
+    <button
+      key={node.id}
+      type="button"
+      className={[
+        'section-node',
+        index === 0 ? 'origin' : '',
+        closable ? 'closable' : '',
+      ].filter(Boolean).join(' ')}
+      style={{ left: position.x, top: position.y }}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        if (!event.shiftKey) return;
+        event.preventDefault();
+        if (index === 0) {
+          setSectionDraft(null);
+          return;
+        }
+        const nodes = sectionDraft.nodes.filter((item) => item.id !== node.id);
+        const edges = nodes.slice(1).map((item, itemIndex) => ({
+          id: crypto.randomUUID(),
+          mapId: item.mapId,
+          startNodeId: nodes[itemIndex].id,
+          endNodeId: item.id,
+        }));
+        setSectionDraft({ ...sectionDraft, nodes, edges });
+      }}
+      onClick={() => {
+        if (closable) completeSectionDraft();
+      }}
+    />
+  );
+})}
 
 {pieces.map((piece) => {
   const position = piecePreview?.pieceId === piece.id
@@ -2104,6 +2659,70 @@ function cancelSubtitleEdit() {
   </div>
 )}
 
+{sectionContextMenu && (
+  <div
+    className="map-context-menu section-context-menu"
+    style={{ left: sectionContextMenu.x, top: sectionContextMenu.y }}
+    onPointerDown={(event) => event.stopPropagation()}
+  >
+    {sectionContextMenu.kind === 'node' ? (
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            const node = sectionNodes.find((item) => {
+              return item.id === sectionContextMenu.id;
+            });
+            if (!node) return;
+            setMovingSectionNode({
+              nodeId: node.id,
+              original: node.position,
+              position: node.position,
+            });
+            setSectionContextMenu(null);
+          }}
+        >
+          Move
+        </button>
+        <button
+          type="button"
+          onClick={() => deleteSectionNode(sectionContextMenu.id)}
+        >
+          Delete
+        </button>
+        <div className="map-context-separator" />
+        <button
+          type="button"
+          onClick={() => {
+            const owner = getSectionOwner(sectionContextMenu.id);
+            if (owner) openSectionProperties(owner);
+          }}
+        >
+          Section...
+        </button>
+      </>
+    ) : (
+      <>
+        <button
+          type="button"
+          onClick={() => addNodeToEdge(
+            sectionContextMenu.id,
+            sectionContextMenu.point
+          )}
+        >
+          Add Node
+        </button>
+        <button
+          type="button"
+          onClick={() => startSectionFromEdge(sectionContextMenu.id)}
+        >
+          New Section
+        </button>
+      </>
+    )}
+  </div>
+)}
+
 {contextMenu && (
   <div
     className="map-context-menu"
@@ -2266,6 +2885,28 @@ function cancelSubtitleEdit() {
         Edit...
       </button>
       <div className="map-context-separator" />
+      <div className="piece-parent-menu-label">Go to Parent Map</div>
+      <button
+        type="button"
+        disabled={!pieceParentMapAvailable}
+        onClick={() => {
+          onExitPieceToParent?.(piece.id, false);
+          setPieceContextMenu(null);
+        }}
+      >
+        Send
+      </button>
+      <button
+        type="button"
+        disabled={!pieceParentMapAvailable}
+        onClick={() => {
+          onExitPieceToParent?.(piece.id, true);
+          setPieceContextMenu(null);
+        }}
+      >
+        Follow
+      </button>
+      <div className="map-context-separator" />
       <button
         type="button"
         onClick={() => {
@@ -2278,6 +2919,58 @@ function cancelSubtitleEdit() {
     </div>
   );
 })()}
+
+{editingSection && (
+  <div className="dialog-backdrop">
+    <div className="dialog section-properties-dialog">
+      <h2>
+        {SECTION_DEFAULTS[editingSection.kind].name} Properties
+      </h2>
+      <label>
+        Name
+        <input
+          type="text"
+          value={sectionNameDraft}
+          onChange={(event) => setSectionNameDraft(event.target.value)}
+          autoFocus
+        />
+      </label>
+      <label>
+        Color
+        <input
+          type="color"
+          value={sectionColorDraft}
+          onChange={(event) => setSectionColorDraft(event.target.value)}
+        />
+      </label>
+      <div className="dialog-buttons section-properties-buttons">
+        <button
+          type="button"
+          className="destructive"
+          onClick={() => {
+            if (!window.confirm(`Delete Section "${editingSection.name}"?`)) {
+              return;
+            }
+            onDeleteSection?.(editingSection.id);
+            setEditingSection(null);
+          }}
+        >
+          Delete Section
+        </button>
+        <button type="button" onClick={() => setEditingSection(null)}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!sectionNameDraft.trim()}
+          onClick={saveSectionProperties}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
     <MapKey
       mapName={mapName}

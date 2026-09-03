@@ -14,9 +14,11 @@ export interface Map {
   imageRegistration?: MapImageRegistration;
 
   parentMapId?: string;
+  parentLocationId?: string;
   featureTypeId?: string;
 
   featureIds: string[];
+  sectionIds?: string[];
 
   createdAt: Date;
   updatedAt: Date;

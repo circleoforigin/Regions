@@ -23,7 +23,16 @@ import type { Feature } from './models/Feature';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import type { Piece, PieceShape } from './models/Piece';
+import type {
+  Section,
+  SectionEdge,
+  SectionKind,
+  SectionNode,
+} from './models/Section';
 import { featureRepository } from './features/FeatureRepository';
+import { sectionRepository } from './sections/SectionRepository';
+import { sectionEdgeRepository } from './sections/SectionEdgeRepository';
+import { sectionNodeRepository } from './sections/SectionNodeRepository';
 
 import { mapRepository} from './maps/MapRepository';
 import { createDefaultMap } from './maps/DefaultMap';
@@ -89,6 +98,18 @@ function App() {
   );
 
   const [activeFeatures, setActiveFeatures] = useState<Feature[]>([]);
+  const [activeSections, setActiveSections] = useState<Section[]>([]);
+  const [activeSectionNodes, setActiveSectionNodes] =
+    useState<SectionNode[]>([]);
+  const [activeSectionEdges, setActiveSectionEdges] =
+    useState<SectionEdge[]>([]);
+  const [sectionMode, setSectionMode] = useState<SectionKind | null>(null);
+  const [deletedSectionIds, setDeletedSectionIds] =
+    useState<Set<string>>(() => new Set());
+  const [deletedSectionNodeIds, setDeletedSectionNodeIds] =
+    useState<Set<string>>(() => new Set());
+  const [deletedSectionEdgeIds, setDeletedSectionEdgeIds] =
+    useState<Set<string>>(() => new Set());
 
   const [
     activeMapImageUrl,
@@ -321,6 +342,42 @@ const pendingProjectActionRef =
 
   useEffect(() => {
     let cancelled = false;
+    const map = activeMap;
+
+    async function loadSections() {
+      await Promise.resolve();
+      if (cancelled) return;
+      setActiveSections([]);
+      setActiveSectionNodes([]);
+      setActiveSectionEdges([]);
+      if (!map) return;
+      const sections = await sectionRepository.loadSections(
+        map.sectionIds ?? []
+      );
+      const edgeIds = sections.flatMap((section) => section.edgeIds);
+      const edges = await sectionEdgeRepository.loadEdges(edgeIds);
+      const nodeIds = Array.from(new Set(edges.flatMap((edge) => {
+        return [edge.startNodeId, edge.endNodeId];
+      })));
+      const nodes = await sectionNodeRepository.loadNodes(nodeIds);
+      if (cancelled) return;
+      setActiveSections(sections);
+      setActiveSectionEdges(edges);
+      setActiveSectionNodes(nodes);
+    }
+
+    void loadSections().catch((error) => {
+      if (!cancelled) console.error('Unable to load Sections:', error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  // Section IDs change locally after creation; reload only on Map identity.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMap?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
 
     async function loadProjectLocationMaps() {
       if (!activeProject) {
@@ -544,6 +601,11 @@ function markProjectDirty() {
   setDirtyRevision((current) => current + 1);
 }
 
+function handleSectionModeChange(mode: SectionKind | null) {
+  mapViewportRef.current?.cancelSectionDraft();
+  setSectionMode(mode);
+}
+
 function resetProjectDirty() {
   dirtyGenerationRef.current += 1;
   setProjectDirty(false);
@@ -612,6 +674,10 @@ function handleNewProject() {
       setActiveFeatures([]);
       setPendingMaps([]);
       setPendingFeatures([]);
+      setDeletedSectionIds(new Set());
+      setDeletedSectionNodeIds(new Set());
+      setDeletedSectionEdgeIds(new Set());
+      setSectionMode(null);
       setZoomControl(null);
       await loadMapImage(rootMap);
       resetProjectDirty();
@@ -728,7 +794,8 @@ function normalizeMap(map: RegionMap): RegionMap {
   const featureIds = Array.isArray(map.featureIds)
     ? map.featureIds
     : [];
-  const normalized = { ...map, featureIds };
+  const sectionIds = Array.isArray(map.sectionIds) ? map.sectionIds : [];
+  const normalized = { ...map, featureIds, sectionIds };
 
   delete (normalized as RegionMap & { features?: Feature[] }).features;
   return normalized;
@@ -762,6 +829,84 @@ async function loadEffectiveMapWithFeatures(mapId: string) {
     map: normalizeMap(effectiveMap),
     features: await loadEffectiveMapFeatures(effectiveMap),
   };
+}
+
+function findParentLocation(childMap: RegionMap, features: Feature[]) {
+  const byId = childMap.parentLocationId
+    ? features.find((feature) => {
+        return feature.id === childMap.parentLocationId;
+      })
+    : undefined;
+  const validById = byId?.type === 'location' &&
+    byId.targetMapId === childMap.id
+    ? byId
+    : undefined;
+  return validById ?? features.find((feature) => {
+    return feature.type === 'location' && feature.targetMapId === childMap.id;
+  });
+}
+
+async function resolveParentLocation(childMap: RegionMap) {
+  if (!childMap.parentMapId) return null;
+  const parent = await loadEffectiveMapWithFeatures(childMap.parentMapId);
+  const parentLocation = findParentLocation(childMap, parent.features);
+  if (!parentLocation) return null;
+  return {
+    parentMap: parent.map,
+    parentFeatures: parent.features,
+    parentLocation,
+  };
+}
+
+async function exitContainedMap(pieceId: string, follow: boolean) {
+  if (!activeProject) return;
+  const piece = activeProject.pieces.find((item) => item.id === pieceId);
+  if (!piece) return;
+  try {
+    const childMap = activeMap?.id === piece.mapId
+      ? activeMap
+      : await loadEffectiveMapWithFeatures(piece.mapId).then((result) => {
+          return result.map;
+        });
+    const parent = await resolveParentLocation(childMap);
+    if (!parent) {
+      setNavigationError('No parent Location could be found for this Map.');
+      return;
+    }
+    const movedPiece = {
+      ...piece,
+      mapId: parent.parentMap.id,
+      position: parent.parentLocation.position,
+    };
+    const updatedProject = {
+      ...activeProject,
+      pieces: activeProject.pieces.map((item) => {
+        return item.id === pieceId ? movedPiece : item;
+      }),
+      activeMapId: follow
+        ? parent.parentMap.id
+        : activeProject.activeMapId,
+    };
+    setActiveProject(updatedProject);
+    markProjectDirty();
+    handleMapEntered(
+      parent.parentMap,
+      updatedProject,
+      childMap.name,
+      'piece',
+      pieceId
+    );
+    if (!follow) return;
+    setActiveMap(parent.parentMap);
+    setActiveFeatures(parent.parentFeatures);
+    setPendingFocusFeatureId(parent.parentLocation.id);
+    await loadMapImage(parent.parentMap);
+    setFocusPiecePosition(parent.parentLocation.position);
+    setFocusPieceRequestId((current) => current + 1);
+  } catch (error) {
+    console.error('Unable to exit contained Map:', error);
+    setNavigationError('Unable to exit this contained Map.');
+  }
 }
 
 function handleMapEntered(
@@ -942,9 +1087,19 @@ async function navigateToParentMap(discardChanges: boolean) {
     sourceMap = restored.map;
   }
   if (!sourceMap.parentMapId) return;
-  const destination = discardChanges
-    ? await loadMapWithFeatures(sourceMap.parentMapId)
-    : await loadEffectiveMapWithFeatures(sourceMap.parentMapId);
+  const containedParent = discardChanges
+    ? null
+    : await resolveParentLocation(sourceMap);
+  const destination = containedParent
+    ? {
+        map: containedParent.parentMap,
+        features: containedParent.parentFeatures,
+      }
+    : discardChanges
+      ? await loadMapWithFeatures(sourceMap.parentMapId)
+      : await loadEffectiveMapWithFeatures(sourceMap.parentMapId);
+  const parentLocation = containedParent?.parentLocation ??
+    findParentLocation(sourceMap, destination.features);
   const updatedProject = { ...project, activeMapId: destination.map.id };
   dispatch({
     type: 'navigation.push',
@@ -953,9 +1108,11 @@ async function navigateToParentMap(discardChanges: boolean) {
   setActiveProject(updatedProject);
   setActiveMap(destination.map);
   setActiveFeatures(destination.features);
-  setPendingFocusFeatureId(null);
+  setPendingFocusFeatureId(parentLocation?.id ?? null);
   await loadMapImage(destination.map);
-  setFocusPiecePosition(getMapArrivalCenter(destination.map));
+  const focusPosition = parentLocation?.position ??
+    getMapArrivalCenter(destination.map);
+  setFocusPiecePosition(focusPosition);
   setFocusPieceRequestId((current) => current + 1);
   handleMapEntered(destination.map, updatedProject, sourceMap.name, 'manual');
 }
@@ -1511,6 +1668,29 @@ async function stageDeleteMap() {
 
   const deletedMap = analysis.map;
   const deletedFeatureIds = new Set(deletedMap.featureIds);
+  const ownedSections = deletedMap.id === activeMap.id
+    ? activeSections
+    : await sectionRepository.loadSections(deletedMap.sectionIds ?? []);
+  const ownedEdges = deletedMap.id === activeMap.id
+    ? activeSectionEdges
+    : await sectionEdgeRepository.loadEdges(ownedSections.flatMap((section) => {
+        return section.edgeIds;
+      }));
+  const ownedNodeIds = new Set(ownedEdges.flatMap((edge) => {
+    return [edge.startNodeId, edge.endNodeId];
+  }));
+  setDeletedSectionIds((current) => new Set([
+    ...current,
+    ...ownedSections.map((section) => section.id),
+  ]));
+  setDeletedSectionEdgeIds((current) => new Set([
+    ...current,
+    ...ownedEdges.map((edge) => edge.id),
+  ]));
+  setDeletedSectionNodeIds((current) => new Set([
+    ...current,
+    ...ownedNodeIds,
+  ]));
   const pendingFeatureIds = new Set(
     pendingFeatures.map((feature) => feature.id)
   );
@@ -1526,6 +1706,10 @@ async function stageDeleteMap() {
   const convertedById = new Map(
     convertedFeatures.map((feature) => [feature.id, feature])
   );
+  clearParentLocationReferences(new Set([
+    ...deletedFeatureIds,
+    ...convertedById.keys(),
+  ]));
 
   if (deletedMap.id !== activeMap.id) {
     setActiveFeatures((current) => current.map((feature) => {
@@ -1611,7 +1795,12 @@ function handleMapParentChange(parentMapId: string) {
   if (!activeMap || activeMap.id === activeProject?.rootMapId) return;
   if (parentMapId === activeMap.id) return;
   if (getDescendantMapIds(activeMap.id).has(parentMapId)) return;
-  setActiveMap({ ...activeMap, parentMapId, updatedAt: new Date() });
+  setActiveMap({
+    ...activeMap,
+    parentMapId,
+    parentLocationId: undefined,
+    updatedAt: new Date(),
+  });
   markProjectDirty();
 }
 
@@ -1626,8 +1815,18 @@ function handleConfirmMakeWorldRoot() {
   }
 
   const now = new Date();
-  const newRoot = { ...mapToMakeRoot, parentMapId: undefined, updatedAt: now };
-  const updatedOldRoot = { ...oldRoot, parentMapId: newRoot.id, updatedAt: now };
+  const newRoot = {
+    ...mapToMakeRoot,
+    parentMapId: undefined,
+    parentLocationId: undefined,
+    updatedAt: now,
+  };
+  const updatedOldRoot = {
+    ...oldRoot,
+    parentMapId: newRoot.id,
+    parentLocationId: undefined,
+    updatedAt: now,
+  };
   setActiveProject({ ...activeProject, rootMapId: newRoot.id });
   setActiveMap(newRoot);
   setPendingMaps((current) => [
@@ -1641,6 +1840,10 @@ function handleConfirmMakeWorldRoot() {
 }
 
 async function handleSelectProject(project: Project) {
+  setSectionMode(null);
+  setDeletedSectionIds(new Set());
+  setDeletedSectionNodeIds(new Set());
+  setDeletedSectionEdgeIds(new Set());
   closeGoToMapDialog();
   deleteMapAnalysisRunIdRef.current += 1;
   setShowDeleteMapDialog(false);
@@ -1714,6 +1917,12 @@ async function saveActiveProject(): Promise<boolean> {
   const maps = pendingMaps;
   const featuresToSave = pendingFeatures;
   const mapsToDelete = pendingMapDeletionIds;
+  const sections = activeSections;
+  const sectionNodes = activeSectionNodes;
+  const sectionEdges = activeSectionEdges;
+  const sectionsToDelete = deletedSectionIds;
+  const nodesToDelete = deletedSectionNodeIds;
+  const edgesToDelete = deletedSectionEdgeIds;
   const generation = dirtyGenerationRef.current;
   const savedAt = new Date();
   const updatedProject: Project = {
@@ -1749,6 +1958,16 @@ async function saveActiveProject(): Promise<boolean> {
 
       await projectRepository.saveProject(updatedProject);
 
+      await Promise.all(sections.map((section) => {
+        return sectionRepository.saveSection(section);
+      }));
+      await Promise.all(sectionNodes.map((node) => {
+        return sectionNodeRepository.saveNode(node);
+      }));
+      await Promise.all(sectionEdges.map((edge) => {
+        return sectionEdgeRepository.saveEdge(edge);
+      }));
+
       await Promise.all(
         Array.from(
           pendingFeatureDeletionIds
@@ -1764,6 +1983,15 @@ async function saveActiveProject(): Promise<boolean> {
           return mapRepository.deleteMap(mapId);
         })
       );
+      await Promise.all(Array.from(sectionsToDelete).map((id) => {
+        return sectionRepository.deleteSection(id);
+      }));
+      await Promise.all(Array.from(nodesToDelete).map((id) => {
+        return sectionNodeRepository.deleteNode(id);
+      }));
+      await Promise.all(Array.from(edgesToDelete).map((id) => {
+        return sectionEdgeRepository.deleteEdge(id);
+      }));
 
       if (dirtyGenerationRef.current === generation) {
         if (updatedMap) setActiveMap(updatedMap);
@@ -1774,6 +2002,9 @@ async function saveActiveProject(): Promise<boolean> {
           new Set()
         );
         setPendingMapDeletionIds(new Set());
+        setDeletedSectionIds(new Set());
+        setDeletedSectionNodeIds(new Set());
+        setDeletedSectionEdgeIds(new Set());
         setProjectDirty(false);
       } else {
         setSaveCompletionRevision((current) => current + 1);
@@ -1811,6 +2042,10 @@ function handleSaveProject() {
 }
 
 function closeProject() {
+  setSectionMode(null);
+  setDeletedSectionIds(new Set());
+  setDeletedSectionNodeIds(new Set());
+  setDeletedSectionEdgeIds(new Set());
   closeGoToMapDialog();
   deleteMapAnalysisRunIdRef.current += 1;
   setShowDeleteMapDialog(false);
@@ -2025,6 +2260,152 @@ function updateFeatureEverywhere(
   setPendingFeatures(updateList);
 }
 
+function handleCreateSection(
+  section: Section,
+  nodes: SectionNode[],
+  edges: SectionEdge[]
+) {
+  if (!activeMap) return;
+  let retainedSections = activeSections;
+  if (section.kind === 'boundary') {
+    const oldBoundaries = activeSections.filter((item) => {
+      return item.kind === 'boundary';
+    });
+    oldBoundaries.forEach((item) => {
+      setDeletedSectionIds((current) => new Set(current).add(item.id));
+    });
+    retainedSections = activeSections.filter((item) => {
+      return item.kind !== 'boundary';
+    });
+    const retainedEdgeIds = new Set(retainedSections.flatMap((item) => {
+      return item.edgeIds;
+    }));
+    const removedEdges = activeSectionEdges.filter((edge) => {
+      return !retainedEdgeIds.has(edge.id);
+    });
+    const retainedNodes = new Set(activeSectionEdges
+      .filter((edge) => retainedEdgeIds.has(edge.id))
+      .flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
+    setActiveSectionEdges((current) => current.filter((edge) => {
+      return retainedEdgeIds.has(edge.id);
+    }));
+    setActiveSectionNodes((current) => current.filter((node) => {
+      return retainedNodes.has(node.id);
+    }));
+    setDeletedSectionEdgeIds((current) => {
+      return new Set([...current, ...removedEdges.map((edge) => edge.id)]);
+    });
+    setDeletedSectionNodeIds((current) => {
+      const removed = activeSectionNodes.filter((node) => {
+        return !retainedNodes.has(node.id);
+      });
+      return new Set([...current, ...removed.map((node) => node.id)]);
+    });
+  }
+  setActiveSections([...retainedSections, section]);
+  setActiveSectionNodes((current) => {
+    const byId = new Map(current.map((node) => [node.id, node]));
+    nodes.forEach((node) => byId.set(node.id, node));
+    return Array.from(byId.values());
+  });
+  setActiveSectionEdges((current) => {
+    const byId = new Map(current.map((edge) => [edge.id, edge]));
+    edges.forEach((edge) => byId.set(edge.id, edge));
+    return Array.from(byId.values());
+  });
+  setActiveMap({
+    ...activeMap,
+    sectionIds: [...retainedSections.map((item) => item.id), section.id],
+    updatedAt: new Date(),
+  });
+  markProjectDirty();
+}
+
+function handleUpdateSectionData(
+  sections: Section[],
+  nodes: SectionNode[],
+  edges: SectionEdge[]
+) {
+  const nextNodeIds = new Set(nodes.map((node) => node.id));
+  const nextEdgeIds = new Set(edges.map((edge) => edge.id));
+  setDeletedSectionNodeIds((current) => new Set([
+    ...current,
+    ...activeSectionNodes
+      .filter((node) => !nextNodeIds.has(node.id))
+      .map((node) => node.id),
+  ]));
+  setDeletedSectionEdgeIds((current) => new Set([
+    ...current,
+    ...activeSectionEdges
+      .filter((edge) => !nextEdgeIds.has(edge.id))
+      .map((edge) => edge.id),
+  ]));
+  setActiveSections(sections);
+  setActiveSectionNodes(nodes);
+  setActiveSectionEdges(edges);
+  markProjectDirty();
+}
+
+function handleDeleteSection(sectionId: string) {
+  if (!activeMap) return;
+  const remainingSections = activeSections.filter((section) => {
+    return section.id !== sectionId;
+  });
+  const retainedEdgeIds = new Set(remainingSections.flatMap((section) => {
+    return section.edgeIds;
+  }));
+  const removedEdges = activeSectionEdges.filter((edge) => {
+    return !retainedEdgeIds.has(edge.id);
+  });
+  const remainingEdges = activeSectionEdges.filter((edge) => {
+    return retainedEdgeIds.has(edge.id);
+  });
+  const retainedNodeIds = new Set(remainingEdges.flatMap((edge) => {
+    return [edge.startNodeId, edge.endNodeId];
+  }));
+  const removedNodes = activeSectionNodes.filter((node) => {
+    return !retainedNodeIds.has(node.id);
+  });
+  setActiveSections(remainingSections);
+  setActiveSectionEdges(remainingEdges);
+  setActiveSectionNodes((current) => current.filter((node) => {
+    return retainedNodeIds.has(node.id);
+  }));
+  setDeletedSectionIds((current) => new Set(current).add(sectionId));
+  setDeletedSectionEdgeIds((current) => {
+    return new Set([...current, ...removedEdges.map((edge) => edge.id)]);
+  });
+  setDeletedSectionNodeIds((current) => {
+    return new Set([...current, ...removedNodes.map((node) => node.id)]);
+  });
+  setActiveMap({
+    ...activeMap,
+    sectionIds: remainingSections.map((section) => section.id),
+    updatedAt: new Date(),
+  });
+  markProjectDirty();
+}
+
+function clearParentLocationReferences(locationIds: Set<string>) {
+  if (activeMap?.parentLocationId &&
+      locationIds.has(activeMap.parentLocationId)) {
+    setActiveMap({ ...activeMap, parentLocationId: undefined });
+  }
+  const affectedMaps = projectMaps.filter((map) => {
+    return map.id !== activeMap?.id &&
+      Boolean(map.parentLocationId) &&
+      locationIds.has(map.parentLocationId ?? '');
+  });
+  if (affectedMaps.length === 0) return;
+  setPendingMaps((current) => {
+    const next = new Map(current.map((map) => [map.id, map]));
+    affectedMaps.forEach((map) => {
+      next.set(map.id, { ...map, parentLocationId: undefined });
+    });
+    return Array.from(next.values());
+  });
+}
+
 function handleFeatureNameChange(
   featureId: string,
   name: string
@@ -2171,6 +2552,9 @@ async function handleDeleteFeature(
     !feature.targetMapId ||
     !feature.targetFeatureId
   ) {
+    if (feature.type === 'location') {
+      clearParentLocationReferences(new Set([feature.id]));
+    }
     setActiveFeatures((current) =>
       current.filter(
         (candidate) =>
@@ -2514,7 +2898,9 @@ async function handleCreateLocation() {
   const childMap = createDefaultMap({
     id: crypto.randomUUID(),
     now,
-    parentMapId: activeMap.id,
+    parentMapId: navigationFeatureKind === 'location'
+      ? activeMap.id
+      : undefined,
   });
   childMap.name = name;
   childMap.featureTypeId = newLocationTypeId || undefined;
@@ -2538,6 +2924,7 @@ async function handleCreateLocation() {
     : null;
   const sourceFeature = location ?? connection?.sourceFeature;
   if (!sourceFeature) return;
+  if (location) childMap.parentLocationId = location.id;
   if (connection) childMap.featureIds = [connection.destinationFeature.id];
 
   setActiveFeatures((current) => [...current, sourceFeature]);
@@ -2818,6 +3205,8 @@ const pendingArrivalPiece = pendingArrival?.pieceId
     mapViewportRef.current?.cancelInteractions();
     setShowFeatureTypesDialog(true);
   }}
+  sectionMode={sectionMode}
+  onSectionModeChange={handleSectionModeChange}
   projectName={
     activeProject?.name
   }
@@ -3753,6 +4142,7 @@ const pendingArrivalPiece = pendingArrival?.pieceId
         ref={mapViewportRef}
         key={activeMap.id}
         imageUrl={activeMapImageUrl}
+        mapId={activeMap.id}
         mapName={activeMap.name}
         mapTypeId={activeMap.featureTypeId}
         parentMapName={parentMapName}
@@ -3791,6 +4181,10 @@ const pendingArrivalPiece = pendingArrival?.pieceId
           setPieceToDelete(piece);
         }}
         onFocusPiece={(pieceId) => void handleFocusPiece(pieceId)}
+        pieceParentMapAvailable={Boolean(activeMap.parentMapId)}
+        onExitPieceToParent={(pieceId, follow) => {
+          void exitContainedMap(pieceId, follow);
+        }}
         onViewportCenterChange={setViewportCenter}
         focusPiecePosition={focusPiecePosition}
         focusPieceRequestId={focusPieceRequestId}
@@ -3809,6 +4203,15 @@ const pendingArrivalPiece = pendingArrival?.pieceId
         onPendingArrivalCancel={() => {
           void cancelPendingArrival();
         }}
+        sections={activeSections}
+        sectionNodes={activeSectionNodes}
+        sectionEdges={activeSectionEdges}
+        sectionMode={sectionMode}
+        onSectionModeChange={handleSectionModeChange}
+        onCreateSection={handleCreateSection}
+        onUpdateSectionData={handleUpdateSectionData}
+        onDeleteSection={handleDeleteSection}
+        onSectionError={setNavigationError}
         onZoomStateChange={setZoomControl}
       />
     ) : (
