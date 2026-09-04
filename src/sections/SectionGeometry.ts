@@ -1,4 +1,9 @@
-import type { SectionPoint } from '../models/Section';
+import type {
+  Section,
+  SectionEdge,
+  SectionNode,
+  SectionPoint,
+} from '../models/Section';
 
 export function closestPointOnSegment(
   point: SectionPoint,
@@ -22,4 +27,42 @@ export function pointToSegmentDistance(
 ): number {
   const closest = closestPointOnSegment(point, start, end);
   return Math.hypot(point.x - closest.x, point.y - closest.y);
+}
+
+export function getSectionPolygon(
+  section: Section,
+  edges: SectionEdge[],
+  nodes: SectionNode[]
+): SectionPoint[] {
+  return section.edgeIds.map((edgeId) => {
+    const edge = edges.find((item) => item.id === edgeId);
+    return nodes.find((node) => node.id === edge?.startNodeId)?.position;
+  }).filter((point): point is SectionPoint => Boolean(point));
+}
+
+export function isPointInPolygon(
+  point: SectionPoint,
+  polygon: SectionPoint[]
+): boolean {
+  if (polygon.length < 3) return false;
+  const onEdge = polygon.some((start, index) => {
+    const end = polygon[(index + 1) % polygon.length];
+    return pointToSegmentDistance(point, start, end) <= 0.000001;
+  });
+  if (onEdge) return true;
+
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1;
+    index < polygon.length;
+    previous = index, index += 1) {
+    const currentPoint = polygon[index];
+    const previousPoint = polygon[previous];
+    const crosses =
+      currentPoint.y > point.y !== previousPoint.y > point.y &&
+      point.x < (previousPoint.x - currentPoint.x) *
+        (point.y - currentPoint.y) /
+        (previousPoint.y - currentPoint.y) + currentPoint.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
 }

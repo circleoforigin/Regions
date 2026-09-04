@@ -9,6 +9,8 @@ import {
   type RegionsLayer,
 } from '../state/RegionsState';
 import type { SectionKind } from '../models/Section';
+import type { Piece } from '../models/Piece';
+import { isPieceTracked } from '../models/Piece';
 
 const LAYER_OPTIONS: { id: RegionsLayer; label: string }[] = [
   { id: 'features', label: 'Features' },
@@ -29,9 +31,10 @@ interface MenuBarProps {
   onGoToParentMap: () => void;
   onDeleteMap: () => void;
   onAddPiece: () => void;
+  onGoToPiece: () => void;
+  onMigratePiece: () => void;
   onAssignMapImage: () => void;
-  autoSave: boolean;
-  onAutoSaveChange: (enabled: boolean) => void;
+  onOpenSettings: () => void;
   onManageFeatureTypes: () => void;
   sectionMode: SectionKind | null;
   onSectionModeChange: (mode: SectionKind | null) => void;
@@ -40,7 +43,7 @@ interface MenuBarProps {
   mapActive: boolean;
   parentMapAvailable: boolean;
   addPieceEnabled: boolean;
-  pieces: { id: string; name: string }[];
+  pieces: Piece[];
   focusedPieceId?: string;
   onFocusPiece: (pieceId: string | null) => void;
 
@@ -65,9 +68,10 @@ function MenuBar({
   onGoToParentMap,
   onDeleteMap,
   onAddPiece,
+  onGoToPiece,
+  onMigratePiece,
   onAssignMapImage,
-  autoSave,
-  onAutoSaveChange,
+  onOpenSettings,
   onManageFeatureTypes,
   sectionMode,
   onSectionModeChange,
@@ -103,6 +107,7 @@ function MenuBar({
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [pieceMenuOpen, setPieceMenuOpen] = useState(false);
   const [sectionsMenuOpen, setSectionsMenuOpen] = useState(false);
+  const trackedPieces = pieces.filter(isPieceTracked);
 
   useEffect(() => {
     if (!fileMenuOpen && !mapMenuOpen && !settingsMenuOpen &&
@@ -321,7 +326,31 @@ function MenuBar({
                 onAddPiece();
               }}
             >
-              Add Piece
+              Add Piece...
+            </button>
+
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={pieces.length === 0}
+              onClick={() => {
+                closeMenus();
+                onGoToPiece();
+              }}
+            >
+              Go to Piece...
+            </button>
+
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={!addPieceEnabled || pieces.length === 0}
+              onClick={() => {
+                closeMenus();
+                onMigratePiece();
+              }}
+            >
+              Migrate Piece...
             </button>
 
             <div className="dropdown-separator" />
@@ -470,17 +499,12 @@ function MenuBar({
             <button
               type="button"
               className="dropdown-item"
-              role="menuitemcheckbox"
-              aria-checked={autoSave}
               onClick={() => {
-                onAutoSaveChange(!autoSave);
                 closeMenus();
+                onOpenSettings();
               }}
             >
-              <span className="dropdown-check">
-                {autoSave ? '✓' : ''}
-              </span>
-              Autosave
+              Settings...
             </button>
 
             <button
@@ -509,7 +533,7 @@ function MenuBar({
       <div className="menu-piece-control">
         <button
           type="button"
-          disabled={pieces.length === 0}
+          disabled={!projectName}
           onClick={() => {
             setPieceMenuOpen((open) => !open);
             setFileMenuOpen(false);
@@ -519,14 +543,20 @@ function MenuBar({
             setSectionsMenuOpen(false);
           }}
         >
-          {pieces.find((piece) => piece.id === focusedPieceId)?.name ??
-            'Piece'}{' '}
+          {trackedPieces.find((piece) => {
+            return piece.id === focusedPieceId;
+          })?.name ?? (
+            trackedPieces.length > 0 ? 'Piece' : 'No Tracked Pieces'
+          )}{' '}
           <span aria-hidden="true">▾</span>
         </button>
 
         {pieceMenuOpen && (
           <div className="dropdown-menu menu-piece-dropdown">
-            {[...pieces]
+            {trackedPieces.length === 0 && (
+              <span className="dropdown-empty">No tracked Pieces</span>
+            )}
+            {[...trackedPieces]
               .sort((left, right) => left.name.localeCompare(right.name))
               .map((piece) => (
                 <button

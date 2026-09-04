@@ -13,7 +13,7 @@ import MapKey from './MapKey';
 import RichTextEditor from './RichTextEditor';
 import type { RichTextDocument } from '../models/RichText';
 import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
-import type { Piece } from '../models/Piece';
+import { isPieceTracked, type Piece } from '../models/Piece';
 import {
   SECTION_DEFAULTS,
   type Section,
@@ -26,6 +26,7 @@ import {
   closestPointOnSegment,
   pointToSegmentDistance,
 } from '../sections/SectionGeometry';
+import { useProximityDismiss } from '../hooks/useProximityDismiss';
 
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
@@ -121,6 +122,7 @@ interface MapViewportProps {
 features: Feature[];
 pieces?: Piece[];
 focusedPieceId?: string;
+edgeScrollingEnabled?: boolean;
 featureTypes: FeatureTypeDefinition[];
 locationMapMetadata?: Record<string, LocationMapMetadata>;
 focusFeatureId?: string | null;
@@ -156,9 +158,8 @@ onPieceDrop?: (
 ) => void;
 onEditPiece?: (piece: Piece) => void;
 onDeletePiece?: (piece: Piece) => void;
+onPieceTrackedChange?: (pieceId: string, tracked: boolean) => void;
   onFocusPiece?: (pieceId: string) => void;
-  pieceParentMapAvailable?: boolean;
-  onExitPieceToParent?: (pieceId: string, follow: boolean) => void;
 onViewportCenterChange?: (position: Point) => void;
 focusPiecePosition?: Point | null;
 focusPieceRequestId?: number;
@@ -244,6 +245,7 @@ function MapViewport({
   features,
   pieces = [],
   focusedPieceId,
+  edgeScrollingEnabled = true,
   featureTypes,
   locationMapMetadata = {},
   focusFeatureId,
@@ -258,9 +260,8 @@ function MapViewport({
   onPieceDrop,
   onEditPiece,
   onDeletePiece,
+  onPieceTrackedChange,
   onFocusPiece,
-  pieceParentMapAvailable = false,
-  onExitPieceToParent,
   onViewportCenterChange,
   focusPiecePosition,
   focusPieceRequestId,
@@ -393,6 +394,26 @@ function MapViewport({
   const [sectionNameDraft, setSectionNameDraft] = useState('');
   const [sectionColorDraft, setSectionColorDraft] = useState('#ffffff');
 
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const pieceContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const sectionContextMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useProximityDismiss({
+    open: contextMenu !== null,
+    ref: contextMenuRef,
+    onDismiss: () => dispatch({ type: 'contextMenu.close' }),
+  });
+  useProximityDismiss({
+    open: pieceContextMenu !== null,
+    ref: pieceContextMenuRef,
+    onDismiss: () => setPieceContextMenu(null),
+  });
+  useProximityDismiss({
+    open: sectionContextMenu !== null,
+    ref: sectionContextMenuRef,
+    onDismiss: () => setSectionContextMenu(null),
+  });
+
   function isSectionVisible(section: Section) {
     if (section.kind === 'area') return layerVisibility.areas !== false;
     if (section.kind === 'zone') return layerVisibility.zones !== false;
@@ -401,13 +422,16 @@ function MapViewport({
   }
 
   const visibleSections = sections.filter(isSectionVisible);
-  const visibleEdgeIds = new Set(visibleSections.flatMap((section) => {
+  const editableSections = sections.filter((section) => {
+    return sectionMode !== null && section.kind === sectionMode;
+  });
+  const editableEdgeIds = new Set(editableSections.flatMap((section) => {
     return section.edgeIds;
   }));
-  const visibleEdges = sectionEdges.filter((edge) => {
-    return visibleEdgeIds.has(edge.id);
+  const editableEdges = sectionEdges.filter((edge) => {
+    return editableEdgeIds.has(edge.id);
   });
-  const visibleNodeIds = new Set(visibleEdges.flatMap((edge) => {
+  const editableNodeIds = new Set(editableEdges.flatMap((edge) => {
     return [edge.startNodeId, edge.endNodeId];
   }));
   const displayedSectionNodes = sectionNodes.map((node) => {
@@ -662,6 +686,9 @@ function cancelViewportInteractions() {
   setDragging(false);
   setMovingSectionNode(null);
   setSectionContextMenu(null);
+  setSectionDraft(null);
+  setSectionPointer(null);
+  setEditingSection(null);
 }
 
 useImperativeHandle(ref, () => ({
@@ -673,6 +700,7 @@ useImperativeHandle(ref, () => ({
 }));
 
 function scheduleEdgeScrolling() {
+  if (!edgeScrollingEnabled) return;
   if (edgeScrollFrameRef.current !== null) return;
   edgeScrollFrameRef.current = requestAnimationFrame((timestamp) => {
     edgeScrollTickRef.current?.(timestamp);
@@ -680,6 +708,10 @@ function scheduleEdgeScrolling() {
 }
 
 function trackEdgePointer(clientX: number, clientY: number) {
+  if (!edgeScrollingEnabled) {
+    stopEdgeScrolling();
+    return;
+  }
   const viewport = viewportRef.current;
   if (!viewport) return;
   const rect = viewport.getBoundingClientRect();
@@ -710,6 +742,10 @@ function getEdgeVelocity(position: number, size: number): number {
 useEffect(() => {
   panRef.current = { x: pan.x, y: pan.y };
 }, [pan.x, pan.y]);
+
+useEffect(() => {
+  if (!edgeScrollingEnabled) stopEdgeScrolling();
+}, [edgeScrollingEnabled]);
 
 useEffect(() => {
   edgeScrollTickRef.current = (timestamp) => {
@@ -1296,7 +1332,18 @@ function cancelPopupDrag() {
 }
 
 function getSectionOwner(edgeOrNodeId: string) {
-  return visibleSections.find((section) => {
+  return sections.find((section) => {
+    return section.edgeIds.some((edgeId) => {
+      if (edgeId === edgeOrNodeId) return true;
+      const edge = sectionEdges.find((item) => item.id === edgeId);
+      return edge?.startNodeId === edgeOrNodeId ||
+        edge?.endNodeId === edgeOrNodeId;
+    });
+  });
+}
+
+function getEditableSectionOwner(edgeOrNodeId: string) {
+  return editableSections.find((section) => {
     return section.edgeIds.some((edgeId) => {
       if (edgeId === edgeOrNodeId) return true;
       const edge = sectionEdges.find((item) => item.id === edgeId);
@@ -1308,6 +1355,10 @@ function getSectionOwner(edgeOrNodeId: string) {
 
 function appendDraftNode(position: SectionPoint) {
   if (!sectionMode) return;
+  const boundaryExists = sections.some((section) => {
+    return section.kind === 'boundary';
+  });
+  if (sectionMode === 'boundary' && boundaryExists) return;
   if (!sectionDraft) {
     const node: SectionNode = {
       id: crypto.randomUUID(),
@@ -1344,6 +1395,14 @@ function appendDraftNode(position: SectionPoint) {
 
 function completeSectionDraft() {
   if (!sectionDraft || sectionDraft.nodes.length < 3) return;
+  const boundaryExists = sections.some((section) => {
+    return section.kind === 'boundary';
+  });
+  if (sectionDraft.kind === 'boundary' && boundaryExists) {
+    setSectionDraft(null);
+    setSectionPointer(null);
+    return;
+  }
   const origin = sectionDraft.nodes[0];
   const last = sectionDraft.nodes.at(-1);
   if (!last) return;
@@ -1371,7 +1430,7 @@ function completeSectionDraft() {
 }
 
 function deleteSectionNode(nodeId: string) {
-  const owner = getSectionOwner(nodeId);
+  const owner = getEditableSectionOwner(nodeId);
   if (!owner) return;
   if (owner.edgeIds.length <= 3) {
     onSectionError?.('A Section requires at least three nodes.');
@@ -1413,6 +1472,7 @@ function deleteSectionNode(nodeId: string) {
 }
 
 function addNodeToEdge(edgeId: string, position: SectionPoint) {
+  if (!getEditableSectionOwner(edgeId)) return;
   const edge = sectionEdges.find((item) => item.id === edgeId);
   if (!edge) return;
   const node: SectionNode = {
@@ -1446,7 +1506,7 @@ function addNodeToEdge(edgeId: string, position: SectionPoint) {
 
 function startSectionFromEdge(edgeId: string) {
   const edge = sectionEdges.find((item) => item.id === edgeId);
-  const owner = getSectionOwner(edgeId);
+  const owner = getEditableSectionOwner(edgeId);
   if (!edge || !owner) return;
   const kind = owner.kind === 'area' || owner.kind === 'border'
     ? owner.kind
@@ -1504,7 +1564,7 @@ function handleContextMenu(
   const rect =
     viewport.getBoundingClientRect();
 
-  const edge = visibleEdges.find((candidate) => {
+  const edge = editableEdges.find((candidate) => {
     const start = displayedSectionNodes.find((node) => {
       return node.id === candidate.startNodeId;
     });
@@ -1577,6 +1637,11 @@ function handleContextMenu(
       React.PointerEvent<HTMLDivElement>
   ) {
     trackEdgePointer(event.clientX, event.clientY);
+    if (event.button === 0) {
+      dispatch({ type: 'contextMenu.close' });
+      setPieceContextMenu(null);
+      setSectionContextMenu(null);
+    }
     if (event.button === 0 && pendingArrivalPlacement) {
       const point = screenToMap(event.clientX, event.clientY);
       if (!point || !isPointInsideMap(point)) return;
@@ -1613,6 +1678,43 @@ function handleContextMenu(
     if (event.button === 0 && sectionMode && mapBackground) {
       const point = screenToMap(event.clientX, event.clientY);
       if (!point || !isPointInsideMap(point)) return;
+      const boundary = sections.find((section) => {
+        return section.kind === 'boundary';
+      });
+      if (sectionMode === 'boundary' && boundary) {
+        const boundaryEdges = boundary.edgeIds
+          .map((id) => sectionEdges.find((edge) => edge.id === id))
+          .filter((edge): edge is SectionEdge => Boolean(edge));
+        const closest = boundaryEdges.map((edge) => {
+          const start = displayedSectionNodes.find((node) => {
+            return node.id === edge.startNodeId;
+          });
+          const end = displayedSectionNodes.find((node) => {
+            return node.id === edge.endNodeId;
+          });
+          if (!start || !end) return null;
+          return {
+            edge,
+            distance: pointToSegmentDistance(
+              point,
+              start.position,
+              end.position
+            ),
+            position: closestPointOnSegment(
+              point,
+              start.position,
+              end.position
+            ),
+          };
+        }).filter((match): match is NonNullable<typeof match> => {
+          return match !== null;
+        }).sort((a, b) => a.distance - b.distance)[0];
+        if (closest && closest.distance <= 8 / scale) {
+          event.preventDefault();
+          addNodeToEdge(closest.edge.id, closest.position);
+        }
+        return;
+      }
       appendDraftNode(point);
       return;
     }
@@ -2094,6 +2196,7 @@ function saveSectionProperties() {
     return (
       <polygon
         key={section.id}
+        className={`section-geometry section-${section.kind}`}
         points={points.map((point) => `${point.x},${point.y}`).join(' ')}
         fill={section.color}
         stroke={section.color}
@@ -2123,7 +2226,7 @@ function saveSectionProperties() {
 </svg>
 
 {displayedSectionNodes.filter((node) => {
-  return visibleNodeIds.has(node.id);
+  return editableNodeIds.has(node.id);
 }).map((node) => {
   const position = mapToScreen(node.position.x, node.position.y);
   const owner = getSectionOwner(node.id);
@@ -2661,6 +2764,7 @@ function saveSectionProperties() {
 
 {sectionContextMenu && (
   <div
+    ref={sectionContextMenuRef}
     className="map-context-menu section-context-menu"
     style={{ left: sectionContextMenu.x, top: sectionContextMenu.y }}
     onPointerDown={(event) => event.stopPropagation()}
@@ -2712,12 +2816,14 @@ function saveSectionProperties() {
         >
           Add Node
         </button>
-        <button
-          type="button"
-          onClick={() => startSectionFromEdge(sectionContextMenu.id)}
-        >
-          New Section
-        </button>
+        {getSectionOwner(sectionContextMenu.id)?.kind !== 'boundary' && (
+          <button
+            type="button"
+            onClick={() => startSectionFromEdge(sectionContextMenu.id)}
+          >
+            New Section
+          </button>
+        )}
       </>
     )}
   </div>
@@ -2725,6 +2831,7 @@ function saveSectionProperties() {
 
 {contextMenu && (
   <div
+    ref={contextMenuRef}
     className="map-context-menu"
     style={{
   left: contextMenu.screenX,
@@ -2861,6 +2968,7 @@ function saveSectionProperties() {
 
   return (
     <div
+      ref={pieceContextMenuRef}
       className="map-context-menu piece-context-menu"
       style={{ left: pieceContextMenu.x, top: pieceContextMenu.y }}
       onPointerDown={(event) => event.stopPropagation()}
@@ -2885,26 +2993,17 @@ function saveSectionProperties() {
         Edit...
       </button>
       <div className="map-context-separator" />
-      <div className="piece-parent-menu-label">Go to Parent Map</div>
       <button
         type="button"
-        disabled={!pieceParentMapAvailable}
         onClick={() => {
-          onExitPieceToParent?.(piece.id, false);
+          onPieceTrackedChange?.(piece.id, piece.tracked === false);
           setPieceContextMenu(null);
         }}
       >
-        Send
-      </button>
-      <button
-        type="button"
-        disabled={!pieceParentMapAvailable}
-        onClick={() => {
-          onExitPieceToParent?.(piece.id, true);
-          setPieceContextMenu(null);
-        }}
-      >
-        Follow
+        <span className="map-context-check">
+          {isPieceTracked(piece) ? '✓' : ''}
+        </span>
+        Track
       </button>
       <div className="map-context-separator" />
       <button

@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import './App.css';
 import type {
@@ -23,6 +29,11 @@ import type { Feature } from './models/Feature';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import type { Piece, PieceShape } from './models/Piece';
+import {
+  DEFAULT_REGIONS_SETTINGS,
+  regionsSettingsRepository,
+  type RegionsSettings,
+} from './settings/RegionsSettingsRepository';
 import type {
   Section,
   SectionEdge,
@@ -33,6 +44,10 @@ import { featureRepository } from './features/FeatureRepository';
 import { sectionRepository } from './sections/SectionRepository';
 import { sectionEdgeRepository } from './sections/SectionEdgeRepository';
 import { sectionNodeRepository } from './sections/SectionNodeRepository';
+import {
+  getSectionPolygon,
+  isPointInPolygon,
+} from './sections/SectionGeometry';
 
 import { mapRepository} from './maps/MapRepository';
 import { createDefaultMap } from './maps/DefaultMap';
@@ -67,7 +82,11 @@ interface MapDeletionAnalysis {
 }
 
 type NavigationFeatureKind = 'location' | 'connection';
-type ArrivalMode = 'manual-placement' | 'connection' | 'legacy-location';
+type ArrivalMode =
+  | 'manual-placement'
+  | 'connection'
+  | 'legacy-location'
+  | 'migration';
 
 interface PendingArrivalIntent {
   mode: ArrivalMode;
@@ -76,7 +95,7 @@ interface PendingArrivalIntent {
   sourceMapName: string;
   sourcePosition?: Feature['position'];
   destinationMapId: string;
-  sourceFeatureId: string;
+  sourceFeatureId?: string;
   destinationFeatureId?: string;
 }
 
@@ -168,7 +187,14 @@ const [
   setProjectDirty,
 ] = useState(false);
 
-const [autoSave, setAutoSave] = useState(false);
+const [regionsSettings, setRegionsSettings] = useState<RegionsSettings>(
+  DEFAULT_REGIONS_SETTINGS
+);
+const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+const [settingsDraft, setSettingsDraft] = useState<RegionsSettings>(
+  DEFAULT_REGIONS_SETTINGS
+);
+const autoSave = regionsSettings.autosaveEnabled;
 
 const [dirtyRevision, setDirtyRevision] = useState(0);
 
@@ -294,6 +320,12 @@ const pendingProjectActionRef =
   const [pieceFillDraft, setPieceFillDraft] = useState('#e4e4e4');
   const [pieceBorderDraft, setPieceBorderDraft] = useState('#222222');
   const [pieceToDelete, setPieceToDelete] = useState<Piece | null>(null);
+  const [showGoToPieceDialog, setShowGoToPieceDialog] = useState(false);
+  const [showMigratePieceDialog, setShowMigratePieceDialog] =
+    useState(false);
+  const [pieceSearch, setPieceSearch] = useState('');
+  const [selectedPieceId, setSelectedPieceId] =
+    useState<string | null>(null);
 
   const [showDeleteMapDialog, setShowDeleteMapDialog] = useState(false);
   const [deleteMapSearch, setDeleteMapSearch] = useState('');
@@ -341,6 +373,24 @@ const pendingProjectActionRef =
   }, [activeMapId, activeProjectId, dispatch]);
 
   useEffect(() => {
+    void regionsSettingsRepository.load()
+      .then((settings) => {
+        setRegionsSettings(settings);
+        setSettingsDraft(settings);
+      })
+      .catch((error) => {
+        console.error('Unable to load Regions settings:', error);
+      });
+  }, []);
+
+  useLayoutEffect(() => {
+    mapViewportRef.current?.cancelInteractions();
+    setSectionMode(null);
+  // Active Map identity is the sole authority for this cleanup.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMapId]);
+
+  useEffect(() => {
     let cancelled = false;
     const map = activeMap;
 
@@ -354,16 +404,47 @@ const pendingProjectActionRef =
       const sections = await sectionRepository.loadSections(
         map.sectionIds ?? []
       );
-      const edgeIds = sections.flatMap((section) => section.edgeIds);
+      const sectionsById = new Map(sections.map((section) => {
+        return [section.id, section];
+      }));
+      const orderedSections = (map.sectionIds ?? [])
+        .map((id) => sectionsById.get(id))
+        .filter((section): section is Section => Boolean(section));
+      let boundaryFound = false;
+      const normalizedSections = orderedSections.filter((section) => {
+        if (section.kind !== 'boundary') return true;
+        const valid = section.mapId === map.id &&
+          section.edgeIds.length >= 3;
+        if (!valid || boundaryFound) return false;
+        boundaryFound = true;
+        return true;
+      });
+      const removedSections = orderedSections.filter((section) => {
+        return !normalizedSections.includes(section);
+      });
+      const edgeIds = normalizedSections.flatMap((section) => {
+        return section.edgeIds;
+      });
       const edges = await sectionEdgeRepository.loadEdges(edgeIds);
       const nodeIds = Array.from(new Set(edges.flatMap((edge) => {
         return [edge.startNodeId, edge.endNodeId];
       })));
       const nodes = await sectionNodeRepository.loadNodes(nodeIds);
       if (cancelled) return;
-      setActiveSections(sections);
+      setActiveSections(normalizedSections);
       setActiveSectionEdges(edges);
       setActiveSectionNodes(nodes);
+      if (removedSections.length > 0) {
+        setDeletedSectionIds((current) => new Set([
+          ...current,
+          ...removedSections.map((section) => section.id),
+        ]));
+        setActiveMap({
+          ...map,
+          sectionIds: normalizedSections.map((section) => section.id),
+        });
+        markProjectDirty();
+      }
     }
 
     void loadSections().catch((error) => {
@@ -602,7 +683,7 @@ function markProjectDirty() {
 }
 
 function handleSectionModeChange(mode: SectionKind | null) {
-  mapViewportRef.current?.cancelSectionDraft();
+  mapViewportRef.current?.cancelInteractions();
   setSectionMode(mode);
 }
 
@@ -858,55 +939,43 @@ async function resolveParentLocation(childMap: RegionMap) {
   };
 }
 
-async function exitContainedMap(pieceId: string, follow: boolean) {
+async function commitPieceParentExit(
+  piece: Piece,
+  childMap: RegionMap,
+  parent: NonNullable<Awaited<ReturnType<typeof resolveParentLocation>>>,
+  follow: boolean
+) {
   if (!activeProject) return;
-  const piece = activeProject.pieces.find((item) => item.id === pieceId);
-  if (!piece) return;
-  try {
-    const childMap = activeMap?.id === piece.mapId
-      ? activeMap
-      : await loadEffectiveMapWithFeatures(piece.mapId).then((result) => {
-          return result.map;
-        });
-    const parent = await resolveParentLocation(childMap);
-    if (!parent) {
-      setNavigationError('No parent Location could be found for this Map.');
-      return;
-    }
-    const movedPiece = {
-      ...piece,
-      mapId: parent.parentMap.id,
-      position: parent.parentLocation.position,
-    };
-    const updatedProject = {
-      ...activeProject,
-      pieces: activeProject.pieces.map((item) => {
-        return item.id === pieceId ? movedPiece : item;
-      }),
-      activeMapId: follow
-        ? parent.parentMap.id
-        : activeProject.activeMapId,
-    };
-    setActiveProject(updatedProject);
-    markProjectDirty();
-    handleMapEntered(
-      parent.parentMap,
-      updatedProject,
-      childMap.name,
-      'piece',
-      pieceId
-    );
-    if (!follow) return;
-    setActiveMap(parent.parentMap);
-    setActiveFeatures(parent.parentFeatures);
-    setPendingFocusFeatureId(parent.parentLocation.id);
-    await loadMapImage(parent.parentMap);
-    setFocusPiecePosition(parent.parentLocation.position);
-    setFocusPieceRequestId((current) => current + 1);
-  } catch (error) {
-    console.error('Unable to exit contained Map:', error);
-    setNavigationError('Unable to exit this contained Map.');
-  }
+  const movedPiece = {
+    ...piece,
+    mapId: parent.parentMap.id,
+    position: parent.parentLocation.position,
+  };
+  const updatedProject = {
+    ...activeProject,
+    pieces: activeProject.pieces.map((item) => {
+      return item.id === piece.id ? movedPiece : item;
+    }),
+    activeMapId: follow
+      ? parent.parentMap.id
+      : activeProject.activeMapId,
+  };
+  setActiveProject(updatedProject);
+  markProjectDirty();
+  handleMapEntered(
+    parent.parentMap,
+    updatedProject,
+    childMap.name,
+    'piece',
+    piece.id
+  );
+  if (!follow) return;
+  setActiveMap(parent.parentMap);
+  setActiveFeatures(parent.parentFeatures);
+  setPendingFocusFeatureId(parent.parentLocation.id);
+  await loadMapImage(parent.parentMap);
+  setFocusPiecePosition(parent.parentLocation.position);
+  setFocusPieceRequestId((current) => current + 1);
 }
 
 function handleMapEntered(
@@ -1266,6 +1335,7 @@ function handleAddPiece() {
     kind: 'piece',
     name: getNextPieceName(activeProject.pieces),
     mapId: activeMap.id,
+    tracked: true,
     position: viewportCenter,
     appearance: {
       shape: 'circle',
@@ -1282,6 +1352,124 @@ function handleAddPiece() {
     ),
   });
   markProjectDirty();
+}
+
+function openPieceBrowser(mode: 'go' | 'migrate') {
+  if (!activeProject) return;
+  mapViewportRef.current?.cancelInteractions();
+  setPieceSearch('');
+  setSelectedPieceId(activeProject.pieces[0]?.id ?? null);
+  setShowGoToPieceDialog(mode === 'go');
+  setShowMigratePieceDialog(mode === 'migrate');
+}
+
+function closePieceBrowsers() {
+  setShowGoToPieceDialog(false);
+  setShowMigratePieceDialog(false);
+  setSelectedPieceId(null);
+}
+
+async function goToPiece(pieceId: string, discardChanges: boolean) {
+  if (!activeProject || !activeMap) return;
+  let project = activeProject;
+  try {
+    if (discardChanges) {
+      const source = await restorePersistedSource(
+        activeProject.id,
+        activeMap.id
+      );
+      project = source.project;
+    }
+    const piece = project.pieces.find((item) => item.id === pieceId);
+    if (!piece) throw new Error('The selected Piece was not found.');
+    if (activeMap?.id !== piece.mapId) {
+      const destination = await loadMapWithFeatures(piece.mapId);
+      setActiveProject({ ...project, activeMapId: piece.mapId });
+      setActiveMap(destination.map);
+      setActiveFeatures(destination.features);
+      setPendingFocusFeatureId(null);
+      await loadMapImage(destination.map);
+    }
+    setFocusPiecePosition(piece.position);
+    setFocusPieceRequestId((current) => current + 1);
+    closePieceBrowsers();
+  } catch (error) {
+    console.error('Unable to go to Piece:', error);
+    setNavigationError('Unable to go to this Piece.');
+  }
+}
+
+async function handleGoToPiece() {
+  if (!activeProject || !activeMap || !selectedPieceId) return;
+  const piece = activeProject.pieces.find((item) => {
+    return item.id === selectedPieceId;
+  });
+  if (!piece) return;
+  if (piece.mapId === activeMap.id) {
+    setFocusPiecePosition(piece.position);
+    setFocusPieceRequestId((current) => current + 1);
+    closePieceBrowsers();
+    return;
+  }
+  const pieceId = piece.id;
+  if (projectDirty && !autoSave) {
+    requestProjectAction((outcome) => {
+      void goToPiece(pieceId, outcome === 'discarded');
+    });
+    return;
+  }
+  if (projectDirty || saveInProgressRef.current) {
+    const saved = await saveActiveProject();
+    if (!saved) return;
+  }
+  await goToPiece(pieceId, false);
+}
+
+function handleBeginPieceMigration() {
+  if (!activeProject || !activeMap || !selectedPieceId) return;
+  const piece = activeProject.pieces.find((item) => {
+    return item.id === selectedPieceId;
+  });
+  if (!piece) return;
+  const sourceMapName = projectMaps.find((map) => {
+    return map.id === piece.mapId;
+  })?.name ?? 'Unknown Map';
+  setPendingArrival({
+    mode: 'migration',
+    pieceId: piece.id,
+    sourceMapId: piece.mapId,
+    sourceMapName,
+    sourcePosition: piece.position,
+    destinationMapId: activeMap.id,
+  });
+  closePieceBrowsers();
+}
+
+function handlePieceTrackedChange(pieceId: string, tracked: boolean) {
+  if (!activeProject) return;
+  setActiveProject({
+    ...activeProject,
+    pieces: activeProject.pieces.map((piece) => {
+      return piece.id === pieceId ? { ...piece, tracked } : piece;
+    }),
+  });
+  markProjectDirty();
+}
+
+function openSettingsDialog() {
+  setSettingsDraft(regionsSettings);
+  setShowSettingsDialog(true);
+}
+
+async function saveSettings() {
+  try {
+    await regionsSettingsRepository.save(settingsDraft);
+    setRegionsSettings(settingsDraft);
+    setShowSettingsDialog(false);
+  } catch (error) {
+    console.error('Unable to save Regions settings:', error);
+    setNavigationError('Unable to save Regions settings.');
+  }
 }
 
 function updatePiecePosition(pieceId: string, position: Feature['position']) {
@@ -1307,6 +1495,36 @@ async function handlePieceDrop(
   const navigable = location?.type === 'location' ||
     location?.type === 'connection';
   if (!navigable || !location?.targetMapId) {
+    const boundary = activeSections.find((section) => {
+      return section.kind === 'boundary' && section.edgeIds.length >= 3;
+    });
+    const polygon = boundary
+      ? getSectionPolygon(
+          boundary,
+          activeSectionEdges,
+          activeSectionNodes
+        )
+      : [];
+    const crossesBoundary = polygon.length >= 3 &&
+      isPointInPolygon(piece.position, polygon) &&
+      !isPointInPolygon(position, polygon);
+    if (crossesBoundary && activeMap.parentMapId) {
+      try {
+        const parent = await resolveParentLocation(activeMap);
+        if (!parent) {
+          setNavigationError(
+            'This Map has no valid parent Location for Boundary exit.'
+          );
+          return;
+        }
+        const focused = piece.id === activeProject.focusedPieceId;
+        await commitPieceParentExit(piece, activeMap, parent, focused);
+      } catch (error) {
+        console.error('Unable to exit Boundary:', error);
+        setNavigationError('Unable to exit this Map Boundary.');
+      }
+      return;
+    }
     updatePiecePosition(pieceId, position);
     return;
   }
@@ -1420,17 +1638,25 @@ async function commitPendingArrival(position: Feature['position']) {
   }
   setPendingArrival(null);
   markProjectDirty();
-  handleMapEntered(
-    activeMap,
-    updatedProject,
-    pendingArrival.sourceMapName,
-    pendingArrival.pieceId ? 'piece' : 'manual',
-    pendingArrival.pieceId
-  );
+  const sameMapMigration = pendingArrival.mode === 'migration' &&
+    pendingArrival.sourceMapId === activeMap.id;
+  if (!sameMapMigration) {
+    handleMapEntered(
+      activeMap,
+      updatedProject,
+      pendingArrival.sourceMapName,
+      pendingArrival.pieceId ? 'piece' : 'manual',
+      pendingArrival.pieceId
+    );
+  }
 }
 
 async function cancelPendingArrival() {
   if (!pendingArrival || !activeProject) return;
+  if (pendingArrival.mode === 'migration') {
+    setPendingArrival(null);
+    return;
+  }
   try {
     const source = await loadEffectiveMapWithFeatures(
       pendingArrival.sourceMapId
@@ -1441,7 +1667,7 @@ async function cancelPendingArrival() {
     });
     setActiveMap(source.map);
     setActiveFeatures(source.features);
-    setPendingFocusFeatureId(pendingArrival.sourceFeatureId);
+    setPendingFocusFeatureId(pendingArrival.sourceFeatureId ?? null);
     setPendingArrival(null);
     await loadMapImage(source.map);
     if (pendingArrival.sourcePosition) {
@@ -2047,6 +2273,8 @@ function closeProject() {
   setDeletedSectionNodeIds(new Set());
   setDeletedSectionEdgeIds(new Set());
   closeGoToMapDialog();
+  closePieceBrowsers();
+  setShowSettingsDialog(false);
   deleteMapAnalysisRunIdRef.current += 1;
   setShowDeleteMapDialog(false);
   setSelectedDeleteMapId(null);
@@ -2266,43 +2494,11 @@ function handleCreateSection(
   edges: SectionEdge[]
 ) {
   if (!activeMap) return;
-  let retainedSections = activeSections;
-  if (section.kind === 'boundary') {
-    const oldBoundaries = activeSections.filter((item) => {
-      return item.kind === 'boundary';
-    });
-    oldBoundaries.forEach((item) => {
-      setDeletedSectionIds((current) => new Set(current).add(item.id));
-    });
-    retainedSections = activeSections.filter((item) => {
-      return item.kind !== 'boundary';
-    });
-    const retainedEdgeIds = new Set(retainedSections.flatMap((item) => {
-      return item.edgeIds;
-    }));
-    const removedEdges = activeSectionEdges.filter((edge) => {
-      return !retainedEdgeIds.has(edge.id);
-    });
-    const retainedNodes = new Set(activeSectionEdges
-      .filter((edge) => retainedEdgeIds.has(edge.id))
-      .flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
-    setActiveSectionEdges((current) => current.filter((edge) => {
-      return retainedEdgeIds.has(edge.id);
-    }));
-    setActiveSectionNodes((current) => current.filter((node) => {
-      return retainedNodes.has(node.id);
-    }));
-    setDeletedSectionEdgeIds((current) => {
-      return new Set([...current, ...removedEdges.map((edge) => edge.id)]);
-    });
-    setDeletedSectionNodeIds((current) => {
-      const removed = activeSectionNodes.filter((node) => {
-        return !retainedNodes.has(node.id);
-      });
-      return new Set([...current, ...removed.map((node) => node.id)]);
-    });
-  }
-  setActiveSections([...retainedSections, section]);
+  const boundaryExists = activeSections.some((item) => {
+    return item.kind === 'boundary';
+  });
+  if (section.kind === 'boundary' && boundaryExists) return;
+  setActiveSections([...activeSections, section]);
   setActiveSectionNodes((current) => {
     const byId = new Map(current.map((node) => [node.id, node]));
     nodes.forEach((node) => byId.set(node.id, node));
@@ -2315,7 +2511,7 @@ function handleCreateSection(
   });
   setActiveMap({
     ...activeMap,
-    sectionIds: [...retainedSections.map((item) => item.id), section.id],
+    sectionIds: [...activeSections.map((item) => item.id), section.id],
     updatedAt: new Date(),
   });
   markProjectDirty();
@@ -3135,6 +3331,21 @@ const selectedGoToMap = goToMapMaps.find((map) => {
 const selectedGoToMapType = activeProject?.featureTypes.find((type) => {
   return type.id === selectedGoToMap?.featureTypeId;
 })?.name ?? 'No Type';
+const pieceBrowserItems = (activeProject?.pieces ?? [])
+  .map((piece) => ({
+    piece,
+    mapName: projectMaps.find((map) => map.id === piece.mapId)?.name ??
+      'Missing Map',
+  }))
+  .filter(({ piece, mapName }) => {
+    const search = pieceSearch.trim().toLocaleLowerCase();
+    return piece.name.toLocaleLowerCase().includes(search) ||
+      mapName.toLocaleLowerCase().includes(search);
+  })
+  .sort((left, right) => left.piece.name.localeCompare(right.piece.name));
+const selectedPiece = activeProject?.pieces.find((piece) => {
+  return piece.id === selectedPieceId;
+}) ?? null;
 const deleteMapMaps = projectMaps
   .filter((map) => {
     const search = deleteMapSearch.trim().toLocaleLowerCase();
@@ -3198,9 +3409,10 @@ const pendingArrivalPiece = pendingArrival?.pieceId
   onGoToParentMap={handleGoToParentMap}
   onDeleteMap={handleOpenDeleteMap}
   onAddPiece={handleAddPiece}
+  onGoToPiece={() => openPieceBrowser('go')}
+  onMigratePiece={() => openPieceBrowser('migrate')}
   onAssignMapImage={() => assignMapInputRef.current?.click()}
-  autoSave={autoSave}
-  onAutoSaveChange={setAutoSave}
+  onOpenSettings={openSettingsDialog}
   onManageFeatureTypes={() => {
     mapViewportRef.current?.cancelInteractions();
     setShowFeatureTypesDialog(true);
@@ -3238,6 +3450,107 @@ const pendingArrivalPiece = pendingArrival?.pieceId
     zoomControl?.fitMap
   }
 />
+
+{showSettingsDialog && (
+  <div className="dialog-backdrop">
+    <div className="dialog regions-settings-dialog">
+      <h2>Regions Settings</h2>
+      <fieldset>
+        <legend>General</legend>
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={settingsDraft.autosaveEnabled}
+            onChange={(event) => setSettingsDraft({
+              ...settingsDraft,
+              autosaveEnabled: event.target.checked,
+            })}
+          />
+          Autosave
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>Navigation</legend>
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={settingsDraft.edgeScrollingEnabled}
+            onChange={(event) => setSettingsDraft({
+              ...settingsDraft,
+              edgeScrollingEnabled: event.target.checked,
+            })}
+          />
+          Edge Scrolling
+        </label>
+      </fieldset>
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          onClick={() => setShowSettingsDialog(false)}
+        >
+          Cancel
+        </button>
+        <button type="button" onClick={() => void saveSettings()}>
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{(showGoToPieceDialog || showMigratePieceDialog) && activeProject && (
+  <div className="dialog-backdrop">
+    <div className="dialog piece-browser-dialog">
+      <h2>
+        {showGoToPieceDialog ? 'Go to Piece' : 'Migrate Piece'}
+      </h2>
+      <input
+        type="search"
+        placeholder="Search Pieces"
+        value={pieceSearch}
+        onChange={(event) => setPieceSearch(event.target.value)}
+        autoFocus
+      />
+      <div className="piece-browser-list">
+        {pieceBrowserItems.length === 0 && (
+          <span className="piece-browser-empty">No Pieces found.</span>
+        )}
+        {pieceBrowserItems.map(({ piece, mapName }) => (
+          <button
+            key={piece.id}
+            type="button"
+            className={piece.id === selectedPieceId ? 'selected' : ''}
+            onClick={() => setSelectedPieceId(piece.id)}
+            onDoubleClick={() => {
+              setSelectedPieceId(piece.id);
+            }}
+          >
+            <span>{piece.name}</span>
+            <small>{mapName}</small>
+          </button>
+        ))}
+      </div>
+      <div className="dialog-buttons">
+        <button type="button" onClick={closePieceBrowsers}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!selectedPiece}
+          onClick={() => {
+            if (showGoToPieceDialog) {
+              void handleGoToPiece();
+              return;
+            }
+            handleBeginPieceMigration();
+          }}
+        >
+          {showGoToPieceDialog ? 'Go' : 'Migrate'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
 {showGoToMapDialog && activeProject && (
   <div className="dialog-backdrop">
@@ -4139,8 +4452,8 @@ const pendingArrivalPiece = pendingArrival?.pieceId
       </div>
     ) : activeMapImageUrl ? (
       <MapViewport
-        ref={mapViewportRef}
         key={activeMap.id}
+        ref={mapViewportRef}
         imageUrl={activeMapImageUrl}
         mapId={activeMap.id}
         mapName={activeMap.name}
@@ -4157,9 +4470,11 @@ const pendingArrivalPiece = pendingArrival?.pieceId
         imageRegistration={activeMap.imageRegistration}
         features={activeFeatures}
         pieces={activeProject.pieces.filter((piece) => {
-          return piece.mapId === activeMap.id;
+          return piece.mapId === activeMap.id &&
+            piece.id !== pendingArrival?.pieceId;
         })}
         focusedPieceId={activeProject.focusedPieceId}
+        edgeScrollingEnabled={regionsSettings.edgeScrollingEnabled}
         featureTypes={activeProject.featureTypes}
         locationMapMetadata={locationMapMetadata}
         onMapMetadataChange={handleMapMetadataChange}
@@ -4180,11 +4495,8 @@ const pendingArrivalPiece = pendingArrival?.pieceId
           mapViewportRef.current?.cancelInteractions();
           setPieceToDelete(piece);
         }}
+        onPieceTrackedChange={handlePieceTrackedChange}
         onFocusPiece={(pieceId) => void handleFocusPiece(pieceId)}
-        pieceParentMapAvailable={Boolean(activeMap.parentMapId)}
-        onExitPieceToParent={(pieceId, follow) => {
-          void exitContainedMap(pieceId, follow);
-        }}
         onViewportCenterChange={setViewportCenter}
         focusPiecePosition={focusPiecePosition}
         focusPieceRequestId={focusPieceRequestId}

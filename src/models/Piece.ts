@@ -23,5 +23,10 @@ export interface Piece {
     y: number;
   };
   appearance: PieceAppearance;
+  tracked?: boolean;
   memberPieceIds?: string[];
+}
+
+export function isPieceTracked(piece: Piece): boolean {
+  return piece.tracked !== false;
 }
