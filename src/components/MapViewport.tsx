@@ -3000,10 +3000,10 @@ function saveSectionProperties() {
           setPieceContextMenu(null);
         }}
       >
+        Track Piece
         <span className="map-context-check">
           {isPieceTracked(piece) ? '✓' : ''}
         </span>
-        Track
       </button>
       <div className="map-context-separator" />
       <button
