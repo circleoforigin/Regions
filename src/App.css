@@ -1380,6 +1380,17 @@ button.map-key-parent:hover {
   text-transform: uppercase;
 }
 
+.module-identifier {
+  margin-bottom: 10px;
+
+  color: #6f7378;
+
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .regions-empty-map {
   text-align: center;
 }

@@ -4431,14 +4431,18 @@ const pendingArrivalPiece = pendingArrival?.pieceId
   <section className="regions-map-workspace">
     {!activeProject ? (
       <div className="regions-empty-map">
-        <h2>
-          No Project Loaded
-        </h2>
+  <div className="module-identifier">
+    Regions
+  </div>
 
-        <p>
-          Create or load a project to get started.
-        </p>
-      </div>
+  <h2>
+    No Project Loaded
+  </h2>
+
+  <p>
+    Create or load a project to get started.
+  </p>
+</div>
     ) : !activeMap ? (
       <div className="regions-empty-map">
         <h2>
