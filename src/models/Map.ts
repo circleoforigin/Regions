@@ -4,6 +4,12 @@ export interface MapImageRegistration {
   offsetY: number;
 }
 
+export interface MapEntryDisplay {
+  alias: string;
+  imageFileId: string;
+  imagePath: string;
+}
+
 export interface Map {
   id: string;
   name: string;
@@ -12,6 +18,8 @@ export interface Map {
 
   imageFileId?: string;
   imageRegistration?: MapImageRegistration;
+
+  entryDisplay?: MapEntryDisplay;
 
   parentMapId?: string;
   parentLocationId?: string;
