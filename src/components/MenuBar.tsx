@@ -34,7 +34,10 @@ interface MenuBarProps {
   onGoToPiece: () => void;
   onMigratePiece: () => void;
   onAssignMapImage: () => void;
+  onManageMapMediaSlots: () => void;
+    mapMediaSlotsEnabled: boolean;
   onOpenSettings: () => void;
+  onManageGlobalMediaSlots: () => void;
   onManageFeatureTypes: () => void;
   sectionMode: SectionKind | null;
   onSectionModeChange: (mode: SectionKind | null) => void;
@@ -71,7 +74,10 @@ function MenuBar({
   onGoToPiece,
   onMigratePiece,
   onAssignMapImage,
+  onManageMapMediaSlots,
+  mapMediaSlotsEnabled,
   onOpenSettings,
+  onManageGlobalMediaSlots,
   onManageFeatureTypes,
   sectionMode,
   onSectionModeChange,
@@ -301,8 +307,6 @@ function MenuBar({
               Go to Map...
             </button>
 
-            <div className="dropdown-separator" />
-
             <button
               type="button"
               className="dropdown-item"
@@ -364,6 +368,20 @@ function MenuBar({
               }}
             >
               Assign Map Image...
+            </button>
+
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={
+                !mapMediaSlotsEnabled
+              }
+              onClick={() => {
+                closeMenus();
+                onManageMapMediaSlots();
+              }}
+            >
+              Map Media Slots...
             </button>
 
             <div
@@ -506,6 +524,18 @@ function MenuBar({
             >
               Settings...
             </button>
+            
+            <button
+  type="button"
+  className="dropdown-item"
+  disabled={!projectName}
+  onClick={() => {
+    closeMenus();
+    onManageGlobalMediaSlots();
+  }}
+>
+  Global Media Slots...
+</button>
 
             <button
               type="button"

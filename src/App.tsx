@@ -14,6 +14,9 @@ import type {
   ProjectLoadRequest,
 } from '@settingforge/module-sdk';
 
+import GlobalMediaSlotsDialog
+  from './components/GlobalMediaSlotsDialog';
+
 import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
@@ -29,6 +32,11 @@ import type { Feature } from './models/Feature';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import type { Piece, PieceShape } from './models/Piece';
+import MapMediaSlotsDialog
+  from './components/MapMediaSlotsDialog';
+import {
+  areGlobalMediaSlotsComplete,
+} from './media/MediaSlotResolver';
 import {
   DEFAULT_REGIONS_SETTINGS,
   regionsSettingsRepository,
@@ -162,6 +170,10 @@ function App() {
   null
 );
 
+const [
+  showMapMediaSlotsDialog,
+  setShowMapMediaSlotsDialog,
+] = useState(false);
   const [
     showNewProjectDialog,
     setShowNewProjectDialog,
@@ -342,6 +354,11 @@ const pendingProjectActionRef =
 
   const [showFeatureTypesDialog, setShowFeatureTypesDialog] =
     useState(false);
+
+    const [
+  showGlobalMediaSlotsDialog,
+  setShowGlobalMediaSlotsDialog,
+] = useState(false);
 
   useEffect(() => {
     if (activeProjectId) {
@@ -735,6 +752,8 @@ function handleNewProject() {
       featureTypes: [],
 
       pieces: [],
+
+      globalMediaSlots: [],
 
       createdAt:
         now,
@@ -3412,11 +3431,30 @@ const pendingArrivalPiece = pendingArrival?.pieceId
   onGoToPiece={() => openPieceBrowser('go')}
   onMigratePiece={() => openPieceBrowser('migrate')}
   onAssignMapImage={() => assignMapInputRef.current?.click()}
+  onManageMapMediaSlots={() =>
+  setShowMapMediaSlotsDialog(
+    true
+  )
+}
+
+mapMediaSlotsEnabled={
+  Boolean(
+    activeProject &&
+    activeMap &&
+    areGlobalMediaSlotsComplete(
+      activeProject
+        .globalMediaSlots
+    )
+  )
+}
   onOpenSettings={openSettingsDialog}
   onManageFeatureTypes={() => {
     mapViewportRef.current?.cancelInteractions();
     setShowFeatureTypesDialog(true);
   }}
+  onManageGlobalMediaSlots={() =>
+    setShowGlobalMediaSlotsDialog(true)
+  }
   sectionMode={sectionMode}
   onSectionModeChange={handleSectionModeChange}
   projectName={
@@ -3551,6 +3589,63 @@ const pendingArrivalPiece = pendingArrival?.pieceId
     </div>
   </div>
 )}
+
+{showMapMediaSlotsDialog &&
+  activeProject &&
+  activeMap && (
+    <MapMediaSlotsDialog
+      globalSlots={
+        activeProject
+          .globalMediaSlots
+      }
+
+      overrides={
+        activeMap
+          .mediaSlotOverrides ??
+        []
+      }
+
+      onClose={() =>
+        setShowMapMediaSlotsDialog(
+          false
+        )
+      }
+
+      onSave={(overrides) => {
+        const updatedMap = {
+          ...activeMap,
+
+          mediaSlotOverrides:
+            overrides,
+
+          updatedAt:
+            new Date(),
+        };
+
+        setActiveMap(
+          updatedMap
+        );
+
+        setPendingMaps(
+          (current) => [
+            ...current.filter(
+              (map) =>
+                map.id !==
+                updatedMap.id
+            ),
+
+            updatedMap,
+          ]
+        );
+
+        markProjectDirty();
+
+        setShowMapMediaSlotsDialog(
+          false
+        );
+      }}
+    />
+  )}
 
 {showGoToMapDialog && activeProject && (
   <div className="dialog-backdrop">
@@ -3964,6 +4059,43 @@ const pendingArrivalPiece = pendingArrival?.pieceId
     </div>
   </div>
 )}
+
+{showGlobalMediaSlotsDialog &&
+  activeProject && (
+    <GlobalMediaSlotsDialog
+      slots={
+        activeProject
+          .globalMediaSlots
+      }
+      onClose={() =>
+        setShowGlobalMediaSlotsDialog(
+          false
+        )
+      }
+      onSave={(slots) => {
+        setActiveProject(
+          (current) =>
+            current
+              ? {
+                  ...current,
+
+                  globalMediaSlots:
+                    slots,
+
+                  updatedAt:
+                    new Date(),
+                }
+              : current
+        );
+
+        markProjectDirty();
+
+        setShowGlobalMediaSlotsDialog(
+          false
+        );
+      }}
+    />
+  )}
 
 {showFeatureTypesDialog && activeProject && (
   <FeatureTypesDialog

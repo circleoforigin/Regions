@@ -28,13 +28,26 @@ function normalizeProject(project: Project): Project {
   );
 
   return {
-    ...project,
-    pieces,
-    focusedPieceId,
-    featureTypes: Array.isArray(project.featureTypes)
+  ...project,
+
+  pieces,
+
+  focusedPieceId,
+
+  featureTypes:
+    Array.isArray(
+      project.featureTypes
+    )
       ? project.featureTypes
       : [],
-  };
+
+  globalMediaSlots:
+    Array.isArray(
+      project.globalMediaSlots
+    )
+      ? project.globalMediaSlots
+      : [],
+};
 }
 
 export class ProjectRepository {

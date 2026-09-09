@@ -1782,3 +1782,188 @@ button.map-key-parent:hover {
 .project-picker-item:hover {
   background: #343434;
 }
+
+.global-media-slots-dialog {
+  width: 760px;
+  max-width: calc(100vw - 48px);
+}
+
+.global-media-slots-dialog > p {
+  margin-bottom: 20px;
+}
+
+.media-slot-row {
+  display: grid;
+
+  grid-template-columns:
+    90px
+    minmax(220px, 1fr)
+    70px
+    110px
+    80px;
+
+  gap: 12px;
+  align-items: center;
+
+  min-height: 54px;
+  padding: 8px 0;
+
+  border-bottom:
+    1px solid
+    rgba(255, 255, 255, 0.12);
+}
+
+.media-slot-row strong {
+  white-space: nowrap;
+}
+
+.media-slot-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-slot-row label {
+  display: block;
+}
+
+.media-slot-row .button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+
+  padding: 6px 10px;
+
+  border: 1px solid currentColor;
+  border-radius: 4px;
+
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.media-slot-row .button:has(+ input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.media-slot-row button {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.global-media-slots-actions {
+  display: grid;
+
+  grid-template-columns:
+    auto
+    auto
+    1fr
+    auto
+    auto;
+
+  gap: 10px;
+  align-items: center;
+
+  margin-top: 20px;
+}
+
+.global-media-slots-actions > span {
+  justify-self: end;
+
+  max-width: 280px;
+
+  font-size: 0.85rem;
+  line-height: 1.3;
+
+  opacity: 0.75;
+}
+
+.map-media-slots-dialog {
+  width: 760px;
+  max-width: calc(100vw - 48px);
+}
+
+.map-media-slots-dialog > p {
+  margin-bottom: 20px;
+}
+
+.map-media-slot-row {
+  display: grid;
+
+  grid-template-columns:
+    90px
+    minmax(220px, 1fr)
+    70px
+    110px
+    100px;
+
+  gap: 12px;
+  align-items: center;
+
+  min-height: 54px;
+  padding: 8px 0;
+
+  border-bottom:
+    1px solid
+    rgba(255, 255, 255, 0.12);
+}
+
+.map-media-slot-row strong {
+  white-space: nowrap;
+}
+
+.map-media-slot-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-media-slot-row label {
+  display: block;
+}
+
+.map-media-slot-row .button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+
+  border: 1px solid currentColor;
+  border-radius: 4px;
+
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.map-media-slot-row .button:has(+ input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.map-media-slot-row button {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.map-media-slots-actions {
+  display: grid;
+  grid-template-columns:
+    1fr auto auto;
+
+  gap: 10px;
+  align-items: center;
+
+  margin-top: 20px;
+}
