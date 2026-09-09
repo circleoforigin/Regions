@@ -560,6 +560,17 @@ const pendingProjectActionRef =
             { key: 'mapId', label: 'Map ID', type: 'string' },
           ],
         },
+        {
+          id: 'Regions.EmitImage',
+          label: 'Emit Image',
+          description: 'Raised for each resolved image media slot.',
+          fields: [
+            { key: 'slot', label: 'Slot', type: 'number' },
+            { key: 'filePath', label: 'File Path', type: 'string' },
+            { key: 'fileName', label: 'File Name', type: 'string' },
+            { key: 'source', label: 'Source', type: 'string' },
+          ],
+        },
       ]).catch(() => undefined);
     }
 
@@ -1018,8 +1029,7 @@ function handleMapEntered(
         type.id === map.featureTypeId
     )?.name ?? '';
 
-    const mediaSlots =
-  resolveMediaSlots(
+  const mediaSlots = resolveMediaSlots(
     project.globalMediaSlots,
     map.mediaSlotOverrides ?? []
   );
@@ -1033,9 +1043,22 @@ function handleMapEntered(
       name: map.name,
       type: semanticType,
       mapId: map.id,
-      mediaSlots,
     }
   );
+
+  mediaSlots.forEach((mediaSlot) => {
+    if (mediaSlot.mediaType !== 'image') return;
+
+    moduleEventBus.emit(
+      'Regions.EmitImage',
+      {
+        slot: mediaSlot.slot,
+        filePath: mediaSlot.filePath,
+        fileName: mediaSlot.fileName,
+        source: mediaSlot.source,
+      }
+    );
+  });
 }
 
 async function restorePersistedSource(
