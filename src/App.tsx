@@ -36,6 +36,7 @@ import MapMediaSlotsDialog
   from './components/MapMediaSlotsDialog';
 import {
   areGlobalMediaSlotsComplete,
+  resolveMediaSlots,
 } from './media/MediaSlotResolver';
 import {
   DEFAULT_REGIONS_SETTINGS,
@@ -1017,6 +1018,12 @@ function handleMapEntered(
         type.id === map.featureTypeId
     )?.name ?? '';
 
+    const mediaSlots =
+  resolveMediaSlots(
+    project.globalMediaSlots,
+    map.mediaSlotOverrides ?? []
+  );
+
   moduleEventBus.emit(
     'Regions.LocationEntered',
     {
@@ -1026,6 +1033,7 @@ function handleMapEntered(
       name: map.name,
       type: semanticType,
       mapId: map.id,
+      mediaSlots,
     }
   );
 }

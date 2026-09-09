@@ -29,6 +29,7 @@ export interface ResolvedMediaSlot {
 
   fileId: string;
   filePath: string;
+  fileName: string;
 
   source:
     | 'global'
