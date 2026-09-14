@@ -900,6 +900,14 @@
   outline-offset: 3px;
 }
 
+.map-piece.party-merge-highlight {
+  outline: 3px solid #f0c85a;
+  outline-offset: 4px;
+  filter:
+    drop-shadow(0 0 5px rgba(240, 200, 90, 0.95))
+    drop-shadow(0 2px 3px rgba(0, 0, 0, 0.7));
+}
+
 .map-piece-circle {
   border-radius: 50%;
 }
@@ -937,6 +945,18 @@
 
 .piece-context-menu {
   z-index: 510;
+}
+
+.piece-context-submenu-anchor {
+  position: relative;
+}
+
+.piece-members-submenu {
+  top: -5px;
+  left: calc(100% - 2px);
+  z-index: 511;
+  max-height: 260px;
+  overflow-y: auto;
 }
 
 /* =========================

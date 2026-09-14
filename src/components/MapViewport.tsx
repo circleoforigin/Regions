@@ -131,6 +131,7 @@ interface MapViewportProps {
 
 features: Feature[];
 pieces?: Piece[];
+allPieces?: Piece[];
 focusedPieceId?: string;
 edgeScrollingEnabled?: boolean;
 featureTypes: FeatureTypeDefinition[];
@@ -164,10 +165,13 @@ onFeatureMove?: (featureId: string, position: Point) => void;
 onPieceDrop?: (
   pieceId: string,
   position: Point,
-  location?: Feature
+  location?: Feature,
+  targetPiece?: Piece
 ) => void;
 onEditPiece?: (piece: Piece) => void;
 onDeletePiece?: (piece: Piece) => void;
+onRemovePartyMember?: (partyId: string, memberId: string) => void;
+onDisbandParty?: (partyId: string) => void;
 onPieceTrackedChange?: (pieceId: string, tracked: boolean) => void;
   onFocusPiece?: (pieceId: string) => void;
 onViewportCenterChange?: (position: Point) => void;
@@ -262,6 +266,7 @@ function MapViewport({
   imageRegistration,
   features,
   pieces = [],
+  allPieces = pieces,
   focusedPieceId,
   edgeScrollingEnabled = true,
   featureTypes,
@@ -278,6 +283,8 @@ function MapViewport({
   onPieceDrop,
   onEditPiece,
   onDeletePiece,
+  onRemovePartyMember,
+  onDisbandParty,
   onPieceTrackedChange,
   onFocusPiece,
   onViewportCenterChange,
@@ -390,6 +397,7 @@ function MapViewport({
     x: number;
     y: number;
   } | null>(null);
+  const [partyMembersMenuOpen, setPartyMembersMenuOpen] = useState(false);
   const [sectionDraft, setSectionDraft] = useState<{
     kind: SectionKind;
     sectionId: string;
@@ -2057,15 +2065,23 @@ function handleContextMenu(
     if (!drag.moved) return;
 
     const previewScreen = mapToScreen(preview.x, preview.y);
-    const location = visibleFeatures.find((feature) => {
+    const targetPiece = pieces.find((candidate) => {
+      if (candidate.id === drag.pieceId) return false;
+      const target = mapToScreen(candidate.position.x, candidate.position.y);
+      return Math.hypot(
+        previewScreen.x - target.x,
+        previewScreen.y - target.y
+      ) <= FEATURE_MARKER_MIN_DISTANCE;
+    });
+    const location = !targetPiece ? visibleFeatures.find((feature) => {
       if (!isNavigableFeature(feature)) return false;
       const target = mapToScreen(feature.position.x, feature.position.y);
       return Math.hypot(
         previewScreen.x - target.x,
         previewScreen.y - target.y
       ) <= FEATURE_MARKER_MIN_DISTANCE;
-    });
-    onPieceDrop?.(drag.pieceId, preview, location);
+    }) : undefined;
+    onPieceDrop?.(drag.pieceId, preview, location, targetPiece);
   }
 
   function cancelPieceDrag() {
@@ -2074,6 +2090,16 @@ function handleContextMenu(
     setPiecePreview(null);
     stopEdgeScrolling();
   }
+
+  const partyDropTargetId = piecePreview
+    ? pieces.find((candidate) => {
+        if (candidate.id === piecePreview.pieceId) return false;
+        const preview = mapToScreen(piecePreview.position.x, piecePreview.position.y);
+        const target = mapToScreen(candidate.position.x, candidate.position.y);
+        return Math.hypot(preview.x - target.x, preview.y - target.y) <=
+          FEATURE_MARKER_MIN_DISTANCE;
+      })?.id
+    : undefined;
 
   const selectedAnchor = selectedFeature
     ? mapToScreen(selectedFeature.position.x, selectedFeature.position.y)
@@ -2529,6 +2555,10 @@ function saveSectionProperties() {
     `map-piece-${piece.appearance.shape}`,
     piece.id === focusedPieceId ? 'focused' : '',
     piecePreview?.pieceId === piece.id ? 'dragging' : '',
+    partyDropTargetId &&
+      (piece.id === partyDropTargetId || piece.id === piecePreview?.pieceId)
+      ? 'party-merge-highlight'
+      : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -2560,6 +2590,7 @@ function saveSectionProperties() {
             x: event.clientX - rect.left,
             y: event.clientY - rect.top,
           });
+          setPartyMembersMenuOpen(false);
         }}
       />
       <span
@@ -3249,6 +3280,48 @@ function saveSectionProperties() {
         Edit...
       </button>
       <div className="map-context-separator" />
+      {piece.kind === 'group' && (
+        <>
+          <div
+            className="piece-context-submenu-anchor"
+            onPointerEnter={() => setPartyMembersMenuOpen(true)}
+            onPointerLeave={() => setPartyMembersMenuOpen(false)}
+          >
+            <button type="button">Members <span aria-hidden="true">▸</span></button>
+            {partyMembersMenuOpen && (
+              <div className="map-context-menu piece-members-submenu">
+                {(piece.memberPieceIds ?? []).map((memberId) => {
+                  const member = allPieces.find((item) => item.id === memberId);
+                  if (!member) return null;
+                  return (
+                    <button
+                      key={member.id}
+                      type="button"
+                      onClick={() => {
+                        onRemovePartyMember?.(piece.id, member.id);
+                        setPieceContextMenu(null);
+                        setPartyMembersMenuOpen(false);
+                      }}
+                    >
+                      {member.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onDisbandParty?.(piece.id);
+              setPieceContextMenu(null);
+            }}
+          >
+            Disband
+          </button>
+          <div className="map-context-separator" />
+        </>
+      )}
       <button
         type="button"
         onClick={() => {

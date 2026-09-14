@@ -36,6 +36,14 @@ import type { Feature } from './models/Feature';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import type { Piece, PieceShape } from './models/Piece';
+import {
+  findContainingParty,
+  getPartyMembers,
+  getPartyMemberIds,
+  isPieceGrouped,
+  movePartyAndMembers,
+  resolveSpatialPiece,
+} from './models/Piece';
 import MapMediaSlotsDialog
   from './components/MapMediaSlotsDialog';
 import {
@@ -1011,9 +1019,12 @@ async function commitPieceParentExit(
   };
   const updatedProject = {
     ...activeProject,
-    pieces: activeProject.pieces.map((item) => {
-      return item.id === piece.id ? movedPiece : item;
-    }),
+    pieces: movePartyAndMembers(
+      activeProject.pieces,
+      piece.id,
+      movedPiece.mapId,
+      movedPiece.position
+    ),
     activeMapId: follow
       ? parent.parentMap.id
       : activeProject.activeMapId,
@@ -1111,8 +1122,36 @@ async function handleMapEntered(
     }
     const destination = await resolvePieceLocation(map, project, piece, resolvedAreas);
     pieceAreaContexts.current.set(`${project.id}:${piece.id}:${map.id}`, destination.area?.id);
-    const events = createLocationEvents(project.id, piece, project.focusedPieceId,
-      destination.context, reason, previous);
+    const partyMembers = getPartyMembers(piece, project.pieces);
+    const events = partyMembers.length > 0
+      ? [
+          ...partyMembers.flatMap((member) =>
+            createLocationEvents(
+              project.id,
+              member,
+              undefined,
+              destination.context,
+              reason,
+              previous
+            ).filter((event) => event.type === 'Regions.LocationEntered')
+          ),
+          ...createLocationEvents(
+            project.id,
+            piece,
+            project.focusedPieceId,
+            destination.context,
+            reason,
+            previous
+          ).filter((event) => event.type === 'Regions.LocationContextChanged'),
+        ]
+      : createLocationEvents(
+          project.id,
+          piece,
+          project.focusedPieceId,
+          destination.context,
+          reason,
+          previous
+        );
     for (const event of events) moduleEventBus.emit(event.type, event.payload);
     if (events.some((event) => event.type === 'Regions.LocationContextChanged')) {
       emitMapImages(destination.resourceMap, project, destination.area?.targetMapId ? undefined : destination.area);
@@ -1492,7 +1531,7 @@ async function goToPiece(pieceId: string, discardChanges: boolean) {
       );
       project = source.project;
     }
-    const piece = project.pieces.find((item) => item.id === pieceId);
+    const piece = resolveSpatialPiece(pieceId, project.pieces);
     if (!piece) throw new Error('The selected Piece was not found.');
     if (activeMap?.id !== piece.mapId) {
       const destination = await loadMapWithFeatures(piece.mapId);
@@ -1513,9 +1552,7 @@ async function goToPiece(pieceId: string, discardChanges: boolean) {
 
 async function handleGoToPiece() {
   if (!activeProject || !activeMap || !selectedPieceId) return;
-  const piece = activeProject.pieces.find((item) => {
-    return item.id === selectedPieceId;
-  });
+  const piece = resolveSpatialPiece(selectedPieceId, activeProject.pieces);
   if (!piece) return;
   if (piece.mapId === activeMap.id) {
     setFocusPiecePosition(piece.position);
@@ -1539,9 +1576,7 @@ async function handleGoToPiece() {
 
 function handleBeginPieceMigration() {
   if (!activeProject || !activeMap || !selectedPieceId) return;
-  const piece = activeProject.pieces.find((item) => {
-    return item.id === selectedPieceId;
-  });
+  const piece = resolveSpatialPiece(selectedPieceId, activeProject.pieces);
   if (!piece) return;
   const sourceMapName = projectMaps.find((map) => {
     return map.id === piece.mapId;
@@ -1564,6 +1599,140 @@ function handlePieceTrackedChange(pieceId: string, tracked: boolean) {
     pieces: activeProject.pieces.map((piece) => {
       return piece.id === pieceId ? { ...piece, tracked } : piece;
     }),
+  });
+  markProjectDirty();
+}
+
+function partyMemberPosition(
+  party: Piece,
+  index: number,
+  count: number
+): Piece['position'] {
+  const angle = (Math.PI * 2 * index) / Math.max(count, 1);
+  return {
+    x: party.position.x + Math.cos(angle) * 28,
+    y: party.position.y + Math.sin(angle) * 28,
+  };
+}
+
+function handlePartyDrop(sourceId: string, targetId: string) {
+  if (!activeProject || sourceId === targetId) return;
+  const source = activeProject.pieces.find((piece) => piece.id === sourceId);
+  const target = activeProject.pieces.find((piece) => piece.id === targetId);
+  if (!source || !target) return;
+  if (findContainingParty(source.id, activeProject.pieces) ||
+      findContainingParty(target.id, activeProject.pieces)) return;
+
+  const sourceMembers = getPartyMemberIds(source);
+  const targetMembers = getPartyMemberIds(target);
+  const memberPieceIds = [...new Set([...targetMembers, ...sourceMembers])]
+    .filter((id) => activeProject.pieces.some((piece) =>
+      piece.id === id && piece.kind !== 'group'));
+  if (memberPieceIds.length < 2) return;
+
+  const survivor = target.kind === 'group'
+    ? target
+    : source.kind === 'group'
+      ? source
+      : {
+          id: crypto.randomUUID(),
+          kind: 'group' as const,
+          name: 'Party',
+          mapId: target.mapId,
+          position: target.position,
+          appearance: { ...target.appearance },
+          tracked: true,
+        };
+  const removedPartyId = source.kind === 'group' && source.id !== survivor.id
+    ? source.id
+    : undefined;
+  const memberIds = new Set(memberPieceIds);
+  const pieces = activeProject.pieces
+    .filter((piece) => piece.id !== removedPartyId)
+    .map((piece) => {
+      if (piece.id === survivor.id) {
+        return {
+          ...survivor,
+          mapId: survivor.mapId,
+          position: survivor.position,
+          memberPieceIds,
+        };
+      }
+      return memberIds.has(piece.id) ? { ...piece, mapId: survivor.mapId } : piece;
+    });
+  if (!pieces.some((piece) => piece.id === survivor.id)) {
+    pieces.push({ ...survivor, memberPieceIds });
+  }
+  const focusedWasMerged = activeProject.focusedPieceId === source.id ||
+    activeProject.focusedPieceId === target.id ||
+    memberIds.has(activeProject.focusedPieceId ?? '');
+  setActiveProject({
+    ...activeProject,
+    pieces,
+    focusedPieceId: focusedWasMerged ? survivor.id : activeProject.focusedPieceId,
+  });
+  markProjectDirty();
+}
+
+function handleRemovePartyMember(partyId: string, memberId: string) {
+  if (!activeProject) return;
+  const party = activeProject.pieces.find((piece) =>
+    piece.id === partyId && piece.kind === 'group');
+  if (!party || !party.memberPieceIds?.includes(memberId)) return;
+  const remainingIds = party.memberPieceIds.filter((id) => id !== memberId);
+  const dissolves = remainingIds.length < 2;
+  const restoredIds = dissolves ? [memberId, ...remainingIds] : [memberId];
+  const restored = new Set(restoredIds);
+  const pieces = activeProject.pieces
+    .filter((piece) => !dissolves || piece.id !== party.id)
+    .map((piece) => {
+      const index = restoredIds.indexOf(piece.id);
+      if (restored.has(piece.id)) {
+        return {
+          ...piece,
+          mapId: party.mapId,
+          position: partyMemberPosition(party, index, restoredIds.length),
+        };
+      }
+      return piece.id === party.id
+        ? { ...piece, memberPieceIds: remainingIds }
+        : piece;
+    });
+  setActiveProject({
+    ...activeProject,
+    pieces,
+    focusedPieceId: dissolves && activeProject.focusedPieceId === party.id
+      ? remainingIds[0] ?? memberId
+      : activeProject.focusedPieceId,
+  });
+  markProjectDirty();
+}
+
+function handleDisbandParty(partyId: string) {
+  if (!activeProject) return;
+  const party = activeProject.pieces.find((piece) =>
+    piece.id === partyId && piece.kind === 'group');
+  if (!party) return;
+  const members = getPartyMembers(party, activeProject.pieces);
+  const memberIds = new Set(members.map((piece) => piece.id));
+  const pieces = activeProject.pieces
+    .filter((piece) => piece.id !== party.id)
+    .map((piece) => {
+      const index = members.findIndex((member) => member.id === piece.id);
+      return memberIds.has(piece.id)
+        ? {
+            ...piece,
+            mapId: party.mapId,
+            position: partyMemberPosition(party, index, members.length),
+          }
+        : piece;
+    });
+  setActiveProject({
+    ...activeProject,
+    pieces,
+    focusedPieceId: activeProject.focusedPieceId === party.id
+      ? members[0]?.id
+      : activeProject.focusedPieceId,
   });
   markProjectDirty();
 }
@@ -1597,9 +1766,12 @@ function updatePiecePosition(pieceId: string, position: Feature['position']) {
   pieceAreaContexts.current.set(key, area?.id);
   const project = {
     ...activeProject,
-    pieces: activeProject.pieces.map((item) => {
-      return item.id === pieceId ? { ...item, position } : item;
-    }),
+    pieces: movePartyAndMembers(
+      activeProject.pieces,
+      pieceId,
+      activeMap.id,
+      position
+    ),
   };
   setActiveProject(project);
   markProjectDirty();
@@ -1615,8 +1787,7 @@ async function transferPieceThroughArea(piece: Piece, mapId: string, position: F
   const focused = piece.id === activeProject.focusedPieceId;
   const project = { ...activeProject,
     activeMapId: focused ? destination.map.id : activeProject.activeMapId,
-    pieces: activeProject.pieces.map((item) => item.id === piece.id
-      ? { ...item, mapId, position } : item) };
+    pieces: movePartyAndMembers(activeProject.pieces, piece.id, mapId, position) };
   setActiveProject(project);
   if (focused) {
     setActiveMap(destination.map);
@@ -1632,7 +1803,8 @@ async function transferPieceThroughArea(piece: Piece, mapId: string, position: F
 async function handlePieceDrop(
   pieceId: string,
   position: Feature['position'],
-  location?: Feature
+  location?: Feature,
+  targetPiece?: Piece
 ) {
   if (!activeProject || !activeMap) return;
   if (loadedSectionsMapId.current !== activeMap.id) {
@@ -1641,6 +1813,10 @@ async function handlePieceDrop(
   }
   const piece = activeProject.pieces.find((item) => item.id === pieceId);
   if (!piece) return;
+  if (targetPiece) {
+    handlePartyDrop(piece.id, targetPiece.id);
+    return;
+  }
 
   const navigable = location?.type === 'location' ||
     location?.type === 'connection';
@@ -1759,9 +1935,12 @@ async function handlePieceDrop(
     };
     const updatedProject = {
       ...activeProject,
-      pieces: activeProject.pieces.map((item) => {
-        return item.id === pieceId ? movedPiece : item;
-      }),
+      pieces: movePartyAndMembers(
+        activeProject.pieces,
+        pieceId,
+        movedPiece.mapId,
+        movedPiece.position
+      ),
       activeMapId: isFocused
         ? destination.map.id
         : activeProject.activeMapId,
@@ -1808,11 +1987,12 @@ async function commitPendingArrival(position: Feature['position']) {
   if (pendingArrival.pieceId) {
     updatedProject = {
       ...activeProject,
-      pieces: activeProject.pieces.map((piece) => {
-        return piece.id === pendingArrival.pieceId
-          ? { ...piece, mapId: activeMap.id, position }
-          : piece;
-      }),
+      pieces: movePartyAndMembers(
+        activeProject.pieces,
+        pendingArrival.pieceId,
+        activeMap.id,
+        position
+      ),
       activeMapId: activeMap.id,
     };
     setActiveProject(updatedProject);
@@ -1861,13 +2041,13 @@ async function cancelPendingArrival() {
 
 async function handleFocusPiece(pieceId: string | null) {
   if (!activeProject || !pieceId) return;
-  const piece = activeProject.pieces.find((item) => item.id === pieceId);
+  const piece = resolveSpatialPiece(pieceId, activeProject.pieces);
   if (!piece) return;
 
   if (activeMap?.id !== piece.mapId) {
     if (projectDirty && !autoSave) {
       requestProjectAction((outcome) => {
-        void focusPiece(pieceId, outcome === 'discarded');
+        void focusPiece(piece.id, outcome === 'discarded');
       });
       return;
     }
@@ -1876,7 +2056,7 @@ async function handleFocusPiece(pieceId: string | null) {
       if (!saved) return;
     }
   }
-  await focusPiece(pieceId, false);
+  await focusPiece(piece.id, false);
 }
 
 async function focusPiece(pieceId: string, discardChanges: boolean) {
@@ -1888,7 +2068,7 @@ async function focusPiece(pieceId: string, discardChanges: boolean) {
       const restored = await restorePersistedSource(project.id, activeMap.id);
       project = restored.project;
     }
-    const piece = project.pieces.find((item) => item.id === pieceId);
+    const piece = resolveSpatialPiece(pieceId, project.pieces);
     if (!piece) throw new Error('The selected Piece was not found.');
 
     const focusChanged = project.focusedPieceId !== piece.id;
@@ -1967,6 +2147,11 @@ function handleSavePiece() {
 
 function handleDeletePiece() {
   if (!activeProject || !pieceToDelete) return;
+  if (pieceToDelete.kind === 'group') {
+    handleDisbandParty(pieceToDelete.id);
+    setPieceToDelete(null);
+    return;
+  }
   const pieces = activeProject.pieces.filter((piece) => {
     return piece.id !== pieceToDelete.id;
   });
@@ -4348,8 +4533,12 @@ mapMediaSlotsEnabled={
 {pieceToDelete && (
   <div className="dialog-backdrop">
     <div className="dialog">
-      <h2>Delete Piece</h2>
-      <p>Delete &quot;{pieceToDelete.name}&quot;?</p>
+      <h2>Delete {pieceToDelete.kind === 'group' ? 'Party' : 'Piece'}</h2>
+      <p>
+        {pieceToDelete.kind === 'group'
+          ? `Disband "${pieceToDelete.name}"? Its members will remain as individual Pieces.`
+          : <>Delete &quot;{pieceToDelete.name}&quot;?</>}
+      </p>
       <div className="dialog-buttons">
         <button type="button" onClick={() => setPieceToDelete(null)}>
           Cancel
@@ -4910,8 +5099,10 @@ mapMediaSlotsEnabled={
         features={activeFeatures}
         pieces={activeProject.pieces.filter((piece) => {
           return piece.mapId === activeMap.id &&
+            !isPieceGrouped(piece.id, activeProject.pieces) &&
             piece.id !== pendingArrival?.pieceId;
         })}
+        allPieces={activeProject.pieces}
         focusedPieceId={activeProject.focusedPieceId}
         edgeScrollingEnabled={regionsSettings.edgeScrollingEnabled}
         featureTypes={activeProject.featureTypes}
@@ -4926,14 +5117,16 @@ mapMediaSlotsEnabled={
         onShowLabelChange={handleShowLabelChange}
         onFeatureTypeChange={handleFeatureTypeChange}
         onFeatureMove={handleFeatureMove}
-        onPieceDrop={(pieceId, position, location) => {
-          void handlePieceDrop(pieceId, position, location);
+        onPieceDrop={(pieceId, position, location, targetPiece) => {
+          void handlePieceDrop(pieceId, position, location, targetPiece);
         }}
         onEditPiece={handleEditPiece}
         onDeletePiece={(piece) => {
           mapViewportRef.current?.cancelInteractions();
           setPieceToDelete(piece);
         }}
+        onRemovePartyMember={handleRemovePartyMember}
+        onDisbandParty={handleDisbandParty}
         onPieceTrackedChange={handlePieceTrackedChange}
         onFocusPiece={(pieceId) => void handleFocusPiece(pieceId)}
         onViewportCenterChange={setViewportCenter}

@@ -79,6 +79,7 @@ function harness({focus = 'npc',tracked = true} = {}) {
   const sandbox = {activeProject,activeMap,activeSections:[area],activeSectionEdges:edges,activeSectionNodes:nodes,
     loadedSectionsMapId:{current:'world'},pieceAreaContexts:{current:new Map()},pendingMaps:[],projectMaps:[activeMap],
     resolveArea:areaResolver.resolveArea,createLocationEvents:api.createLocationEvents,
+    getPartyMembers:pieceModel.getPartyMembers,
     mapRepository:{loadMap:async(id)=>id==='world'?activeMap:null},
     sectionRepository:{loadSections:async()=>[]},sectionEdgeRepository:{loadEdges:async()=>[]},sectionNodeRepository:{loadNodes:async()=>[]},
     resolveMediaSlots:()=>[{mediaType:'image',slot:1,filePath:'test.png',fileName:'test.png',source:'global'}],
@@ -96,6 +97,22 @@ test('application movement captures previous context and emits focused image ref
   assert.equal(messages[0].payload.previousLocationId,'world');
   assert.equal(messages[0].payload.locationId,'forest');
   assert.equal(messages[0].payload.locationType,'');
+});
+test('Party movement announces every member and only one focused spatial context', async()=>{
+  const {sandbox,messages,area,activeMap,activeProject}=harness({focus:'party'});
+  const memberA={...activeProject.pieces[0],id:'a',name:'A',position:{x:-5,y:5}};
+  const memberB={...activeProject.pieces[0],id:'b',name:'B',tracked:false,position:{x:-5,y:5}};
+  const oldParty={...activeProject.pieces[0],id:'party',kind:'group',memberPieceIds:['a','b'],position:{x:-5,y:5}};
+  sandbox.activeProject={...activeProject,pieces:[memberA,memberB,oldParty],focusedPieceId:'party'};
+  const project={...sandbox.activeProject,pieces:[memberA,memberB,{...oldParty,position:{x:5,y:5}}]};
+  await sandbox.handleMapEntered(activeMap,project,undefined,'piece','party',{area,previousArea:undefined});
+  assert.deepEqual(messages.map((event)=>event.type),[
+    'Regions.LocationEntered','Regions.LocationEntered','Regions.LocationContextChanged','Regions.EmitImage'
+  ]);
+  assert.deepEqual(messages.slice(0,2).map((event)=>event.payload.pieceId),['a','b']);
+  assert.equal(messages[0].payload.focused,false);
+  assert.equal(messages[1].payload.tracked,false);
+  assert.equal(messages[2].payload.pieceId,'party');
 });
 test('application cross-map travel resolves both identities without redundant IDs', async()=>{
   const {sandbox,messages,activeProject}=harness({focus:'other',tracked:false});
