@@ -135,7 +135,7 @@ function MapMediaSlotsDialog({
       }
     >
       <div
-        className="dialog map-media-slots-dialog"
+        className="dialog global-media-slots-dialog"
         onPointerDown={(
           event
         ) =>
@@ -173,7 +173,7 @@ function MapMediaSlotsDialog({
                 key={
                   globalSlot.slot
                 }
-                className="map-media-slot-row"
+                className="media-slot-row"
               >
                 <strong>
                   Slot{' '}
@@ -251,8 +251,12 @@ function MapMediaSlotsDialog({
           })}
 
         <div
-          className="map-media-slots-actions"
+          className="global-media-slots-actions"
         >
+          <div />
+
+          <div />
+
           <div />
 
           <button
