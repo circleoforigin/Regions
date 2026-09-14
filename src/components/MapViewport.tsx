@@ -23,9 +23,14 @@ import {
   type SectionPoint,
 } from '../models/Section';
 import {
+  isPointInPolygon,
+  getAreaLabelPosition,
+  getSectionPolygon,
+  getSectionNodeIds,
   closestPointOnSegment,
   pointToSegmentDistance,
 } from '../sections/SectionGeometry';
+import { findAreaReturnPath, validateAreaSegment } from '../sections/AreaDrawing';
 import { useProximityDismiss } from '../hooks/useProximityDismiss';
 
 const OVERSCROLL_RATIO = 0.5;
@@ -378,7 +383,7 @@ function MapViewport({
   const [sectionPointer, setSectionPointer] =
     useState<SectionPoint | null>(null);
   const [sectionContextMenu, setSectionContextMenu] = useState<{
-    kind: 'node' | 'edge';
+    kind: 'node' | 'edge' | 'area';
     id: string;
     x: number;
     y: number;
@@ -390,8 +395,12 @@ function MapViewport({
     position: SectionPoint;
     pointerId?: number;
   } | null>(null);
+  const [movingAreaControl, setMovingAreaControl] = useState<{
+    sectionId: string; position: SectionPoint; pointerId: number;
+  } | null>(null);
   const [editingSection, setEditingSection] = useState<Section | null>(null);
   const [sectionNameDraft, setSectionNameDraft] = useState('');
+  const [sectionShowNameDraft, setSectionShowNameDraft] = useState(false);
   const [sectionColorDraft, setSectionColorDraft] = useState('#ffffff');
 
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -657,6 +666,7 @@ function releasePointerCaptureSafely(
 }
 
 function cancelViewportInteractions() {
+  setMovingAreaControl(null);
   if (dragRef.current) {
     releasePointerCaptureSafely(
       dragRef.current.target,
@@ -1353,14 +1363,14 @@ function getEditableSectionOwner(edgeOrNodeId: string) {
   });
 }
 
-function appendDraftNode(position: SectionPoint) {
+function appendDraftNode(position: SectionPoint, existingNode?: SectionNode) {
   if (!sectionMode) return;
   const boundaryExists = sections.some((section) => {
     return section.kind === 'boundary';
   });
   if (sectionMode === 'boundary' && boundaryExists) return;
   if (!sectionDraft) {
-    const node: SectionNode = {
+    const node: SectionNode = existingNode ?? {
       id: crypto.randomUUID(),
       mapId,
       position,
@@ -1373,24 +1383,62 @@ function appendDraftNode(position: SectionPoint) {
     });
     return;
   }
+  if (existingNode && sectionDraft.nodes.some((node) => node.id === existingNode.id)) {
+    if (existingNode.id === sectionDraft.nodes[0].id) completeSectionDraft();
+    return;
+  }
   const previous = sectionDraft.nodes.at(-1);
   if (!previous) return;
-  const node: SectionNode = {
+  const node: SectionNode = existingNode ?? {
     id: crypto.randomUUID(),
     mapId: previous.mapId,
     position,
   };
-  const edge: SectionEdge = {
+  if (sectionMode === 'area') {
+    const error = validateAreaSegment(previous, node, [...sectionEdges, ...sectionDraft.edges],
+      [...sectionNodes, ...sectionDraft.nodes]);
+    if (error) { onSectionError?.(error); return; }
+  }
+  const edge: SectionEdge = editableEdges.find((item) =>
+    (item.startNodeId === previous.id && item.endNodeId === node.id) ||
+    (item.endNodeId === previous.id && item.startNodeId === node.id)
+  ) ?? {
     id: crypto.randomUUID(),
     mapId: previous.mapId,
     startNodeId: previous.id,
     endNodeId: node.id,
   };
-  setSectionDraft({
+  const draft = {
     ...sectionDraft,
     nodes: [...sectionDraft.nodes, node],
     edges: [...sectionDraft.edges, edge],
-  });
+  };
+  if (sectionMode === 'area' && existingNode &&
+      draft.edges.some((item) => !sectionEdges.some((saved) => saved.id === item.id))) {
+    const path = findAreaReturnPath(draft.nodes, draft.edges, editableEdges);
+    if (path) {
+      const allNodes = new Map([...sectionNodes, ...draft.nodes].map((item) => [item.id, item]));
+      const edges = [...draft.edges, ...path];
+      const nodeIds = new Set(edges.flatMap((item) => [item.startNodeId, item.endNodeId]));
+      saveSectionDraft(draft, edges, [...allNodes.values()].filter((item) => nodeIds.has(item.id)));
+      return;
+    }
+  }
+  setSectionDraft(draft);
+}
+
+function saveSectionDraft(
+  draft: NonNullable<typeof sectionDraft>, edges: SectionEdge[], nodes: SectionNode[]
+) {
+  const defaults = SECTION_DEFAULTS[draft.kind];
+  const now = new Date();
+  onCreateSection?.({
+    id: draft.sectionId, mapId, kind: draft.kind,
+    name: defaults.name, color: defaults.color,
+    edgeIds: edges.map((edge) => edge.id), createdAt: now, updatedAt: now,
+  }, nodes, edges);
+  setSectionDraft(null);
+  setSectionPointer(null);
 }
 
 function completeSectionDraft() {
@@ -1406,27 +1454,22 @@ function completeSectionDraft() {
   const origin = sectionDraft.nodes[0];
   const last = sectionDraft.nodes.at(-1);
   if (!last) return;
-  const closingEdge: SectionEdge = {
+  if (sectionDraft.kind === 'area') {
+    const error = validateAreaSegment(last, origin, [...sectionEdges, ...sectionDraft.edges],
+      [...sectionNodes, ...sectionDraft.nodes]);
+    if (error) { onSectionError?.(error); return; }
+  }
+  const closingEdge: SectionEdge = editableEdges.find((item) =>
+    (item.startNodeId === last.id && item.endNodeId === origin.id) ||
+    (item.endNodeId === last.id && item.startNodeId === origin.id)
+  ) ?? {
     id: crypto.randomUUID(),
     mapId: origin.mapId,
     startNodeId: last.id,
     endNodeId: origin.id,
   };
   const edges = [...sectionDraft.edges, closingEdge];
-  const defaults = SECTION_DEFAULTS[sectionDraft.kind];
-  const now = new Date();
-  onCreateSection?.({
-    id: sectionDraft.sectionId,
-    mapId: origin.mapId,
-    kind: sectionDraft.kind,
-    name: defaults.name,
-    color: defaults.color,
-    edgeIds: edges.map((edge) => edge.id),
-    createdAt: now,
-    updatedAt: now,
-  }, sectionDraft.nodes, edges);
-  setSectionDraft(null);
-  setSectionPointer(null);
+  saveSectionDraft(sectionDraft, edges, sectionDraft.nodes);
 }
 
 function deleteSectionNode(nodeId: string) {
@@ -1439,13 +1482,18 @@ function deleteSectionNode(nodeId: string) {
   const ownerEdges = owner.edgeIds.map((id) => {
     return sectionEdges.find((edge) => edge.id === id);
   }).filter((edge): edge is SectionEdge => Boolean(edge));
-  const incoming = ownerEdges.find((edge) => edge.endNodeId === nodeId);
-  const outgoing = ownerEdges.find((edge) => edge.startNodeId === nodeId);
+  const orderedNodes = getSectionNodeIds(owner, sectionEdges);
+  const nodeIndex = orderedNodes.indexOf(nodeId);
+  if (nodeIndex < 0) return;
+  const incoming = ownerEdges[(nodeIndex + ownerEdges.length - 1) % ownerEdges.length];
+  const outgoing = ownerEdges[nodeIndex];
   if (!incoming || !outgoing) return;
   const shared = sections.some((section) => {
     return section.id !== owner.id &&
-      (section.edgeIds.includes(incoming.id) ||
-        section.edgeIds.includes(outgoing.id));
+      section.edgeIds.some((id) => {
+        const edge = sectionEdges.find((item) => item.id === id);
+        return edge?.startNodeId === nodeId || edge?.endNodeId === nodeId;
+      });
   });
   if (shared) {
     onSectionError?.('A shared Section node cannot be deleted yet.');
@@ -1454,8 +1502,8 @@ function deleteSectionNode(nodeId: string) {
   const replacement: SectionEdge = {
     id: crypto.randomUUID(),
     mapId: incoming.mapId,
-    startNodeId: incoming.startNodeId,
-    endNodeId: outgoing.endNodeId,
+    startNodeId: orderedNodes[(nodeIndex + orderedNodes.length - 1) % orderedNodes.length],
+    endNodeId: orderedNodes[(nodeIndex + 1) % orderedNodes.length],
   };
   const removeIds = new Set([incoming.id, outgoing.id]);
   const insertAt = owner.edgeIds.indexOf(incoming.id);
@@ -1495,7 +1543,8 @@ function addNodeToEdge(edgeId: string, position: SectionPoint) {
       const index = section.edgeIds.indexOf(edgeId);
       if (index < 0) return section;
       const edgeIds = [...section.edgeIds];
-      edgeIds.splice(index, 1, first.id, second.id);
+      const forward = getSectionNodeIds(section, sectionEdges)[index] === edge.startNodeId;
+      edgeIds.splice(index, 1, ...(forward ? [first.id, second.id] : [second.id, first.id]));
       return { ...section, edgeIds, updatedAt: new Date() };
     }),
     [...sectionNodes, node],
@@ -2054,7 +2103,13 @@ function handleSectionNodePointerDown(
     deleteSectionNode(node.id);
     return;
   }
-  if (!event.ctrlKey) return;
+  if (!event.ctrlKey) {
+    if (sectionMode === 'area') {
+      event.preventDefault();
+      appendDraftNode(node.position, node);
+    }
+    return;
+  }
   event.preventDefault();
   event.currentTarget.setPointerCapture(event.pointerId);
   setMovingSectionNode({
@@ -2093,9 +2148,26 @@ function cancelSectionNodeMove() {
   setMovingSectionNode(null);
 }
 
+function getAreaControlPosition(section: Section) {
+  const polygon = getSectionPolygon(section, sectionEdges, displayedSectionNodes);
+  const position = movingAreaControl?.sectionId === section.id
+    ? movingAreaControl.position : section.controlPosition;
+  return position && isPointInPolygon(position, polygon)
+    ? position : getAreaLabelPosition(polygon);
+}
+
+useEffect(() => {
+  if (!movingAreaControl) return;
+  const cancel = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') setMovingAreaControl(null);
+  };
+  window.addEventListener('keydown', cancel);
+  return () => window.removeEventListener('keydown', cancel);
+}, [movingAreaControl]);
 function openSectionProperties(section: Section) {
   setEditingSection(section);
   setSectionNameDraft(section.name);
+  setSectionShowNameDraft(section.showName ?? false);
   setSectionColorDraft(section.color);
   setSectionContextMenu(null);
 }
@@ -2108,6 +2180,7 @@ function saveSectionProperties() {
           ...section,
           name: sectionNameDraft.trim(),
           color: sectionColorDraft,
+          showName: sectionShowNameDraft,
           updatedAt: new Date(),
         }
       : section),
@@ -2186,23 +2259,57 @@ function saveSectionProperties() {
 
 <svg className="section-geometry-layer" aria-hidden="true">
   {visibleSections.map((section) => {
-    const points = section.edgeIds.map((edgeId) => {
-      const edge = sectionEdges.find((item) => item.id === edgeId);
-      const node = displayedSectionNodes.find((item) => {
-        return item.id === edge?.startNodeId;
-      });
-      return node ? mapToScreen(node.position.x, node.position.y) : null;
-    }).filter((point): point is Point => point !== null);
+    const points = getSectionPolygon(section, sectionEdges, displayedSectionNodes)
+      .map((point) => mapToScreen(point.x, point.y));
+    const polygonPoints = points.map((point) => `${point.x},${point.y}`).join(' ');
+    if (section.kind === 'area') {
+      const clipId = `area-interior-${mapId}-${section.id}`;
+      return (
+        <g key={section.id}>
+          <defs>
+            <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
+              <polygon points={polygonPoints} />
+            </clipPath>
+          </defs>
+          <polygon
+            className="section-geometry section-area"
+            points={polygonPoints}
+            fill={section.color}
+            stroke="none"
+          />
+          {/* Keep the inner half of a 4px stroke: a 2px line centered 1px inside.
+              Points are in screen coordinates, so the inset stays fixed on zoom. */}
+          <polygon
+            className="section-area-edge"
+            points={polygonPoints}
+            stroke={section.color}
+            clipPath={`url(#${clipId})`}
+          />
+        </g>
+      );
+    }
     return (
       <polygon
         key={section.id}
         className={`section-geometry section-${section.kind}`}
-        points={points.map((point) => `${point.x},${point.y}`).join(' ')}
+        points={polygonPoints}
         fill={section.color}
         stroke={section.color}
       />
     );
   })}
+  {visibleSections.filter((section) => section.kind === 'area' && section.showName)
+    .map((section) => {
+      const position = getAreaControlPosition(section);
+      if (!position) return null;
+      const screen = mapToScreen(position.x, position.y);
+      return (
+        <text key={`label-${section.id}`} className="section-area-name"
+          x={screen.x} y={screen.y + 22} textAnchor="middle" dominantBaseline="central">
+          {section.name}
+        </text>
+      );
+    })}
   {sectionDraft?.edges.map((edge) => {
     const start = sectionDraft.nodes.find((node) => {
       return node.id === edge.startNodeId;
@@ -2225,6 +2332,60 @@ function saveSectionProperties() {
   })()}
 </svg>
 
+{visibleSections.filter((section) => section.kind === 'area').map((section) => {
+  const position = getAreaControlPosition(section);
+  if (!position) return null;
+  const screen = mapToScreen(position.x, position.y);
+  return (
+    <button
+      key={`control-${section.id}`}
+      type="button"
+      className="area-control-node"
+      aria-label={`${section.name} Area control`}
+      title={`${section.name}: drag to move; right-click for Area properties`}
+      style={{ left: screen.x, top: screen.y, backgroundColor: section.color }}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        if (event.button !== 0 || pendingArrivalPlacement || sectionDraft) return;
+        event.preventDefault();
+        setSectionContextMenu(null);
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setMovingAreaControl({ sectionId: section.id, position, pointerId: event.pointerId });
+      }}
+      onPointerMove={(event) => {
+        event.stopPropagation();
+        if (movingAreaControl?.sectionId !== section.id ||
+            movingAreaControl.pointerId !== event.pointerId) return;
+        const point = screenToMap(event.clientX, event.clientY);
+        const polygon = getSectionPolygon(section, sectionEdges, displayedSectionNodes);
+        if (point && isPointInPolygon(point, polygon)) {
+          setMovingAreaControl({ ...movingAreaControl, position: point });
+        }
+      }}
+      onPointerUp={(event) => {
+        event.stopPropagation();
+        if (movingAreaControl?.sectionId !== section.id ||
+            movingAreaControl.pointerId !== event.pointerId) return;
+        const controlPosition = movingAreaControl.position;
+        setMovingAreaControl(null);
+        releasePointerCaptureSafely(event.currentTarget, event.pointerId);
+        onUpdateSectionData?.(sections.map((item) => item.id === section.id
+          ? { ...item, controlPosition, updatedAt: new Date() } : item), sectionNodes, sectionEdges);
+      }}
+      onPointerCancel={() => setMovingAreaControl(null)}
+      onLostPointerCapture={() => setMovingAreaControl(null)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = viewportRef.current?.getBoundingClientRect();
+        if (!rect || pendingArrivalPlacement) return;
+        setMovingAreaControl(null);
+        setSectionContextMenu({ kind: 'area', id: section.id, point: position,
+          x: event.clientX - rect.left, y: event.clientY - rect.top });
+      }}
+    />
+  );
+})}
 {displayedSectionNodes.filter((node) => {
   return editableNodeIds.has(node.id);
 }).map((node) => {
@@ -2769,7 +2930,14 @@ function saveSectionProperties() {
     style={{ left: sectionContextMenu.x, top: sectionContextMenu.y }}
     onPointerDown={(event) => event.stopPropagation()}
   >
-    {sectionContextMenu.kind === 'node' ? (
+    {sectionContextMenu.kind === 'area' ? (
+      <button type="button" onClick={() => {
+        const section = sections.find((item) => item.id === sectionContextMenu.id);
+        if (section) openSectionProperties(section);
+      }}>
+        Area...
+      </button>
+    ) : sectionContextMenu.kind === 'node' ? (
       <>
         <button
           type="button"
@@ -2794,16 +2962,18 @@ function saveSectionProperties() {
         >
           Delete
         </button>
+        {getEditableSectionOwner(sectionContextMenu.id)?.kind !== 'area' && (<>
         <div className="map-context-separator" />
         <button
           type="button"
           onClick={() => {
-            const owner = getSectionOwner(sectionContextMenu.id);
+            const owner = getEditableSectionOwner(sectionContextMenu.id);
             if (owner) openSectionProperties(owner);
           }}
         >
           Section...
-        </button>
+        </button>        </>)}
+
       </>
     ) : (
       <>
@@ -2821,7 +2991,7 @@ function saveSectionProperties() {
             type="button"
             onClick={() => startSectionFromEdge(sectionContextMenu.id)}
           >
-            New Section
+            {sectionMode === 'area' ? 'New Area' : 'New Section'}
           </button>
         )}
       </>
@@ -3034,7 +3204,8 @@ function saveSectionProperties() {
           autoFocus
         />
       </label>
-      <label>
+      <div className="section-appearance-row">
+      <label className="section-color-control">
         Color
         <input
           type="color"
@@ -3042,6 +3213,17 @@ function saveSectionProperties() {
           onChange={(event) => setSectionColorDraft(event.target.value)}
         />
       </label>
+      {editingSection.kind === 'area' && (
+        <label className="section-show-name-control">
+          Show Name
+          <input
+            type="checkbox"
+            checked={sectionShowNameDraft}
+            onChange={(event) => setSectionShowNameDraft(event.target.checked)}
+          />
+        </label>
+      )}
+      </div>
       <div className="dialog-buttons section-properties-buttons">
         <button
           type="button"

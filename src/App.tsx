@@ -50,6 +50,7 @@ import type {
   SectionNode,
 } from './models/Section';
 import { featureRepository } from './features/FeatureRepository';
+import { resolveArea } from './sections/AreaContext';
 import { sectionRepository } from './sections/SectionRepository';
 import { sectionEdgeRepository } from './sections/SectionEdgeRepository';
 import { sectionNodeRepository } from './sections/SectionNodeRepository';
@@ -109,6 +110,8 @@ interface PendingArrivalIntent {
 }
 
 function App() {
+  const loadedSectionsMapId = useRef<string | null>(null);
+  const pieceAreaContexts = useRef(new Map<string, string | undefined>());
   const { dispatch } = useRegionsState();
   const mapViewportRef = useRef<MapViewportHandle | null>(null);
   const [
@@ -404,6 +407,7 @@ const pendingProjectActionRef =
   useLayoutEffect(() => {
     mapViewportRef.current?.cancelInteractions();
     setSectionMode(null);
+    loadedSectionsMapId.current = null;
   // Active Map identity is the sole authority for this cleanup.
   // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMapId]);
@@ -449,6 +453,7 @@ const pendingProjectActionRef =
       })));
       const nodes = await sectionNodeRepository.loadNodes(nodeIds);
       if (cancelled) return;
+      loadedSectionsMapId.current = map.id;
       setActiveSections(normalizedSections);
       setActiveSectionEdges(edges);
       setActiveSectionNodes(nodes);
@@ -558,6 +563,11 @@ const pendingProjectActionRef =
             { key: 'name', label: 'Name', type: 'string' },
             { key: 'type', label: 'Type', type: 'string' },
             { key: 'mapId', label: 'Map ID', type: 'string' },
+            { key: 'pieceId', label: 'Piece ID', type: 'string' },
+            { key: 'focused', label: 'Focused', type: 'boolean' },
+            { key: 'contextKind', label: 'Context Kind', type: 'string' },
+            { key: 'areaId', label: 'Area ID', type: 'string' },
+            { key: 'mapName', label: 'Map Name', type: 'string' },
           ],
         },
         {
@@ -1009,20 +1019,42 @@ async function commitPieceParentExit(
   setFocusPieceRequestId((current) => current + 1);
 }
 
-function handleMapEntered(
+async function handleMapEntered(
   map: RegionMap,
   project: Project,
   parentMapName?: string,
   source: SpatialNavigationSource = 'manual',
-  sourcePieceId?: string
+  sourcePieceId?: string,
+  resolvedArea?: { area: Section | undefined }
 ) {
+  try {
   if (project.pieces.length > 0) {
     const pieceNavigation = source === 'piece' ||
       source === 'piece-focus';
     if (!pieceNavigation) return;
-    if (sourcePieceId !== project.focusedPieceId) return;
+
   }
 
+  let enteredArea = resolvedArea?.area;
+  const sourcePiece = project.pieces.find((piece) => piece.id === sourcePieceId);
+  if (!resolvedArea && sourcePiece && sourcePiece.mapId === map.id) {
+    if (map.id === activeMap?.id && loadedSectionsMapId.current === map.id) {
+      enteredArea = resolveArea(map.id, sourcePiece.position, activeSections,
+        activeSectionEdges, activeSectionNodes,
+        pieceAreaContexts.current.get(`${project.id}:${sourcePieceId}:${map.id}`));
+    } else {
+    // Arrival can precede the active Map's asynchronous Section-loading effect.
+    const sections = await sectionRepository.loadSections(map.sectionIds ?? []);
+    const edges = await sectionEdgeRepository.loadEdges(sections.flatMap((section) => section.edgeIds));
+    const nodes = await sectionNodeRepository.loadNodes(
+      Array.from(new Set(edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])))
+    );
+    enteredArea = resolveArea(map.id, sourcePiece.position, sections, edges, nodes);
+    }
+  }
+  if (sourcePieceId) {
+    pieceAreaContexts.current.set(`${project.id}:${sourcePieceId}:${map.id}`, enteredArea?.id);
+  }
   const semanticType =
     project.featureTypes.find(
       (type) =>
@@ -1037,14 +1069,22 @@ function handleMapEntered(
   moduleEventBus.emit(
     'Regions.LocationEntered',
     {
-      area: 'Location',
+      area: enteredArea ? 'Area' : 'Location',
+      contextKind: enteredArea ? 'area' : 'map',
+      areaId: enteredArea?.id ?? '',
+      mapName: map.name,
       parentMap:
         parentMapName ?? '',
-      name: map.name,
+      name: enteredArea?.name ?? map.name,
       type: semanticType,
       mapId: map.id,
+      pieceId: sourcePieceId ?? '',
+      focused: Boolean(sourcePieceId && sourcePieceId === project.focusedPieceId),
     }
   );
+
+  // Shared images continue to follow the focused Piece.
+  if (project.pieces.length > 0 && sourcePieceId !== project.focusedPieceId) return;
 
   mediaSlots.forEach((mediaSlot) => {
     if (mediaSlot.mediaType !== 'image') return;
@@ -1059,6 +1099,10 @@ function handleMapEntered(
       }
     );
   });
+  } catch (error) {
+    console.error('Unable to resolve location context:', error);
+    setNavigationError('Unable to resolve location context.');
+  }
 }
 
 async function restorePersistedSource(
@@ -1523,16 +1567,28 @@ async function saveSettings() {
 }
 
 function updatePiecePosition(pieceId: string, position: Feature['position']) {
-  if (!activeProject) return;
-  setActiveProject({
+  if (!activeProject || !activeMap) return;
+  const piece = activeProject.pieces.find((item) => item.id === pieceId);
+  if (!piece) return;
+  const key = `${activeProject.id}:${pieceId}:${activeMap.id}`;
+  const previousArea = resolveArea(activeMap.id, piece.position,
+    activeSections, activeSectionEdges, activeSectionNodes,
+    pieceAreaContexts.current.get(key));
+  const area = resolveArea(activeMap.id, position,
+    activeSections, activeSectionEdges, activeSectionNodes, previousArea?.id);
+  pieceAreaContexts.current.set(key, area?.id);
+  const project = {
     ...activeProject,
-    pieces: activeProject.pieces.map((piece) => {
-      return piece.id === pieceId ? { ...piece, position } : piece;
+    pieces: activeProject.pieces.map((item) => {
+      return item.id === pieceId ? { ...item, position } : item;
     }),
-  });
+  };
+  setActiveProject(project);
   markProjectDirty();
+  if (previousArea?.id !== area?.id) {
+    void handleMapEntered(activeMap, project, undefined, 'piece', pieceId, { area });
+  }
 }
-
 async function handlePieceDrop(
   pieceId: string,
   position: Feature['position'],
@@ -1636,13 +1692,6 @@ async function handlePieceDrop(
     setActiveProject(updatedProject);
     markProjectDirty();
 
-    if (!isFocused) return;
-    setActiveMap(destination.map);
-    setActiveFeatures(destination.features);
-    setPendingFocusFeatureId(null);
-    await loadMapImage(destination.map);
-    setFocusPiecePosition(movedPiece.position);
-    setFocusPieceRequestId((current) => current + 1);
     handleMapEntered(
       destination.map,
       updatedProject,
@@ -1650,6 +1699,13 @@ async function handlePieceDrop(
       'piece',
       pieceId
     );
+    if (!isFocused) return;
+    setActiveMap(destination.map);
+    setActiveFeatures(destination.features);
+    setPendingFocusFeatureId(null);
+    await loadMapImage(destination.map);
+    setFocusPiecePosition(movedPiece.position);
+    setFocusPieceRequestId((current) => current + 1);
   } catch (error) {
     const message = error instanceof Error
       ? error.message
@@ -1731,35 +1787,59 @@ async function cancelPendingArrival() {
 }
 
 async function handleFocusPiece(pieceId: string | null) {
-  if (!activeProject) return;
-  if (pieceId === null) {
-    return;
-  }
+  if (!activeProject || !pieceId) return;
   const piece = activeProject.pieces.find((item) => item.id === pieceId);
   if (!piece) return;
 
-  const focusChanged = activeProject.focusedPieceId !== piece.id;
-  const updatedProject = focusChanged
-    ? { ...activeProject, focusedPieceId: piece.id }
-    : activeProject;
-  if (focusChanged) {
-    setActiveProject(updatedProject);
-    markProjectDirty();
+  if (activeMap?.id !== piece.mapId) {
+    if (projectDirty && !autoSave) {
+      requestProjectAction((outcome) => {
+        void focusPiece(pieceId, outcome === 'discarded');
+      });
+      return;
+    }
+    if (projectDirty || saveInProgressRef.current) {
+      const saved = await saveActiveProject();
+      if (!saved) return;
+    }
   }
+  await focusPiece(pieceId, false);
+}
+
+async function focusPiece(pieceId: string, discardChanges: boolean) {
+  if (!activeProject) return;
 
   try {
-    let destinationMap = activeMap;
-    if (activeMap?.id !== piece.mapId) {
-      const destination = await loadMapWithFeatures(piece.mapId);
-      destinationMap = destination.map;
-      setActiveProject({ ...updatedProject, activeMapId: piece.mapId });
+    let project = activeProject;
+    if (discardChanges && activeMap) {
+      const restored = await restorePersistedSource(project.id, activeMap.id);
+      project = restored.project;
+    }
+    const piece = project.pieces.find((item) => item.id === pieceId);
+    if (!piece) throw new Error('The selected Piece was not found.');
+
+    const focusChanged = project.focusedPieceId !== piece.id;
+    const mapChanged = activeMap?.id !== piece.mapId;
+    const destination = mapChanged
+      ? await loadMapWithFeatures(piece.mapId)
+      : null;
+    const destinationMap = destination?.map ?? activeMap;
+    if (!destinationMap) return;
+
+    const updatedProject = {
+      ...project,
+      focusedPieceId: piece.id,
+      activeMapId: destinationMap.id,
+    };
+    setActiveProject(updatedProject);
+    if (destination) {
       setActiveMap(destination.map);
       setActiveFeatures(destination.features);
       setPendingFocusFeatureId(null);
       await loadMapImage(destination.map);
     }
+    if (focusChanged || mapChanged) markProjectDirty();
 
-    if (!destinationMap) return;
     setFocusPiecePosition(piece.position);
     setFocusPieceRequestId((current) => current + 1);
     if (focusChanged) {
@@ -1779,7 +1859,6 @@ async function handleFocusPiece(pieceId: string | null) {
     setNavigationError(message);
   }
 }
-
 function handleEditPiece(piece: Piece) {
   mapViewportRef.current?.cancelInteractions();
   setEditingPieceId(piece.id);

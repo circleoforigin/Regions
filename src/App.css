@@ -1303,6 +1303,11 @@ button.map-key-parent:hover {
   vector-effect: non-scaling-stroke;
 }
 
+.section-geometry-layer .section-area-edge {
+  fill: none;
+  stroke-width: 4;
+}
+
 .section-geometry-layer .section-boundary {
   fill: none;
   stroke-width: 4;
@@ -1966,4 +1971,86 @@ button.map-key-parent:hover {
   align-items: center;
 
   margin-top: 20px;
+}
+.section-properties-dialog .section-color-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-properties-dialog .section-color-control input[type='color'] {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #777777;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.section-color-control input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.section-color-control input[type='color']::-webkit-color-swatch {
+  border: 0;
+}
+
+.section-color-control input[type='color']::-moz-color-swatch {
+  border: 0;
+}
+.section-properties-dialog .section-show-name-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-properties-dialog .section-show-name-control input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  accent-color: #81b497;
+}
+
+.section-area-name {
+  fill: #ffffff;
+  stroke: #202020;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+}
+.section-appearance-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.area-control-node {
+  position: absolute;
+  z-index: 7;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 2px solid #ffffff;
+  border-radius: 3px;
+  box-shadow: 0 1px 4px #000000;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  touch-action: none;
+}
+
+.area-control-node:active {
+  cursor: grabbing;
+}
+
+.area-control-node:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
 }

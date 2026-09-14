@@ -24,6 +24,8 @@ export interface Section {
   kind: SectionKind;
   name: string;
   color: string;
+  showName?: boolean;
+  controlPosition?: SectionPoint;
   edgeIds: string[];
   createdAt: Date;
   updatedAt: Date;
