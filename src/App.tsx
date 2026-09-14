@@ -1,3 +1,5 @@
+import type { BoundaryAlignment } from './models/Map';
+import { findBoundaryCrossing, deriveAreaBoundary, isValidAlignment, transformBoundaryPoint } from './sections/BoundaryTransform';
 import {
   useEffect,
   useLayoutEffect,
@@ -435,6 +437,7 @@ const pendingProjectActionRef =
       let boundaryFound = false;
       const normalizedSections = orderedSections.filter((section) => {
         if (section.kind !== 'boundary') return true;
+        if (map.areaBoundaryLink) return false;
         const valid = section.mapId === map.id &&
           section.edgeIds.length >= 3;
         if (!valid || boundaryFound) return false;
@@ -452,6 +455,20 @@ const pendingProjectActionRef =
         return [edge.startNodeId, edge.endNodeId];
       })));
       const nodes = await sectionNodeRepository.loadNodes(nodeIds);
+      if (map.areaBoundaryLink && map.parentMapId) {
+        const [area] = await sectionRepository.loadSections([map.areaBoundaryLink.areaId]);
+        if (!area || area.mapId !== map.parentMapId || area.kind !== 'area' || area.targetMapId !== map.id) {
+          throw new Error('The source Area for this locked Boundary was not found.');
+        }
+        const sourceEdges = await sectionEdgeRepository.loadEdges(area.edgeIds);
+        const sourceNodes = await sectionNodeRepository.loadNodes(
+          [...new Set(sourceEdges.flatMap((edge) => [edge.startNodeId, edge.endNodeId]))]);
+        const derived = deriveAreaBoundary(map.id, area,
+          getSectionPolygon(area, sourceEdges, sourceNodes), map.areaBoundaryLink.alignment);
+        normalizedSections.push(derived.section);
+        edges.push(...derived.edges);
+        nodes.push(...derived.nodes);
+      }
       if (cancelled) return;
       loadedSectionsMapId.current = map.id;
       setActiveSections(normalizedSections);
@@ -464,14 +481,17 @@ const pendingProjectActionRef =
         ]));
         setActiveMap({
           ...map,
-          sectionIds: normalizedSections.map((section) => section.id),
+          sectionIds: normalizedSections.filter((section) => !section.locked).map((section) => section.id),
         });
         markProjectDirty();
       }
     }
 
     void loadSections().catch((error) => {
-      if (!cancelled) console.error('Unable to load Sections:', error);
+      if (!cancelled) {
+        console.error('Unable to load Sections:', error);
+        setNavigationError(error instanceof Error ? error.message : 'Unable to load Sections.');
+      }
     });
     return () => {
       cancelled = true;
@@ -971,7 +991,17 @@ function findParentLocation(childMap: RegionMap, features: Feature[]) {
 async function resolveParentLocation(childMap: RegionMap) {
   if (!childMap.parentMapId) return null;
   const parent = await loadEffectiveMapWithFeatures(childMap.parentMapId);
-  const parentLocation = findParentLocation(childMap, parent.features);
+  let parentLocation = findParentLocation(childMap, parent.features);
+  if (childMap.areaBoundaryLink) {
+    const [area] = await sectionRepository.loadSections([childMap.areaBoundaryLink.areaId]);
+    if (area?.mapId === parent.map.id) {
+      parentLocation = { id: area.id, name: area.name, type: 'location', noteLinks: [],
+        targetMapId: childMap.id, position: {
+          x: childMap.areaBoundaryLink.alignment.pivotX,
+          y: childMap.areaBoundaryLink.alignment.pivotY,
+        } };
+    }
+  }
   if (!parentLocation) return null;
   return {
     parentMap: parent.map,
@@ -1589,18 +1619,76 @@ function updatePiecePosition(pieceId: string, position: Feature['position']) {
     void handleMapEntered(activeMap, project, undefined, 'piece', pieceId, { area });
   }
 }
+async function transferPieceThroughArea(piece: Piece, mapId: string, position: Feature['position']) {
+  if (!activeProject || !activeMap) return;
+  const sourceName = activeMap.name;
+  if (!(await saveActiveProject())) return;
+  const destination = await loadMapWithFeatures(mapId);
+  const focused = piece.id === activeProject.focusedPieceId;
+  const project = { ...activeProject,
+    activeMapId: focused ? destination.map.id : activeProject.activeMapId,
+    pieces: activeProject.pieces.map((item) => item.id === piece.id
+      ? { ...item, mapId, position } : item) };
+  setActiveProject(project);
+  if (focused) {
+    setActiveMap(destination.map);
+    setActiveFeatures(destination.features);
+    setPendingFocusFeatureId(null);
+    await loadMapImage(destination.map);
+    setFocusPiecePosition(position);
+    setFocusPieceRequestId((current) => current + 1);
+  }
+  markProjectDirty();
+  void handleMapEntered(destination.map, project, sourceName, 'piece', piece.id);
+}
 async function handlePieceDrop(
   pieceId: string,
   position: Feature['position'],
   location?: Feature
 ) {
   if (!activeProject || !activeMap) return;
+  if (loadedSectionsMapId.current !== activeMap.id) {
+    setNavigationError('Please wait for this Map’s Areas and Boundary to load.');
+    return;
+  }
   const piece = activeProject.pieces.find((item) => item.id === pieceId);
   if (!piece) return;
 
   const navigable = location?.type === 'location' ||
     location?.type === 'connection';
   if (!navigable || !location?.targetMapId) {
+    try {
+      if (activeMap.areaBoundaryLink && activeMap.parentMapId) {
+        const locked = activeSections.find((section) => section.locked);
+        const polygon = locked ? getSectionPolygon(locked, activeSectionEdges, activeSectionNodes) : [];
+        const crossing = findBoundaryCrossing(piece.position, position, polygon, false);
+        if (crossing) {
+          await transferPieceThroughArea(piece, activeMap.parentMapId,
+            transformBoundaryPoint(crossing.position, activeMap.areaBoundaryLink.alignment, true));
+          return;
+        }
+      }
+      const entrances = activeSections.filter((section) => section.kind === 'area' && section.targetMapId)
+        .flatMap((area) => {
+          const crossing = findBoundaryCrossing(piece.position, position,
+            getSectionPolygon(area, activeSectionEdges, activeSectionNodes), true);
+          return crossing ? [{ area, crossing }] : [];
+        }).sort((a, b) => a.crossing.fraction - b.crossing.fraction);
+      const entrance = entrances[0];
+      if (entrance?.area.targetMapId) {
+        const destination = await loadEffectiveMapWithFeatures(entrance.area.targetMapId);
+        const link = destination.map.areaBoundaryLink;
+        if (!link || link.areaId !== entrance.area.id || destination.map.parentMapId !== activeMap.id) {
+          throw new Error('The Area Location link is incomplete.');
+        }
+        await transferPieceThroughArea(piece, destination.map.id,
+          transformBoundaryPoint(entrance.crossing.position, link.alignment));
+        return;
+      }
+    } catch (error) {
+      setNavigationError(error instanceof Error ? error.message : 'Unable to travel through the Area.');
+      return;
+    }
     const boundary = activeSections.find((section) => {
       return section.kind === 'boundary' && section.edgeIds.length >= 3;
     });
@@ -1999,6 +2087,10 @@ function closeDeleteMapDialog() {
 
 async function handleDeleteMapRequest() {
   if (!selectedDeleteMap) return;
+  if (selectedDeleteMap.areaBoundaryLink) {
+    setNavigationError('Unlink this Location in its parent Area properties before deleting it.');
+    return;
+  }
   const currentAnalysis = mapDeletionAnalysis?.map.id === selectedDeleteMap.id
     ? mapDeletionAnalysis
     : await analyzeMapDeletion(selectedDeleteMap);
@@ -2147,6 +2239,10 @@ function getDescendantMapIds(mapId: string): Set<string> {
 }
 
 function handleMapParentChange(parentMapId: string) {
+  if (activeMap?.areaBoundaryLink) {
+    setNavigationError('This Map belongs to its linked Area.');
+    return;
+  }
   if (!activeMap || activeMap.id === activeProject?.rootMapId) return;
   if (parentMapId === activeMap.id) return;
   if (getDescendantMapIds(activeMap.id).has(parentMapId)) return;
@@ -2160,6 +2256,10 @@ function handleMapParentChange(parentMapId: string) {
 }
 
 function handleConfirmMakeWorldRoot() {
+  if (activeMap?.areaBoundaryLink) {
+    setNavigationError('Unlink this Location from its parent Area before making it the root Map.');
+    return;
+  }
   if (!activeProject || !activeMap || !mapToMakeRoot) return;
   const oldRoot = projectMaps.find((map) => {
     return map.id === activeProject.rootMapId;
@@ -2272,9 +2372,12 @@ async function saveActiveProject(): Promise<boolean> {
   const maps = pendingMaps;
   const featuresToSave = pendingFeatures;
   const mapsToDelete = pendingMapDeletionIds;
-  const sections = activeSections;
-  const sectionNodes = activeSectionNodes;
-  const sectionEdges = activeSectionEdges;
+  const sections = activeSections.filter((section) => !section.locked);
+  const savedEdgeIds = new Set(sections.flatMap((section) => section.edgeIds));
+  const savedNodeIds = new Set(activeSectionEdges.filter((edge) => savedEdgeIds.has(edge.id))
+    .flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
+  const sectionNodes = activeSectionNodes.filter((node) => savedNodeIds.has(node.id));
+  const sectionEdges = activeSectionEdges.filter((edge) => savedEdgeIds.has(edge.id));
   const sectionsToDelete = deletedSectionIds;
   const nodesToDelete = deletedSectionNodeIds;
   const edgesToDelete = deletedSectionEdgeIds;
@@ -2617,6 +2720,67 @@ function updateFeatureEverywhere(
   setPendingFeatures(updateList);
 }
 
+function handleCreateAreaLocation(area: Section) {
+  if (!activeProject || !activeMap || area.kind !== 'area' || area.targetMapId) return;
+  const polygon = getSectionPolygon(area, activeSectionEdges, activeSectionNodes);
+  if (polygon.length < 3) return;
+  const pivotX = (Math.min(...polygon.map((point) => point.x)) + Math.max(...polygon.map((point) => point.x))) / 2;
+  const pivotY = (Math.min(...polygon.map((point) => point.y)) + Math.max(...polygon.map((point) => point.y))) / 2;
+  const child = createDefaultMap({ id: crypto.randomUUID(), now: new Date(), parentMapId: activeMap.id });
+  child.name = area.name;
+  child.areaBoundaryLink = { areaId: area.id,
+    alignment: { rotation: 0, zoom: 100, width: 100, height: 100, x: 0, y: 0, pivotX, pivotY } };
+  setPendingMaps((current) => [...current, child]);
+  setActiveProject({ ...activeProject, mapIds: [...activeProject.mapIds, child.id] });
+  setActiveSections((current) => current.map((item) => item.id === area.id
+    ? { ...area, targetMapId: child.id, updatedAt: new Date() } : item));
+  markProjectDirty();
+  return { ...area, targetMapId: child.id, updatedAt: new Date() };
+}
+
+async function handleUnlinkAreaLocation(area: Section) {
+  if (!area.targetMapId) return;
+  try {
+    const destination = await loadEffectiveMapWithFeatures(area.targetMapId);
+    setPendingMaps((current) => [...current.filter((map) => map.id !== destination.map.id),
+      { ...destination.map, areaBoundaryLink: undefined, updatedAt: new Date() }]);
+    setActiveSections((current) => current.map((item) => item.id === area.id
+      ? { ...item, targetMapId: undefined, updatedAt: new Date() } : item));
+    markProjectDirty();
+  } catch (error) {
+    setNavigationError(error instanceof Error ? error.message : 'Unable to unlink Location.');
+  }
+}
+
+async function handleOpenAreaLocation(area: Section) {
+  if (!area.targetMapId || !activeProject) return;
+  if (!(await saveActiveProject())) return;
+  try {
+    const destination = await loadMapWithFeatures(area.targetMapId);
+    setActiveProject({ ...activeProject, activeMapId: destination.map.id });
+    setActiveMap(destination.map);
+    setActiveFeatures(destination.features);
+    setPendingFocusFeatureId(null);
+    await loadMapImage(destination.map);
+  } catch (error) {
+    setNavigationError(error instanceof Error ? error.message : 'Unable to open Area Location.');
+  }
+}
+
+function handleBoundaryAlignmentChange(alignment: BoundaryAlignment) {
+  if (!activeMap?.areaBoundaryLink || !isValidAlignment(alignment)) return;
+  const old = activeMap.areaBoundaryLink.alignment;
+  const boundary = activeSections.find((section) => section.locked);
+  if (!boundary) return;
+  const edgeIds = new Set(boundary.edgeIds);
+  const nodeIds = new Set(activeSectionEdges.filter((edge) => edgeIds.has(edge.id))
+    .flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
+  setActiveSectionNodes((current) => current.map((node) => nodeIds.has(node.id)
+    ? { ...node, position: transformBoundaryPoint(transformBoundaryPoint(node.position, old, true), alignment) }
+    : node));
+  setActiveMap({ ...activeMap, areaBoundaryLink: { ...activeMap.areaBoundaryLink, alignment }, updatedAt: new Date() });
+  markProjectDirty();
+}
 function handleCreateSection(
   section: Section,
   nodes: SectionNode[],
@@ -2640,7 +2804,7 @@ function handleCreateSection(
   });
   setActiveMap({
     ...activeMap,
-    sectionIds: [...activeSections.map((item) => item.id), section.id],
+    sectionIds: [...activeSections.filter((item) => !item.locked).map((item) => item.id), section.id],
     updatedAt: new Date(),
   });
   markProjectDirty();
@@ -2673,6 +2837,11 @@ function handleUpdateSectionData(
 
 function handleDeleteSection(sectionId: string) {
   if (!activeMap) return;
+  const section = activeSections.find((item) => item.id === sectionId);
+  if (section?.locked || section?.targetMapId) {
+    setNavigationError('Linked Areas and locked Boundaries cannot be deleted independently.');
+    return;
+  }
   const remainingSections = activeSections.filter((section) => {
     return section.id !== sectionId;
   });
@@ -2705,7 +2874,7 @@ function handleDeleteSection(sectionId: string) {
   });
   setActiveMap({
     ...activeMap,
-    sectionIds: remainingSections.map((section) => section.id),
+    sectionIds: remainingSections.filter((section) => !section.locked).map((section) => section.id),
     updatedAt: new Date(),
   });
   markProjectDirty();
@@ -4761,6 +4930,11 @@ mapMediaSlotsEnabled={
         onPendingArrivalCancel={() => {
           void cancelPendingArrival();
         }}
+        boundaryAlignment={activeMap.areaBoundaryLink?.alignment}
+        onBoundaryAlignmentChange={handleBoundaryAlignmentChange}
+        onUnlinkAreaLocation={(area) => void handleUnlinkAreaLocation(area)}
+        onCreateAreaLocation={handleCreateAreaLocation}
+        onOpenAreaLocation={(area) => void handleOpenAreaLocation(area)}
         sections={activeSections}
         sectionNodes={activeSectionNodes}
         sectionEdges={activeSectionEdges}

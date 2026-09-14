@@ -2054,3 +2054,26 @@ button.map-key-parent:hover {
   outline: 2px solid #ffffff;
   outline-offset: 3px;
 }
+.boundary-alignment-panel {
+  position: absolute;
+  z-index: 520;
+  top: 16px;
+  right: 16px;
+  padding: 12px;
+  border: 1px solid #555;
+  border-radius: 6px;
+  background: #222;
+  color: #eee;
+  display: grid;
+  gap: 8px;
+  max-width: 290px;
+}
+.boundary-alignment-panel p { margin: 0; font-size: 12px; color: #bbb; }
+.boundary-alignment-panel label { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.boundary-alignment-panel input { width: 100px; padding: 5px; background: #111; color: #fff; border: 1px solid #666; }
+.boundary-alignment-title {
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+  padding: 4px 0;
+}

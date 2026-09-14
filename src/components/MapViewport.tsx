@@ -1,3 +1,5 @@
+import type { BoundaryAlignment } from '../models/Map';
+import { isValidAlignment, transformBoundaryPoint } from '../sections/BoundaryTransform';
 import type { Feature } from '../models/Feature';
 import {
   Fragment,
@@ -212,6 +214,11 @@ onPendingArrivalCommit?: (position: Point) => void;
     edges: SectionEdge[]
   ) => void;
   onDeleteSection?: (sectionId: string) => void;
+  boundaryAlignment?: BoundaryAlignment;
+  onBoundaryAlignmentChange?: (alignment: BoundaryAlignment) => void;
+  onCreateAreaLocation?: (area: Section) => Section | undefined;
+  onOpenAreaLocation?: (area: Section) => void;
+  onUnlinkAreaLocation?: (area: Section) => void;
   onSectionError?: (message: string) => void;
 
   onZoomStateChange?: (
@@ -287,6 +294,11 @@ function MapViewport({
   onCreateSection,
   onUpdateSectionData,
   onDeleteSection,
+  boundaryAlignment,
+  onBoundaryAlignmentChange,
+  onCreateAreaLocation,
+  onOpenAreaLocation,
+  onUnlinkAreaLocation,
   onSectionError,
   onZoomStateChange,
   onMapMetadataChange,
@@ -398,6 +410,11 @@ function MapViewport({
   const [movingAreaControl, setMovingAreaControl] = useState<{
     sectionId: string; position: SectionPoint; pointerId: number;
   } | null>(null);
+  const [alignmentPanelPosition, setAlignmentPanelPosition] = useState<Point | null>(null);
+  const alignmentPanelRef = useRef<HTMLDivElement | null>(null);
+  const alignmentDragRef = useRef<{ pointerId: number; x: number; y: number; left: number; top: number } | null>(null);
+  const alignmentLastValues = useRef<BoundaryAlignment | null>(null);
+  const [alignmentDraft, setAlignmentDraft] = useState<BoundaryAlignment | null>(null);
   const [editingSection, setEditingSection] = useState<Section | null>(null);
   const [sectionNameDraft, setSectionNameDraft] = useState('');
   const [sectionShowNameDraft, setSectionShowNameDraft] = useState(false);
@@ -432,7 +449,7 @@ function MapViewport({
 
   const visibleSections = sections.filter(isSectionVisible);
   const editableSections = sections.filter((section) => {
-    return sectionMode !== null && section.kind === sectionMode;
+    return !section.locked && sectionMode !== null && section.kind === sectionMode;
   });
   const editableEdgeIds = new Set(editableSections.flatMap((section) => {
     return section.edgeIds;
@@ -443,7 +460,14 @@ function MapViewport({
   const editableNodeIds = new Set(editableEdges.flatMap((edge) => {
     return [edge.startNodeId, edge.endNodeId];
   }));
+  const lockedEdgeIds = new Set(sections.filter((section) => section.locked).flatMap((section) => section.edgeIds));
+  const lockedNodeIds = new Set(sectionEdges.filter((edge) => lockedEdgeIds.has(edge.id))
+    .flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
   const displayedSectionNodes = sectionNodes.map((node) => {
+    if (alignmentDraft && boundaryAlignment && isValidAlignment(alignmentDraft) && lockedNodeIds.has(node.id)) {
+      return { ...node, position: transformBoundaryPoint(
+        transformBoundaryPoint(node.position, boundaryAlignment, true), alignmentDraft) };
+    }
     if (movingSectionNode?.nodeId !== node.id) return node;
     return { ...node, position: movingSectionNode.position };
   });
@@ -643,6 +667,22 @@ function screenToMapWithPan(
   };
 }
 
+useEffect(() => {
+  if (sectionMode === 'boundary' && boundaryAlignment) {
+    setAlignmentDraft({ ...boundaryAlignment });
+    alignmentLastValues.current = { ...boundaryAlignment };
+    stopEdgeScrolling();
+  } else {
+    setAlignmentDraft(null);
+  }
+  alignmentDragRef.current = null;
+}, [sectionMode, boundaryAlignment]);
+
+function stopPanelMapScrolling() {
+  latestPointerRef.current = null;
+  pointerInsideViewportRef.current = false;
+  stopEdgeScrolling();
+}
 function stopEdgeScrolling() {
   if (edgeScrollFrameRef.current !== null) {
     cancelAnimationFrame(edgeScrollFrameRef.current);
@@ -1365,6 +1405,10 @@ function getEditableSectionOwner(edgeOrNodeId: string) {
 
 function appendDraftNode(position: SectionPoint, existingNode?: SectionNode) {
   if (!sectionMode) return;
+  if (sectionMode === 'boundary' && !parentMapId) {
+    onSectionError?.('Assign a parent Map before drawing a Boundary.');
+    return;
+  }
   const boundaryExists = sections.some((section) => {
     return section.kind === 'boundary';
   });
@@ -3189,7 +3233,79 @@ function saveSectionProperties() {
   );
 })()}
 
-{editingSection && (
+{boundaryAlignment && sectionMode === 'boundary' && alignmentDraft && (
+  <div ref={alignmentPanelRef} className="boundary-alignment-panel"
+    style={alignmentPanelPosition ? { left: alignmentPanelPosition.x, top: alignmentPanelPosition.y, right: 'auto' } : undefined}
+    onPointerEnter={stopPanelMapScrolling}
+    onPointerDown={(event) => { event.stopPropagation(); stopPanelMapScrolling(); }}
+    onPointerMove={(event) => { event.stopPropagation(); stopPanelMapScrolling(); }}
+    onPointerUp={(event) => event.stopPropagation()}
+    onWheel={(event) => { event.stopPropagation(); stopPanelMapScrolling(); }}
+    onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+    <strong className="boundary-alignment-title"
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        stopPanelMapScrolling();
+        const panel = alignmentPanelRef.current?.getBoundingClientRect();
+        const viewport = viewportRef.current?.getBoundingClientRect();
+        if (!panel || !viewport) return;
+        alignmentDragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY,
+          left: panel.left - viewport.left, top: panel.top - viewport.top };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const drag = alignmentDragRef.current;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        event.stopPropagation();
+        stopPanelMapScrolling();
+        const panel = alignmentPanelRef.current;
+        const viewport = viewportRef.current;
+        if (!panel || !viewport) return;
+        setAlignmentPanelPosition({
+          x: Math.max(0, Math.min(viewport.clientWidth - panel.offsetWidth, drag.left + event.clientX - drag.x)),
+          y: Math.max(0, Math.min(viewport.clientHeight - panel.offsetHeight, drag.top + event.clientY - drag.y)),
+        });
+      }}
+      onPointerUp={(event) => {
+        alignmentDragRef.current = null;
+        releasePointerCaptureSafely(event.currentTarget, event.pointerId);
+      }}
+      onPointerCancel={() => { alignmentDragRef.current = null; }}
+      onLostPointerCapture={() => { alignmentDragRef.current = null; }}
+    >Boundary Alignment</strong>
+    <p>Edit the parent Area to change this outline.</p>
+    {([['rotation', 'Rotation (°)'], ['zoom', 'Zoom (%)'], ['x', 'X'], ['y', 'Y'],
+      ['width', 'Width (%)'], ['height', 'Height (%)']] as const).map(([key, label]) => (
+      <label key={key}>{label}
+        <input type="number" step="any"
+          min={key === 'zoom' || key === 'width' || key === 'height' ? 0.01 : undefined}
+          value={Number.isFinite(alignmentDraft[key]) ? alignmentDraft[key] : ''}
+          onChange={(event) => {
+            const value = event.target.value === '' ? NaN : Number(event.target.value);
+            if (Number.isFinite(value)) {
+              alignmentLastValues.current = { ...(alignmentLastValues.current ?? boundaryAlignment), [key]: value };
+            }
+            setAlignmentDraft({ ...alignmentDraft, [key]: value });
+          }}
+          onBlur={() => {
+            if (!Number.isFinite(alignmentDraft[key])) {
+              setAlignmentDraft({ ...alignmentDraft, [key]: alignmentLastValues.current?.[key] ?? boundaryAlignment[key] });
+            }
+          }} />
+      </label>
+    ))}
+    <div className="dialog-buttons">
+      <button type="button" onClick={() => { setAlignmentDraft(null); onSectionModeChange?.(null); }}>Cancel</button>
+      <button type="button" disabled={!isValidAlignment(alignmentDraft)} onClick={() => {
+        onBoundaryAlignmentChange?.(alignmentDraft);
+        setAlignmentDraft(null);
+        onSectionModeChange?.(null);
+      }}>Apply</button>
+    </div>
+  </div>
+)}{editingSection && (
   <div className="dialog-backdrop">
     <div className="dialog section-properties-dialog">
       <h2>
@@ -3224,6 +3340,27 @@ function saveSectionProperties() {
         </label>
       )}
       </div>
+      {editingSection.kind === 'area' && (
+        <button type="button" onClick={() => {
+          if (editingSection.targetMapId) {
+            onOpenAreaLocation?.(editingSection);
+            setEditingSection(null);
+          } else {
+            const created = onCreateAreaLocation?.({ ...editingSection, name: sectionNameDraft.trim(),
+              color: sectionColorDraft, showName: sectionShowNameDraft });
+            if (created) setEditingSection(created);
+          }
+        }} disabled={!sectionNameDraft.trim()}>
+          {editingSection.targetMapId ? 'Open Location…' : 'Create Location…'}
+        </button>
+      )}
+      {editingSection.kind === 'area' && editingSection.targetMapId && (
+        <button type="button" onClick={() => {
+          if (!window.confirm('Unlink this Location? Its Map is kept, but its derived Boundary and automatic Area travel are removed.')) return;
+          onUnlinkAreaLocation?.(editingSection);
+          setEditingSection(null);
+        }}>Unlink Location</button>
+      )}
       <div className="dialog-buttons section-properties-buttons">
         <button
           type="button"

@@ -8,7 +8,24 @@ export interface MapImageRegistration {
   offsetY: number;
 }
 
+export interface BoundaryAlignment {
+  rotation: number;
+  zoom: number;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  pivotX: number;
+  pivotY: number;
+}
+
+export interface AreaBoundaryLink {
+  areaId: string;
+  alignment: BoundaryAlignment;
+}
+
 export interface Map {
+  areaBoundaryLink?: AreaBoundaryLink;
   id: string;
   name: string;
 

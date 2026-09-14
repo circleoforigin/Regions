@@ -26,6 +26,8 @@ export interface Section {
   color: string;
   showName?: boolean;
   controlPosition?: SectionPoint;
+  targetMapId?: string;
+  locked?: boolean;
   edgeIds: string[];
   createdAt: Date;
   updatedAt: Date;
