@@ -116,6 +116,12 @@ function MapKey({
     setEditing(false);
   }
 
+  function selectType(typeId: string) {
+    setTypeDraft(typeId);
+    typeDraftRef.current = typeId;
+    save();
+  }
+
   function cancel() {
     setNameDraft(mapName);
     setTypeDraft(mapTypeId ?? '');
@@ -246,9 +252,7 @@ function MapKey({
                 : ''
             }
             onClick={() => {
-              setTypeDraft('');
-              typeDraftRef.current = '';
-              setTypeMenuOpen(false);
+              selectType('');
             }}
           >
             Select Type:
@@ -265,16 +269,7 @@ function MapKey({
                     : ''
                 }
                 onClick={() => {
-                  setTypeDraft(
-                    type.id
-                  );
-
-                  typeDraftRef.current =
-                    type.id;
-
-                  setTypeMenuOpen(
-                    false
-                  );
+                  selectType(type.id);
                 }}
               >
                 {type.name}

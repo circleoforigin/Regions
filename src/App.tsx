@@ -1,3 +1,5 @@
+import { copyAreaResourcesToLocation, copyLocationResourcesToArea } from './sections/AreaResources';
+import { createLocationEvents, locationActionDefinitions, type LocationContext } from './events/LocationEvents';
 import type { BoundaryAlignment } from './models/Map';
 import { findBoundaryCrossing, deriveAreaBoundary, isValidAlignment, transformBoundaryPoint } from './sections/BoundaryTransform';
 import {
@@ -263,6 +265,7 @@ const pendingProjectActionRef =
     useState<string | null>(null);
 
   const [newLocationName, setNewLocationName] = useState('');
+  const [locationAreaId, setLocationAreaId] = useState<string | null>(null);
 
   const [newLocationTypeId, setNewLocationTypeId] =
     useState('');
@@ -573,23 +576,7 @@ const pendingProjectActionRef =
 
     if (moduleEventBus.hosted) {
       void moduleEventBus.registerActions([
-        {
-          id: 'Regions.LocationEntered',
-          label: 'Location Entered',
-          description: 'Raised when navigation into a Location completes.',
-          fields: [
-            { key: 'area', label: 'Area', type: 'string' },
-            { key: 'parentMap', label: 'Parent Map', type: 'string' },
-            { key: 'name', label: 'Name', type: 'string' },
-            { key: 'type', label: 'Type', type: 'string' },
-            { key: 'mapId', label: 'Map ID', type: 'string' },
-            { key: 'pieceId', label: 'Piece ID', type: 'string' },
-            { key: 'focused', label: 'Focused', type: 'boolean' },
-            { key: 'contextKind', label: 'Context Kind', type: 'string' },
-            { key: 'areaId', label: 'Area ID', type: 'string' },
-            { key: 'mapName', label: 'Map Name', type: 'string' },
-          ],
-        },
+        ...locationActionDefinitions,
         {
           id: 'Regions.EmitImage',
           label: 'Emit Image',
@@ -1049,86 +1036,87 @@ async function commitPieceParentExit(
   setFocusPieceRequestId((current) => current + 1);
 }
 
+async function resolvePieceLocation(
+  map: RegionMap, project: Project, piece: Piece, resolvedArea?: { area: Section | undefined }
+): Promise<{ context: LocationContext; area: Section | undefined; resourceMap: RegionMap }> {
+  let area = resolvedArea?.area;
+  if (!resolvedArea) {
+    const preferredAreaId = pieceAreaContexts.current.get(`${project.id}:${piece.id}:${map.id}`);
+    if (map.id === activeMap?.id && loadedSectionsMapId.current === map.id) {
+      area = resolveArea(map.id, piece.position, activeSections, activeSectionEdges,
+        activeSectionNodes, preferredAreaId);
+    } else {
+      const sections = await sectionRepository.loadSections(map.sectionIds ?? []);
+      const edges = await sectionEdgeRepository.loadEdges(sections.flatMap((section) => section.edgeIds));
+      const nodes = await sectionNodeRepository.loadNodes(
+        [...new Set(edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId]))]);
+      area = resolveArea(map.id, piece.position, sections, edges, nodes, preferredAreaId);
+    }
+  }
+  let resourceMap = map;
+  if (area?.targetMapId) {
+    const linkedMap = pendingMaps.find((item) => item.id === area.targetMapId)
+      ?? projectMaps.find((item) => item.id === area.targetMapId)
+      ?? await mapRepository.loadMap(area.targetMapId);
+    if (!linkedMap) throw new Error('The Area’s linked Location settings could not be loaded.');
+    resourceMap = linkedMap;
+  }
+  const typeId = area && !area.targetMapId ? area.featureTypeId : resourceMap.featureTypeId;
+  return { area, resourceMap, context: {
+    contextKind: area ? 'area' : 'map',
+    locationId: area?.id ?? map.id,
+    locationName: area?.name ?? map.name,
+    locationType: project.featureTypes.find((type) => type.id === typeId)?.name ?? '',
+  } };
+}
+
+function emitMapImages(map: RegionMap, project: Project, area?: Section) {
+  resolveMediaSlots(project.globalMediaSlots, map.mediaSlotOverrides ?? [], area?.mediaSlotOverrides ?? []).forEach((slot) => {
+    if (slot.mediaType !== 'image') return;
+    moduleEventBus.emit('Regions.EmitImage', {
+      slot: slot.slot, filePath: slot.filePath, fileName: slot.fileName, source: slot.source,
+    });
+  });
+}
+
 async function handleMapEntered(
   map: RegionMap,
   project: Project,
-  parentMapName?: string,
+  _parentMapName?: string,
   source: SpatialNavigationSource = 'manual',
   sourcePieceId?: string,
-  resolvedArea?: { area: Section | undefined }
+  resolvedAreas?: { area: Section | undefined; previousArea?: Section }
 ) {
   try {
-  if (project.pieces.length > 0) {
-    const pieceNavigation = source === 'piece' ||
-      source === 'piece-focus';
-    if (!pieceNavigation) return;
-
-  }
-
-  let enteredArea = resolvedArea?.area;
-  const sourcePiece = project.pieces.find((piece) => piece.id === sourcePieceId);
-  if (!resolvedArea && sourcePiece && sourcePiece.mapId === map.id) {
-    if (map.id === activeMap?.id && loadedSectionsMapId.current === map.id) {
-      enteredArea = resolveArea(map.id, sourcePiece.position, activeSections,
-        activeSectionEdges, activeSectionNodes,
-        pieceAreaContexts.current.get(`${project.id}:${sourcePieceId}:${map.id}`));
-    } else {
-    // Arrival can precede the active Map's asynchronous Section-loading effect.
-    const sections = await sectionRepository.loadSections(map.sectionIds ?? []);
-    const edges = await sectionEdgeRepository.loadEdges(sections.flatMap((section) => section.edgeIds));
-    const nodes = await sectionNodeRepository.loadNodes(
-      Array.from(new Set(edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])))
-    );
-    enteredArea = resolveArea(map.id, sourcePiece.position, sections, edges, nodes);
+    // Browsing a Map is not a Piece arrival or a focus change.
+    if (source !== 'piece' && source !== 'piece-focus') {
+      if (project.pieces.length === 0) emitMapImages(map, project);
+      return;
     }
-  }
-  if (sourcePieceId) {
-    pieceAreaContexts.current.set(`${project.id}:${sourcePieceId}:${map.id}`, enteredArea?.id);
-  }
-  const semanticType =
-    project.featureTypes.find(
-      (type) =>
-        type.id === map.featureTypeId
-    )?.name ?? '';
-
-  const mediaSlots = resolveMediaSlots(
-    project.globalMediaSlots,
-    map.mediaSlotOverrides ?? []
-  );
-
-  moduleEventBus.emit(
-    'Regions.LocationEntered',
-    {
-      area: enteredArea ? 'Area' : 'Location',
-      contextKind: enteredArea ? 'area' : 'map',
-      areaId: enteredArea?.id ?? '',
-      mapName: map.name,
-      parentMap:
-        parentMapName ?? '',
-      name: enteredArea?.name ?? map.name,
-      type: semanticType,
-      mapId: map.id,
-      pieceId: sourcePieceId ?? '',
-      focused: Boolean(sourcePieceId && sourcePieceId === project.focusedPieceId),
+    const piece = project.pieces.find((item) => item.id === sourcePieceId);
+    if (!piece) return;
+    const reason = source === 'piece-focus' ? 'focus' : 'movement';
+    let previous: LocationContext | undefined;
+    if (reason === 'movement') {
+      // This render's Project still holds the Piece before the committed movement.
+      const oldPiece = activeProject?.pieces.find((item) => item.id === piece.id);
+      if (!oldPiece) throw new Error('The Piece’s previous location could not be resolved.');
+      const oldMap = oldPiece.mapId === activeMap?.id ? activeMap
+        : pendingMaps.find((item) => item.id === oldPiece.mapId)
+          ?? projectMaps.find((item) => item.id === oldPiece.mapId)
+          ?? await mapRepository.loadMap(oldPiece.mapId);
+      if (!oldMap) throw new Error('The Piece’s previous Map could not be resolved.');
+      previous = (await resolvePieceLocation(oldMap, project, oldPiece,
+        resolvedAreas ? { area: resolvedAreas.previousArea } : undefined)).context;
     }
-  );
-
-  // Shared images continue to follow the focused Piece.
-  if (project.pieces.length > 0 && sourcePieceId !== project.focusedPieceId) return;
-
-  mediaSlots.forEach((mediaSlot) => {
-    if (mediaSlot.mediaType !== 'image') return;
-
-    moduleEventBus.emit(
-      'Regions.EmitImage',
-      {
-        slot: mediaSlot.slot,
-        filePath: mediaSlot.filePath,
-        fileName: mediaSlot.fileName,
-        source: mediaSlot.source,
-      }
-    );
-  });
+    const destination = await resolvePieceLocation(map, project, piece, resolvedAreas);
+    pieceAreaContexts.current.set(`${project.id}:${piece.id}:${map.id}`, destination.area?.id);
+    const events = createLocationEvents(project.id, piece, project.focusedPieceId,
+      destination.context, reason, previous);
+    for (const event of events) moduleEventBus.emit(event.type, event.payload);
+    if (events.some((event) => event.type === 'Regions.LocationContextChanged')) {
+      emitMapImages(destination.resourceMap, project, destination.area?.targetMapId ? undefined : destination.area);
+    }
   } catch (error) {
     console.error('Unable to resolve location context:', error);
     setNavigationError('Unable to resolve location context.');
@@ -1616,7 +1604,7 @@ function updatePiecePosition(pieceId: string, position: Feature['position']) {
   setActiveProject(project);
   markProjectDirty();
   if (previousArea?.id !== area?.id) {
-    void handleMapEntered(activeMap, project, undefined, 'piece', pieceId, { area });
+    void handleMapEntered(activeMap, project, undefined, 'piece', pieceId, { area, previousArea });
   }
 }
 async function transferPieceThroughArea(piece: Piece, mapId: string, position: Feature['position']) {
@@ -1739,6 +1727,7 @@ async function handlePieceDrop(
     const needsManualPlacement = !targetFeature ||
       targetFeature.connectionPlacementPending;
     if (needsManualPlacement) {
+      if (!(await saveActiveProject())) return;
       const updatedProject = {
         ...activeProject,
         activeMapId: destination.map.id,
@@ -1832,17 +1821,13 @@ async function commitPendingArrival(position: Feature['position']) {
   }
   setPendingArrival(null);
   markProjectDirty();
-  const sameMapMigration = pendingArrival.mode === 'migration' &&
-    pendingArrival.sourceMapId === activeMap.id;
-  if (!sameMapMigration) {
-    handleMapEntered(
-      activeMap,
-      updatedProject,
-      pendingArrival.sourceMapName,
-      pendingArrival.pieceId ? 'piece' : 'manual',
-      pendingArrival.pieceId
-    );
-  }
+  void handleMapEntered(
+    activeMap,
+    updatedProject,
+    pendingArrival.sourceMapName,
+    pendingArrival.pieceId ? 'piece' : 'manual',
+    pendingArrival.pieceId
+  );
 }
 
 async function cancelPendingArrival() {
@@ -2409,7 +2394,7 @@ async function saveActiveProject(): Promise<boolean> {
       );
 
       await Promise.all(
-        maps.map((pendingMap) => {
+        maps.filter((pendingMap) => pendingMap.id !== updatedMap?.id).map((pendingMap) => {
           return mapRepository.saveMap(pendingMap);
         })
       );
@@ -2720,22 +2705,45 @@ function updateFeatureEverywhere(
   setPendingFeatures(updateList);
 }
 
-function handleCreateAreaLocation(area: Section) {
-  if (!activeProject || !activeMap || area.kind !== 'area' || area.targetMapId) return;
+function handleAddAreaLocation(area: Section) {
+  if (!activeMap || area.targetMapId) return;
+  handleNewLocationRequest(area.controlPosition?.x ?? 0, area.controlPosition?.y ?? 0);
+  setLocationAreaId(area.id);
+  setNewLocationName(area.name);
+  setNewLocationTypeId(area.featureTypeId ?? '');
+}
+
+function canLinkAreaMap(map: RegionMap) {
+  if (!activeMap || !activeProject || map.id === activeMap.id || map.id === activeProject.rootMapId || map.areaBoundaryLink) return false;
+  if (map.parentMapId && map.parentMapId !== activeMap.id) return false;
+  const maps = [...projectMaps, ...pendingMaps];
+  const visited = new Set<string>();
+  let ancestor: RegionMap | undefined = activeMap;
+  while (ancestor && !visited.has(ancestor.id)) {
+    if (ancestor.id === map.id) return false;
+    visited.add(ancestor.id);
+    const parentId: string | undefined = ancestor.parentMapId;
+    ancestor = maps.findLast((item) => item.id === parentId);
+  }
+  return true;
+}
+
+function linkAreaLocation(area: Section, destination: RegionMap, isNew: boolean) {
+  if (!activeProject || !activeMap || area.targetMapId) return false;
+  if (!isNew && !canLinkAreaMap(destination)) return false;
   const polygon = getSectionPolygon(area, activeSectionEdges, activeSectionNodes);
-  if (polygon.length < 3) return;
+  if (polygon.length < 3) return false;
   const pivotX = (Math.min(...polygon.map((point) => point.x)) + Math.max(...polygon.map((point) => point.x))) / 2;
   const pivotY = (Math.min(...polygon.map((point) => point.y)) + Math.max(...polygon.map((point) => point.y))) / 2;
-  const child = createDefaultMap({ id: crypto.randomUUID(), now: new Date(), parentMapId: activeMap.id });
-  child.name = area.name;
-  child.areaBoundaryLink = { areaId: area.id,
-    alignment: { rotation: 0, zoom: 100, width: 100, height: 100, x: 0, y: 0, pivotX, pivotY } };
-  setPendingMaps((current) => [...current, child]);
-  setActiveProject({ ...activeProject, mapIds: [...activeProject.mapIds, child.id] });
+  const child: RegionMap = { ...destination, parentMapId: activeMap.id, updatedAt: new Date(),
+    areaBoundaryLink: { areaId: area.id,
+      alignment: { rotation: 0, zoom: 100, width: 100, height: 100, x: 0, y: 0, pivotX, pivotY } } };
+  setPendingMaps((current) => [...current.filter((map) => map.id !== child.id), child]);
+  if (isNew) setActiveProject({ ...activeProject, mapIds: [...activeProject.mapIds, child.id] });
   setActiveSections((current) => current.map((item) => item.id === area.id
-    ? { ...area, targetMapId: child.id, updatedAt: new Date() } : item));
+    ? { ...item, targetMapId: child.id, updatedAt: new Date() } : item));
   markProjectDirty();
-  return { ...area, targetMapId: child.id, updatedAt: new Date() };
+  return true;
 }
 
 async function handleUnlinkAreaLocation(area: Section) {
@@ -2745,7 +2753,7 @@ async function handleUnlinkAreaLocation(area: Section) {
     setPendingMaps((current) => [...current.filter((map) => map.id !== destination.map.id),
       { ...destination.map, areaBoundaryLink: undefined, updatedAt: new Date() }]);
     setActiveSections((current) => current.map((item) => item.id === area.id
-      ? { ...item, targetMapId: undefined, updatedAt: new Date() } : item));
+      ? { ...item, ...copyLocationResourcesToArea(destination.map), targetMapId: undefined, updatedAt: new Date() } : item));
     markProjectDirty();
   } catch (error) {
     setNavigationError(error instanceof Error ? error.message : 'Unable to unlink Location.');
@@ -3305,6 +3313,7 @@ function handleCreateFeature() {
 }
 
 function handleNewLocationRequest(x: number, y: number) {
+  setLocationAreaId(null);
   mapViewportRef.current?.cancelInteractions();
   setNavigationFeatureKind('location');
   setNewLocationPosition({ x, y });
@@ -3318,6 +3327,7 @@ function handleNewLocationRequest(x: number, y: number) {
 }
 
 function handleNewConnectionRequest(x: number, y: number) {
+  setLocationAreaId(null);
   mapViewportRef.current?.cancelInteractions();
   setNavigationFeatureKind('connection');
   setNewLocationPosition({ x, y });
@@ -3331,6 +3341,7 @@ function handleNewConnectionRequest(x: number, y: number) {
 }
 
 function closeLocationDialogs() {
+  setLocationAreaId(null);
   setShowLocationChoiceDialog(false);
   setShowNewLocationDialog(false);
   setShowExistingLocationDialog(false);
@@ -3397,6 +3408,9 @@ async function handleCreateLocation() {
       : undefined,
   });
   childMap.name = name;
+  const locationArea = locationAreaId ? activeSections.find((area) => area.id === locationAreaId) : undefined;
+  if (locationAreaId && !locationArea) return;
+  if (locationArea) Object.assign(childMap, copyAreaResourcesToLocation(locationArea, activeMap.mediaSlotOverrides));
   childMap.featureTypeId = newLocationTypeId || undefined;
 
   if (newLocationImage) {
@@ -3406,6 +3420,10 @@ async function handleCreateLocation() {
     childMap.imageFileId = image.id;
   }
 
+  if (locationArea) {
+    if (linkAreaLocation(locationArea, childMap, true)) closeLocationDialogs();
+    return;
+  }
   const sourceName = navigationFeatureKind === 'connection'
     ? newConnectionName.trim()
     : name;
@@ -3447,6 +3465,11 @@ async function handleCreateLocation() {
 
 function handleCreateExistingLocation(destinationMap: RegionMap) {
   if (!activeProject || !activeMap || !newLocationPosition) return;
+  if (locationAreaId) {
+    const area = activeSections.find((item) => item.id === locationAreaId);
+    if (area && linkAreaLocation(area, destinationMap, false)) closeLocationDialogs();
+    return;
+  }
 
   const now = new Date();
   const sourceName = navigationFeatureKind === 'connection'
@@ -3506,7 +3529,7 @@ function handleCreateExistingLocation(destinationMap: RegionMap) {
 
 function handleConfirmExistingNavigationFeature() {
   if (!selectedExistingMapId) return;
-  const destinationMap = projectMaps.find((map) => {
+  const destinationMap = [...projectMaps, ...pendingMaps].findLast((map) => {
     return map.id === selectedExistingMapId;
   });
   if (!destinationMap) return;
@@ -4605,8 +4628,9 @@ mapMediaSlotsEnabled={
       </div>
 
       <div className="location-map-list">
-        {projectMaps
+        {[...new Map([...projectMaps, ...pendingMaps].map((map) => [map.id, map])).values()]
           .filter((map) => {
+            if (locationAreaId && !canLinkAreaMap(map)) return false;
             const matchesName = map.name.toLocaleLowerCase().includes(
               locationSearch.trim().toLocaleLowerCase()
             );
@@ -4930,10 +4954,13 @@ mapMediaSlotsEnabled={
         onPendingArrivalCancel={() => {
           void cancelPendingArrival();
         }}
+        globalMediaSlots={activeProject.globalMediaSlots}
+        mapMediaOverrides={activeMap.mediaSlotOverrides}
+        locationMaps={[...projectMaps, ...pendingMaps]}
         boundaryAlignment={activeMap.areaBoundaryLink?.alignment}
         onBoundaryAlignmentChange={handleBoundaryAlignmentChange}
         onUnlinkAreaLocation={(area) => void handleUnlinkAreaLocation(area)}
-        onCreateAreaLocation={handleCreateAreaLocation}
+        onAddAreaLocation={handleAddAreaLocation}
         onOpenAreaLocation={(area) => void handleOpenAreaLocation(area)}
         sections={activeSections}
         sectionNodes={activeSectionNodes}

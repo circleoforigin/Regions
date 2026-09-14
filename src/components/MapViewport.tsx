@@ -1,3 +1,6 @@
+import AreaMediaSlotsDialog from './AreaMediaSlotsDialog';
+import type { Map as RegionMap } from '../models/Map';
+import type { GlobalMediaSlot, MediaSlotOverride } from '../models/MediaSlot';
 import type { BoundaryAlignment } from '../models/Map';
 import { isValidAlignment, transformBoundaryPoint } from '../sections/BoundaryTransform';
 import type { Feature } from '../models/Feature';
@@ -214,9 +217,12 @@ onPendingArrivalCommit?: (position: Point) => void;
     edges: SectionEdge[]
   ) => void;
   onDeleteSection?: (sectionId: string) => void;
+  globalMediaSlots?: GlobalMediaSlot[];
+  mapMediaOverrides?: MediaSlotOverride[];
+  locationMaps?: RegionMap[];
   boundaryAlignment?: BoundaryAlignment;
   onBoundaryAlignmentChange?: (alignment: BoundaryAlignment) => void;
-  onCreateAreaLocation?: (area: Section) => Section | undefined;
+  onAddAreaLocation?: (area: Section) => void;
   onOpenAreaLocation?: (area: Section) => void;
   onUnlinkAreaLocation?: (area: Section) => void;
   onSectionError?: (message: string) => void;
@@ -294,9 +300,12 @@ function MapViewport({
   onCreateSection,
   onUpdateSectionData,
   onDeleteSection,
+  globalMediaSlots = [],
+  mapMediaOverrides = [],
+  locationMaps = [],
   boundaryAlignment,
   onBoundaryAlignmentChange,
-  onCreateAreaLocation,
+  onAddAreaLocation,
   onOpenAreaLocation,
   onUnlinkAreaLocation,
   onSectionError,
@@ -317,10 +326,6 @@ function MapViewport({
       ? layerVisibility.locations
       : layerVisibility.features;
   };
-  const selectedFeature = features.find((feature) => {
-    return feature.id === state.selectedFeatureId &&
-      isFeatureVisible(feature);
-  });
   const visibleFeatures = features.filter((feature) => {
     return isFeatureVisible(feature) &&
       feature.id !== pendingArrivalPlacement?.connection?.id;
@@ -407,9 +412,7 @@ function MapViewport({
     position: SectionPoint;
     pointerId?: number;
   } | null>(null);
-  const [movingAreaControl, setMovingAreaControl] = useState<{
-    sectionId: string; position: SectionPoint; pointerId: number;
-  } | null>(null);
+
   const [alignmentPanelPosition, setAlignmentPanelPosition] = useState<Point | null>(null);
   const alignmentPanelRef = useRef<HTMLDivElement | null>(null);
   const alignmentDragRef = useRef<{ pointerId: number; x: number; y: number; left: number; top: number } | null>(null);
@@ -417,7 +420,17 @@ function MapViewport({
   const [alignmentDraft, setAlignmentDraft] = useState<BoundaryAlignment | null>(null);
   const [editingSection, setEditingSection] = useState<Section | null>(null);
   const [sectionNameDraft, setSectionNameDraft] = useState('');
-  const [sectionShowNameDraft, setSectionShowNameDraft] = useState(false);
+  const [mediaAreaId, setMediaAreaId] = useState<string | null>(null);
+  const mediaArea = sections.find((area) => area.id === mediaAreaId);
+  const mediaLocationMap = locationMaps.findLast((map) => map.id === mediaArea?.targetMapId);
+  const sectionDataRef = useRef({ sections, sectionNodes, sectionEdges });
+  sectionDataRef.current = { sections, sectionNodes, sectionEdges };
+  function updateAreaIdentity(id: string, patch: Partial<Section> | ((area: Section) => Partial<Section>)) {
+    const data = sectionDataRef.current;
+    onUpdateSectionData?.(data.sections.map((area) => area.id === id
+      ? { ...area, ...(typeof patch === 'function' ? patch(area) : patch), updatedAt: new Date() }
+      : area), data.sectionNodes, data.sectionEdges);
+  }
   const [sectionColorDraft, setSectionColorDraft] = useState('#ffffff');
 
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -471,6 +484,19 @@ function MapViewport({
     if (movingSectionNode?.nodeId !== node.id) return node;
     return { ...node, position: movingSectionNode.position };
   });
+
+  const selectedArea = sections.find((section) => section.kind === 'area' &&
+    section.id === state.selectedFeatureId && isSectionVisible(section));
+  const linkedLocationMap = selectedArea?.targetMapId
+    ? locationMaps.findLast((map) => map.id === selectedArea.targetMapId) : undefined;
+  const areaPosition = selectedArea ? getAreaControlPosition(selectedArea) : null;
+  const selectedFeature: Feature | undefined = selectedArea && areaPosition ? {
+    id: selectedArea.id, name: selectedArea.name, subtitle: selectedArea.subtitle,
+    description: selectedArea.description, position: areaPosition,
+    type: selectedArea.targetMapId ? 'location' : 'feature',
+    targetMapId: selectedArea.targetMapId, featureTypeId: selectedArea.featureTypeId,
+    noteLinks: [],
+  } : features.find((feature) => feature.id === state.selectedFeatureId && isFeatureVisible(feature));
 
   const [arrivalPreviewState, setArrivalPreviewState] = useState<{
     key: string;
@@ -706,7 +732,6 @@ function releasePointerCaptureSafely(
 }
 
 function cancelViewportInteractions() {
-  setMovingAreaControl(null);
   if (dragRef.current) {
     releasePointerCaptureSafely(
       dragRef.current.target,
@@ -915,6 +940,8 @@ function isPointInsideMap(point: Point): boolean {
 
 function isMovePositionValid(point: Point): boolean {
   if (!isPointInsideMap(point)) return false;
+  const area = sections.find((section) => section.kind === 'area' && section.id === movingFeatureId);
+  if (area && !isPointInPolygon(point, getSectionPolygon(area, sectionEdges, displayedSectionNodes))) return false;
 
   const proposed = mapToScreen(point.x, point.y);
   return visibleFeatures.every((feature) => {
@@ -1175,13 +1202,15 @@ function isMovePositionValid(point: Point): boolean {
       (isNavigableFeature(movingFeature)
         ? layerVisibility.locations
         : layerVisibility.features);
-    if (movingLayerIsVisible) return;
+    if (movingLayerIsVisible || sections.some((area) => area.kind === 'area' && area.id === movingFeatureId && layerVisibility.areas !== false)) return;
     dispatch({ type: 'featureMove.cancel' });
   }, [
     dispatch,
     features,
     layerVisibility.features,
     layerVisibility.locations,
+    layerVisibility.areas,
+    sections,
     movingFeatureId,
     state.editingMode,
   ]);
@@ -1239,7 +1268,7 @@ function isMovePositionValid(point: Point): boolean {
     const observer = new ResizeObserver(updatePopupSize);
     observer.observe(popup);
     return () => observer.disconnect();
-  }, [selectedFeature]);
+  }, [selectedFeature?.id]);
 
   useEffect(() => {
     if (!focusFeatureId) return;
@@ -1704,6 +1733,15 @@ function handleContextMenu(
     event:
       React.WheelEvent<HTMLDivElement>
   ) {
+    const viewport = event.currentTarget;
+    const underPointer = viewport.ownerDocument.elementFromPoint(event.clientX, event.clientY);
+    const controls = '.dialog-backdrop, .dialog, [role="dialog"], .feature-popup, ' +
+      '.map-context-menu, .map-key, .boundary-alignment-panel, ' +
+      'input, select, textarea, [contenteditable="true"]';
+    if (!underPointer || !viewport.contains(underPointer) || underPointer.closest(controls)) return;
+    // A focused control can receive wheel events even when the pointer is elsewhere.
+    if (event.target instanceof Element && event.target.closest(controls)) return;
+    if (event.deltaY === 0) return;
     event.preventDefault();
     dispatch({ type: 'contextMenu.close' });
 
@@ -1748,7 +1786,8 @@ function handleContextMenu(
       dispatch({ type: 'featureMove.preview', position: point });
       if (!isMovePositionValid(point)) return;
       suppressNextFeatureClickRef.current = true;
-      onFeatureMove?.(movingFeatureId, point);
+      if (sections.some((area) => area.kind === 'area' && area.id === movingFeatureId)) updateAreaIdentity(movingFeatureId, { controlPosition: point });
+      else onFeatureMove?.(movingFeatureId, point);
       dispatch({ type: 'featureMove.cancel' });
       return;
     }
@@ -2085,7 +2124,7 @@ function handleContextMenu(
     isNavigableFeature(selectedFeature) &&
     selectedFeature.targetMapId
   );
-  const selectedLocationMap = selectedFeature
+  const selectedLocationMap = selectedArea ? { typeName: featureTypes.find((type) => type.id === linkedLocationMap?.featureTypeId)?.name } : selectedFeature
     ? locationMapMetadata[selectedFeature.id]
     : undefined;
 
@@ -2106,10 +2145,8 @@ function handleContextMenu(
     return;
   }
 
-  onFeatureNameChange?.(
-    selectedFeature.id,
-    name
-  );
+  if (selectedArea) updateAreaIdentity(selectedArea.id, { name });
+  else onFeatureNameChange?.(selectedFeature.id, name);
 
   setEditingName(false);
 }
@@ -2127,7 +2164,8 @@ function cancelNameEdit() {
 
   const subtitle = subtitleDraft.trim();
 
-  onSubtitleChange?.(selectedFeature.id, subtitle);
+  if (selectedArea) updateAreaIdentity(selectedArea.id, { subtitle });
+  else onSubtitleChange?.(selectedFeature.id, subtitle);
   setEditingSubtitle(false);
 }
 
@@ -2194,24 +2232,16 @@ function cancelSectionNodeMove() {
 
 function getAreaControlPosition(section: Section) {
   const polygon = getSectionPolygon(section, sectionEdges, displayedSectionNodes);
-  const position = movingAreaControl?.sectionId === section.id
-    ? movingAreaControl.position : section.controlPosition;
+  if (state.editingMode === 'move-feature' && movingFeatureId === section.id && movingFeaturePreviewPosition) return movingFeaturePreviewPosition;
+  const position = section.controlPosition;
   return position && isPointInPolygon(position, polygon)
     ? position : getAreaLabelPosition(polygon);
 }
 
-useEffect(() => {
-  if (!movingAreaControl) return;
-  const cancel = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') setMovingAreaControl(null);
-  };
-  window.addEventListener('keydown', cancel);
-  return () => window.removeEventListener('keydown', cancel);
-}, [movingAreaControl]);
 function openSectionProperties(section: Section) {
+  if (section.kind === 'area') return;
   setEditingSection(section);
   setSectionNameDraft(section.name);
-  setSectionShowNameDraft(section.showName ?? false);
   setSectionColorDraft(section.color);
   setSectionContextMenu(null);
 }
@@ -2222,9 +2252,8 @@ function saveSectionProperties() {
     sections.map((section) => section.id === editingSection.id
       ? {
           ...section,
-          name: sectionNameDraft.trim(),
+          ...(section.kind !== 'area' ? { name: sectionNameDraft.trim() } : {}),
           color: sectionColorDraft,
-          showName: sectionShowNameDraft,
           updatedAt: new Date(),
         }
       : section),
@@ -2384,46 +2413,24 @@ function saveSectionProperties() {
     <button
       key={`control-${section.id}`}
       type="button"
-      className="area-control-node"
+      className={`area-control-node${movingFeatureId === section.id ? (isMovePositionValid(position) ? ' moving' : ' moving invalid') : ''}`}
       aria-label={`${section.name} Area control`}
-      title={`${section.name}: drag to move; right-click for Area properties`}
+      title={section.name}
       style={{ left: screen.x, top: screen.y, backgroundColor: section.color }}
       onPointerDown={(event) => {
-        event.stopPropagation();
-        if (event.button !== 0 || pendingArrivalPlacement || sectionDraft) return;
-        event.preventDefault();
-        setSectionContextMenu(null);
-        event.currentTarget.setPointerCapture(event.pointerId);
-        setMovingAreaControl({ sectionId: section.id, position, pointerId: event.pointerId });
+        if (state.editingMode !== 'move-feature') event.stopPropagation();
       }}
-      onPointerMove={(event) => {
+      onClick={(event) => {
         event.stopPropagation();
-        if (movingAreaControl?.sectionId !== section.id ||
-            movingAreaControl.pointerId !== event.pointerId) return;
-        const point = screenToMap(event.clientX, event.clientY);
-        const polygon = getSectionPolygon(section, sectionEdges, displayedSectionNodes);
-        if (point && isPointInPolygon(point, polygon)) {
-          setMovingAreaControl({ ...movingAreaControl, position: point });
-        }
+        if (suppressNextFeatureClickRef.current) { suppressNextFeatureClickRef.current = false; return; }
+        if (pendingArrivalPlacement || sectionDraft || state.editingMode === 'move-feature') return;
+        dispatch({ type: 'feature.select', featureId: section.id });
       }}
-      onPointerUp={(event) => {
-        event.stopPropagation();
-        if (movingAreaControl?.sectionId !== section.id ||
-            movingAreaControl.pointerId !== event.pointerId) return;
-        const controlPosition = movingAreaControl.position;
-        setMovingAreaControl(null);
-        releasePointerCaptureSafely(event.currentTarget, event.pointerId);
-        onUpdateSectionData?.(sections.map((item) => item.id === section.id
-          ? { ...item, controlPosition, updatedAt: new Date() } : item), sectionNodes, sectionEdges);
-      }}
-      onPointerCancel={() => setMovingAreaControl(null)}
-      onLostPointerCapture={() => setMovingAreaControl(null)}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
         const rect = viewportRef.current?.getBoundingClientRect();
         if (!rect || pendingArrivalPlacement) return;
-        setMovingAreaControl(null);
         setSectionContextMenu({ kind: 'area', id: section.id, point: position,
           x: event.clientX - rect.left, y: event.clientY - rect.top });
       }}
@@ -2881,7 +2888,8 @@ function saveSectionProperties() {
               type="button"
               className={!selectedFeatureType ? 'selected' : ''}
               onClick={() => {
-                onFeatureTypeChange?.(selectedFeature.id, undefined);
+                if (selectedArea) updateAreaIdentity(selectedArea.id, { featureTypeId: undefined });
+                else onFeatureTypeChange?.(selectedFeature.id, undefined);
                 setExpandedTypeFeatureId(null);
               }}
             >
@@ -2895,7 +2903,8 @@ function saveSectionProperties() {
                   ? 'selected'
                   : ''}
                 onClick={() => {
-                  onFeatureTypeChange?.(selectedFeature.id, type.id);
+                  if (selectedArea) updateAreaIdentity(selectedArea.id, { featureTypeId: type.id });
+                  else onFeatureTypeChange?.(selectedFeature.id, type.id);
                   setExpandedTypeFeatureId(null);
                 }}
               >
@@ -2928,13 +2937,24 @@ function saveSectionProperties() {
             {hasNavigationTarget && (
               <button
                 type="button"
-                onClick={() => onEnterFeature?.(selectedFeature)}
+                onClick={() => selectedArea ? onOpenAreaLocation?.(selectedArea) : onEnterFeature?.(selectedFeature)}
               >
                 Enter
               </button>
             )}
 
-            {secondaryActions.map((action) => (
+            {selectedArea && <>
+              <button type="button" onClick={() => {
+                setMediaAreaId(selectedArea.id); setExpandedActionsFeatureId(null);
+              }}>Media Assignment…</button>
+              {!selectedArea.targetMapId && <button type="button"
+                onClick={() => { onAddAreaLocation?.(selectedArea); setExpandedActionsFeatureId(null); }}>Add Location</button>}
+              {selectedArea.targetMapId && <button type="button" onClick={() => {
+                if (!window.confirm('Unlink this Location? Its Map is kept, but its derived Boundary and automatic Area travel are removed.')) return;
+                onUnlinkAreaLocation?.(selectedArea); setExpandedActionsFeatureId(null);
+              }}>Unlink Location</button>}
+            </>}
+            {(selectedArea ? [] : secondaryActions).map((action) => (
               <button
                 key={action.id}
                 type="button"
@@ -2945,7 +2965,7 @@ function saveSectionProperties() {
               </button>
             ))}
 
-            {!hasNavigationTarget && secondaryActions.length === 0 && (
+            {!selectedArea && !hasNavigationTarget && secondaryActions.length === 0 && (
               <span className="feature-popup-no-actions">
                 No actions available.
               </span>
@@ -2955,18 +2975,28 @@ function saveSectionProperties() {
       </div>
     </div>
 
+    <div className="feature-popup-content">
     <div className="feature-popup-separator" />
 
     <RichTextEditor
       key={selectedFeature.id}
       value={selectedFeature.description}
       onChange={(description) => {
-        onDescriptionChange?.(selectedFeature.id, description);
+        if (selectedArea) updateAreaIdentity(selectedArea.id, { description });
+        else onDescriptionChange?.(selectedFeature.id, description);
       }}
     />
+    </div>
   </div>
 )}
 
+{mediaArea && <AreaMediaSlotsDialog key={mediaArea.id + (mediaArea.targetMapId ?? '')}
+  overrides={mediaArea.targetMapId ? mediaLocationMap?.mediaSlotOverrides ?? [] : mediaArea.mediaSlotOverrides ?? []}
+  inheritedOverrides={mediaArea.targetMapId ? [] : mapMediaOverrides} globalSlots={globalMediaSlots}
+  readOnly={Boolean(mediaArea.targetMapId)} loading={Boolean(mediaArea.targetMapId && !mediaLocationMap)}
+  onClose={() => setMediaAreaId(null)} onSave={(mediaSlotOverrides) => {
+    updateAreaIdentity(mediaArea.id, { mediaSlotOverrides }); setMediaAreaId(null);
+  }} />}
 {sectionContextMenu && (
   <div
     ref={sectionContextMenuRef}
@@ -2974,14 +3004,26 @@ function saveSectionProperties() {
     style={{ left: sectionContextMenu.x, top: sectionContextMenu.y }}
     onPointerDown={(event) => event.stopPropagation()}
   >
-    {sectionContextMenu.kind === 'area' ? (
-      <button type="button" onClick={() => {
-        const section = sections.find((item) => item.id === sectionContextMenu.id);
-        if (section) openSectionProperties(section);
-      }}>
-        Area...
-      </button>
-    ) : sectionContextMenu.kind === 'node' ? (
+    {sectionContextMenu.kind === 'area' ? (() => {
+      const area = sections.find((item) => item.id === sectionContextMenu.id);
+      if (!area) return null;
+      return <>
+        <button type="button" onClick={() => {
+          dispatch({ type: 'featureMove.start', featureId: area.id, position: getAreaControlPosition(area)! });
+          setSectionContextMenu(null);
+        }}>Move</button>
+        <button type="button" role="menuitemcheckbox" aria-checked={Boolean(area.showName)} onClick={() => {
+          updateAreaIdentity(area.id, { showName: !area.showName }); setSectionContextMenu(null);
+        }}>Show Label<span className="map-context-check">{area.showName ? '✓' : ''}</span></button>
+        <label className="area-context-color">Color<input type="color" aria-label="Area color" value={area.color}
+          onChange={(event) => updateAreaIdentity(area.id, { color: event.target.value })} /></label>
+        <div className="map-context-separator" />
+        <button type="button" onClick={() => {
+          if (window.confirm(`Delete Area "${area.name}"?`)) onDeleteSection?.(area.id);
+          setSectionContextMenu(null);
+        }}>Delete</button>
+      </>;
+    })() : sectionContextMenu.kind === 'node' ? (
       <>
         <button
           type="button"
@@ -3311,7 +3353,7 @@ function saveSectionProperties() {
       <h2>
         {SECTION_DEFAULTS[editingSection.kind].name} Properties
       </h2>
-      <label>
+      {editingSection.kind !== 'area' && <label>
         Name
         <input
           type="text"
@@ -3319,7 +3361,7 @@ function saveSectionProperties() {
           onChange={(event) => setSectionNameDraft(event.target.value)}
           autoFocus
         />
-      </label>
+      </label>}
       <div className="section-appearance-row">
       <label className="section-color-control">
         Color
@@ -3329,38 +3371,7 @@ function saveSectionProperties() {
           onChange={(event) => setSectionColorDraft(event.target.value)}
         />
       </label>
-      {editingSection.kind === 'area' && (
-        <label className="section-show-name-control">
-          Show Name
-          <input
-            type="checkbox"
-            checked={sectionShowNameDraft}
-            onChange={(event) => setSectionShowNameDraft(event.target.checked)}
-          />
-        </label>
-      )}
       </div>
-      {editingSection.kind === 'area' && (
-        <button type="button" onClick={() => {
-          if (editingSection.targetMapId) {
-            onOpenAreaLocation?.(editingSection);
-            setEditingSection(null);
-          } else {
-            const created = onCreateAreaLocation?.({ ...editingSection, name: sectionNameDraft.trim(),
-              color: sectionColorDraft, showName: sectionShowNameDraft });
-            if (created) setEditingSection(created);
-          }
-        }} disabled={!sectionNameDraft.trim()}>
-          {editingSection.targetMapId ? 'Open Location…' : 'Create Location…'}
-        </button>
-      )}
-      {editingSection.kind === 'area' && editingSection.targetMapId && (
-        <button type="button" onClick={() => {
-          if (!window.confirm('Unlink this Location? Its Map is kept, but its derived Boundary and automatic Area travel are removed.')) return;
-          onUnlinkAreaLocation?.(editingSection);
-          setEditingSection(null);
-        }}>Unlink Location</button>
-      )}
       <div className="dialog-buttons section-properties-buttons">
         <button
           type="button"
@@ -3380,7 +3391,7 @@ function saveSectionProperties() {
         </button>
         <button
           type="button"
-          disabled={!sectionNameDraft.trim()}
+          disabled={editingSection.kind !== 'area' && !sectionNameDraft.trim()}
           onClick={saveSectionProperties}
         >
           Save

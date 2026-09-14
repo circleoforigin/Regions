@@ -1,3 +1,5 @@
+import type { Feature } from './Feature';
+import type { MediaSlotOverride } from './MediaSlot';
 export type SectionKind = 'area' | 'zone' | 'border' | 'boundary';
 
 export interface SectionPoint {
@@ -23,10 +25,14 @@ export interface Section {
   mapId: string;
   kind: SectionKind;
   name: string;
+  subtitle?: string;
+  description?: Feature['description'];
   color: string;
   showName?: boolean;
   controlPosition?: SectionPoint;
   targetMapId?: string;
+  featureTypeId?: string;
+  mediaSlotOverrides?: MediaSlotOverride[];
   locked?: boolean;
   edgeIds: string[];
   createdAt: Date;
