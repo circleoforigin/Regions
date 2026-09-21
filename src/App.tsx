@@ -12,6 +12,7 @@ import {
 import {
   createJournalPage,
   getJournalSections,
+  goToJournalPage,
   type JournalSectionSummary,
 } from './integrations/journal/JournalIntegration';
 
@@ -5112,7 +5113,7 @@ mapMediaSlotsEnabled={
 
 {journalPageFeature && (
   <div className="dialog-backdrop">
-    <div className="dialog">
+    <div className="dialog journal-page-dialog">
       <h2>Create Journal Page</h2>
 
       <label>
@@ -5164,15 +5165,23 @@ mapMediaSlotsEnabled={
           <label>
             Brief
             <textarea
-              value={journalBrief}
-              disabled={journalDialogLoading}
-              onChange={(event) => {
-                setJournalBrief(
-                  event.target.value
-                );
-              }}
-              autoFocus
-            />
+  value={journalBrief}
+  disabled={journalDialogLoading}
+  onChange={(event) => {
+    setJournalBrief(
+      event.target.value.replace(
+        /[\r\n]+/g,
+        ' '
+      )
+    );
+  }}
+  onKeyDown={(event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+    }
+  }}
+  autoFocus
+/>
           </label>
         </>
       )}
@@ -5376,7 +5385,7 @@ mapMediaSlotsEnabled={
         focusPiecePosition={focusPiecePosition}
         focusPieceRequestId={focusPieceRequestId}
         onFocusPieceComplete={() => setFocusPiecePosition(null)}
-        secondaryActions={(feature) => {
+       secondaryActions={(feature) => {
   if (
     !journalAvailable ||
     feature.type !== 'location'
@@ -5387,28 +5396,58 @@ mapMediaSlotsEnabled={
   if (feature.journalPageId) {
     return [
       {
-  id: 'journal-create-page',
-  label: 'Create Journal Page...',
+        id: 'journal',
+        label: 'Journal',
+        children: [
+          {
+  id: 'journal-go-to-page',
+  label: 'Go to Page',
   onInvoke: () => {
-    void handleCreateJournalPageRequest(
-      feature
-    );
+    if (!feature.journalPageId) {
+      return;
+    }
+
+    void goToJournalPage(
+      feature.journalPageId
+    ).catch((error) => {
+      setNavigationError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to open Journal Page.'
+      );
+    });
   },
 },
+          {
+            id: 'journal-view-page',
+            label: 'View',
+            onInvoke: () => {
+              console.log(
+                '[Regions] View Journal Page:',
+                feature.journalPageId
+              );
+            },
+          },
+        ],
+      },
     ];
   }
 
   return [
     {
-      id: 'journal-create-page',
-      label: 'Create Journal Page...',
-      onInvoke: () => {
-        console.log(
-          '[Regions] Create Journal Page:',
-          feature.id,
-          feature.name
-        );
-      },
+      id: 'journal',
+      label: 'Journal',
+      children: [
+        {
+          id: 'journal-create-page',
+          label: 'Create Page...',
+          onInvoke: () => {
+            void handleCreateJournalPageRequest(
+              feature
+            );
+          },
+        },
+      ],
     },
   ];
 }}

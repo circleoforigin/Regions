@@ -618,6 +618,11 @@
 
 .feature-popup-control-menu.actions-menu {
   right: 0;
+
+  min-width: 110px;
+  max-width: 160px;
+  max-height: none;
+  overflow: visible;
 }
 
 .feature-popup-control-menu button {
@@ -657,6 +662,63 @@
 .feature-popup-data span {
   color: #999999;
   font-style: italic;
+}
+
+.feature-popup-action-group {
+  position: relative;
+}
+
+.feature-popup-action-group > button {
+  width: 100%;
+}
+
+.feature-popup-action-arrow {
+  float: right;
+  margin-left: 12px;
+}
+
+.feature-popup-action-submenu {
+  position: absolute;
+
+  top: -5px;
+  left: calc(100% + 1px);
+
+  z-index: 100;
+
+  min-width: 115px;
+  padding: 4px 0;
+
+  background: #252525;
+  border: 1px solid #666666;
+
+  box-shadow:
+    0 6px 14px
+    rgba(0, 0, 0, 0.5);
+}
+
+.feature-popup-action-submenu button {
+  display: block;
+
+  width: 100%;
+  padding: 7px 12px;
+
+  border: 0;
+  background: transparent;
+  color: #eeeeee;
+
+  text-align: left;
+  white-space: nowrap;
+
+  cursor: pointer;
+}
+
+.feature-popup-action-submenu button:hover:not(:disabled) {
+  background: #353535;
+}
+
+.feature-popup-action-submenu button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .feature-description-section {
@@ -1519,6 +1581,78 @@ button.map-key-parent:hover {
 .dialog-buttons button:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+.journal-page-dialog {
+  width: min(380px, calc(100vw - 40px));
+  box-sizing: border-box;
+
+  padding: 16px;
+}
+
+.journal-page-dialog h2 {
+  margin-bottom: 12px;
+  font-size: 18px;
+}
+
+.journal-page-dialog label {
+  display: grid;
+  gap: 4px;
+
+  margin-bottom: 10px;
+
+  color: #cfcfcf;
+  font-size: 12px;
+}
+
+.journal-page-dialog input,
+.journal-page-dialog select,
+.journal-page-dialog textarea {
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 6px 8px;
+
+  background: #181818;
+  color: #ffffff;
+
+  border: 1px solid #454545;
+  border-radius: 4px;
+
+  font: inherit;
+}
+
+.journal-page-dialog input[readonly] {
+  color: #bdbdbd;
+  background: #202020;
+}
+
+.journal-page-dialog select {
+  cursor: pointer;
+}
+
+.journal-page-dialog textarea {
+  min-height: 52px;
+  height: 52px;
+  resize: none;
+}
+
+.journal-page-dialog input:focus,
+.journal-page-dialog select:focus,
+.journal-page-dialog textarea:focus {
+  outline: none;
+  border-color: #8aa7c7;
+}
+
+.journal-page-dialog p {
+  margin: 6px 0 0;
+
+  color: #d6a0a0;
+  font-size: 12px;
+}
+
+.journal-page-dialog .dialog-buttons {
+  margin-top: 12px;
 }
 
 .location-choice-buttons {

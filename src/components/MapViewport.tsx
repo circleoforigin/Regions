@@ -103,7 +103,8 @@ export interface FeaturePopupAction {
   id: string;
   label: string;
   disabled?: boolean;
-  onInvoke: () => void;
+  onInvoke?: () => void;
+  children?: FeaturePopupAction[];
 }
 
 export interface LocationMapMetadata {
@@ -532,7 +533,11 @@ const selectedFeatureSecondaryActions =
 
   const [expandedActionsFeatureId, setExpandedActionsFeatureId] =
     useState<string | null>(null);
-  const [expandedTypeFeatureId, setExpandedTypeFeatureId] =
+  const [
+  expandedSecondaryActionId,
+  setExpandedSecondaryActionId,
+] = useState<string | null>(null);
+    const [expandedTypeFeatureId, setExpandedTypeFeatureId] =
     useState<string | null>(null);
   const [editingSubtitle, setEditingSubtitle] = useState(false);
   const [subtitleDraft, setSubtitleDraft] = useState('');
@@ -2994,16 +2999,73 @@ function saveSectionProperties() {
                 onUnlinkAreaLocation?.(selectedArea); setExpandedActionsFeatureId(null);
               }}>Unlink Location</button>}
             </>}
-            {selectedFeatureSecondaryActions.map((action) => (
+            {selectedFeatureSecondaryActions.map((action) => {
+  const hasChildren =
+    Boolean(action.children?.length);
+
+  const submenuExpanded =
+    expandedSecondaryActionId === action.id;
+
+  return (
+    <div
+      key={action.id}
+      className="feature-popup-action-group"
+    >
+      <button
+        type="button"
+        disabled={action.disabled}
+        onClick={() => {
+          if (hasChildren) {
+            setExpandedSecondaryActionId(
+              submenuExpanded
+                ? null
+                : action.id
+            );
+            return;
+          }
+
+          action.onInvoke?.();
+        }}
+      >
+        {action.label}
+
+        {hasChildren && (
+          <span
+            className="feature-popup-action-arrow"
+            aria-hidden="true"
+          >
+            ›
+          </span>
+        )}
+      </button>
+
+      {hasChildren && submenuExpanded && (
+        <div className="feature-popup-action-submenu">
+          {action.children!.map(
+            (child) => (
               <button
-                key={action.id}
+                key={child.id}
                 type="button"
-                disabled={action.disabled}
-                onClick={action.onInvoke}
+                disabled={child.disabled}
+                onClick={() => {
+                  child.onInvoke?.();
+                  setExpandedSecondaryActionId(
+                    null
+                  );
+                  setExpandedActionsFeatureId(
+                    null
+                  );
+                }}
               >
-                {action.label}
+                {child.label}
               </button>
-            ))}
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+})}
 
            {!selectedArea &&
   !hasNavigationTarget &&

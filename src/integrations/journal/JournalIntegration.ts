@@ -46,3 +46,18 @@ export async function createJournalPage(
     request
   );
 }
+
+export async function goToJournalPage(
+  pageId: string
+): Promise<void> {
+  await moduleEventBus.command(
+    'journal',
+    'Journal.GoToPage',
+    {
+      pageId,
+    },
+    {
+      focus: true,
+    }
+  );
+}
