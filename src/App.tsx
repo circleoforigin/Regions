@@ -9,6 +9,11 @@ import {
   useRef,
   useState,
 } from 'react';
+import {
+  createJournalPage,
+  getJournalSections,
+  type JournalSectionSummary,
+} from './integrations/journal/JournalIntegration';
 
 import './App.css';
 import type {
@@ -126,6 +131,11 @@ function App() {
   const pieceAreaContexts = useRef(new Map<string, string | undefined>());
   const { dispatch } = useRegionsState();
   const mapViewportRef = useRef<MapViewportHandle | null>(null);
+  const [
+    journalAvailable,
+    setJournalAvailable,
+  ] = useState(false);
+  
   const [
     activeProject,
     setActiveProject,
@@ -331,6 +341,36 @@ const pendingProjectActionRef =
 
   const [navigationError, setNavigationError] =
     useState<string | null>(null);
+
+    const [
+  journalPageFeature,
+  setJournalPageFeature,
+] = useState<Feature | null>(null);
+
+const [
+  journalSections,
+  setJournalSections,
+] = useState<JournalSectionSummary[]>([]);
+
+const [
+  journalSectionId,
+  setJournalSectionId,
+] = useState('');
+
+const [
+  journalBrief,
+  setJournalBrief,
+] = useState('');
+
+const [
+  journalDialogLoading,
+  setJournalDialogLoading,
+] = useState(false);
+
+const [
+  journalDialogError,
+  setJournalDialogError,
+] = useState<string | null>(null);
 
   const [viewportCenter, setViewportCenter] =
     useState({ x: 0, y: 0 });
@@ -582,6 +622,19 @@ const pendingProjectActionRef =
 
     modulePresence.announceReady();
 
+    const updateJournalAvailability = () => {
+  setJournalAvailable(
+    modulePresence.isReady('journal')
+  );
+};
+
+const unsubscribePresence =
+  modulePresence.subscribe(
+    updateJournalAvailability
+  );
+
+updateJournalAvailability();
+
     if (moduleEventBus.hosted) {
       void moduleEventBus.registerActions([
         ...locationActionDefinitions,
@@ -600,8 +653,9 @@ const pendingProjectActionRef =
     }
 
     return () => {
-      modulePresence.stop();
-    };
+  unsubscribePresence();
+  modulePresence.stop();
+};
   }, []);
 
   useEffect(() => {
@@ -3119,6 +3173,87 @@ function handleSubtitleChange(featureId: string, subtitle: string) {
   markProjectDirty();
 }
 
+async function handleCreateJournalPageRequest(
+  feature: Feature
+) {
+  setJournalDialogLoading(true);
+  setJournalDialogError(null);
+
+  try {
+    const response =
+      await getJournalSections();
+
+    if (response.sections.length === 0) {
+      throw new Error(
+        'The active Journal Project has no available Sections.'
+      );
+    }
+
+    setJournalPageFeature(feature);
+    setJournalSections(response.sections);
+    setJournalSectionId(
+      response.sections[0].sectionId
+    );
+    setJournalBrief('');
+  } catch (error) {
+    setJournalDialogError(
+      error instanceof Error
+        ? error.message
+        : 'Unable to access Journal.'
+    );
+
+    setJournalPageFeature(feature);
+  } finally {
+    setJournalDialogLoading(false);
+  }
+}
+
+async function handleCreateJournalPage() {
+  if (
+    !journalPageFeature ||
+    !journalSectionId ||
+    !journalBrief.trim()
+  ) {
+    return;
+  }
+
+  setJournalDialogLoading(true);
+  setJournalDialogError(null);
+
+  try {
+    const page = await createJournalPage({
+      sectionId: journalSectionId,
+      title: journalPageFeature.name,
+      subtitle:
+        journalPageFeature.subtitle ?? '',
+      brief: journalBrief.trim(),
+    });
+
+    updateFeatureEverywhere(
+      journalPageFeature.id,
+      (feature) => ({
+        ...feature,
+        journalPageId: page.pageId,
+      })
+    );
+
+    markProjectDirty();
+
+    setJournalPageFeature(null);
+    setJournalSections([]);
+    setJournalSectionId('');
+    setJournalBrief('');
+  } catch (error) {
+    setJournalDialogError(
+      error instanceof Error
+        ? error.message
+        : 'Unable to create Journal Page.'
+    );
+  } finally {
+    setJournalDialogLoading(false);
+  }
+}
+
 function handleDescriptionChange(
   featureId: string,
   description: RichTextDocument
@@ -4975,6 +5110,114 @@ mapMediaSlotsEnabled={
   </div>
 )}
 
+{journalPageFeature && (
+  <div className="dialog-backdrop">
+    <div className="dialog">
+      <h2>Create Journal Page</h2>
+
+      <label>
+        Title
+        <input
+          type="text"
+          value={journalPageFeature.name}
+          readOnly
+        />
+      </label>
+
+      <label>
+        Subtitle
+        <input
+          type="text"
+          value={
+            journalPageFeature.subtitle ?? ''
+          }
+          readOnly
+        />
+      </label>
+
+      {journalSections.length > 0 && (
+        <>
+          <label>
+            Section
+            <select
+              value={journalSectionId}
+              disabled={journalDialogLoading}
+              onChange={(event) => {
+                setJournalSectionId(
+                  event.target.value
+                );
+              }}
+            >
+              {journalSections.map(
+                (section) => (
+                  <option
+                    key={section.sectionId}
+                    value={section.sectionId}
+                  >
+                    {section.sectionName}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+
+          <label>
+            Brief
+            <textarea
+              value={journalBrief}
+              disabled={journalDialogLoading}
+              onChange={(event) => {
+                setJournalBrief(
+                  event.target.value
+                );
+              }}
+              autoFocus
+            />
+          </label>
+        </>
+      )}
+
+      {journalDialogError && (
+        <p>{journalDialogError}</p>
+      )}
+
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          disabled={journalDialogLoading}
+          onClick={() => {
+            setJournalPageFeature(null);
+            setJournalSections([]);
+            setJournalSectionId('');
+            setJournalBrief('');
+            setJournalDialogError(null);
+          }}
+        >
+          Cancel
+        </button>
+
+        {journalSections.length > 0 && (
+          <button
+            type="button"
+            disabled={
+              journalDialogLoading ||
+              !journalSectionId ||
+              !journalBrief.trim()
+            }
+            onClick={() => {
+              void handleCreateJournalPage();
+            }}
+          >
+            {journalDialogLoading
+              ? 'Creating...'
+              : 'Create Page'}
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
 {showDeleteProjectDialog && (
   <div className="dialog-backdrop">
     <div className="dialog">
@@ -5133,6 +5376,42 @@ mapMediaSlotsEnabled={
         focusPiecePosition={focusPiecePosition}
         focusPieceRequestId={focusPieceRequestId}
         onFocusPieceComplete={() => setFocusPiecePosition(null)}
+        secondaryActions={(feature) => {
+  if (
+    !journalAvailable ||
+    feature.type !== 'location'
+  ) {
+    return [];
+  }
+
+  if (feature.journalPageId) {
+    return [
+      {
+  id: 'journal-create-page',
+  label: 'Create Journal Page...',
+  onInvoke: () => {
+    void handleCreateJournalPageRequest(
+      feature
+    );
+  },
+},
+    ];
+  }
+
+  return [
+    {
+      id: 'journal-create-page',
+      label: 'Create Journal Page...',
+      onInvoke: () => {
+        console.log(
+          '[Regions] Create Journal Page:',
+          feature.id,
+          feature.name
+        );
+      },
+    },
+  ];
+}}
         onDeleteFeature={handleDeleteFeature}
         onNewFeatureRequest={handleNewFeatureRequest}
         onNewLocationRequest={handleNewLocationRequest}

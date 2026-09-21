@@ -178,7 +178,9 @@ onViewportCenterChange?: (position: Point) => void;
 focusPiecePosition?: Point | null;
 focusPieceRequestId?: number;
 onFocusPieceComplete?: () => void;
-secondaryActions?: FeaturePopupAction[];
+secondaryActions?: (
+  feature: Feature
+) => FeaturePopupAction[];
 
 onDeleteFeature?: (
   feature: Feature
@@ -292,7 +294,7 @@ function MapViewport({
   focusPieceRequestId,
   onFocusPieceComplete,
   onDeleteFeature,
-  secondaryActions = [],
+  secondaryActions,
   onNewFeatureRequest,
   onNewLocationRequest,
   onNewConnectionRequest,
@@ -505,6 +507,13 @@ function MapViewport({
     targetMapId: selectedArea.targetMapId, featureTypeId: selectedArea.featureTypeId,
     noteLinks: [],
   } : features.find((feature) => feature.id === state.selectedFeatureId && isFeatureVisible(feature));
+
+const selectedFeatureSecondaryActions =
+  selectedFeature && !selectedArea
+    ? secondaryActions?.(
+        selectedFeature
+      ) ?? []
+    : [];
 
   const [arrivalPreviewState, setArrivalPreviewState] = useState<{
     key: string;
@@ -2985,7 +2994,7 @@ function saveSectionProperties() {
                 onUnlinkAreaLocation?.(selectedArea); setExpandedActionsFeatureId(null);
               }}>Unlink Location</button>}
             </>}
-            {(selectedArea ? [] : secondaryActions).map((action) => (
+            {selectedFeatureSecondaryActions.map((action) => (
               <button
                 key={action.id}
                 type="button"
@@ -2996,7 +3005,9 @@ function saveSectionProperties() {
               </button>
             ))}
 
-            {!selectedArea && !hasNavigationTarget && secondaryActions.length === 0 && (
+           {!selectedArea &&
+  !hasNavigationTarget &&
+  selectedFeatureSecondaryActions.length === 0 && (
               <span className="feature-popup-no-actions">
                 No actions available.
               </span>

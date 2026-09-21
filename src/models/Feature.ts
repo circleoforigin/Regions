@@ -26,5 +26,8 @@ export interface Feature {
 
   targetMapId?: string;
   targetFeatureId?: string;
+
+  journalPageId?: string;
+
   connectionPlacementPending?: boolean;
 }
