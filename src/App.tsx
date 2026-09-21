@@ -31,6 +31,8 @@ import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
+import JournalViewPanel
+  from './integrations/journal/JournalViewPanel';
 import type {
   LocationMapMetadata,
   MapViewportHandle,
@@ -130,7 +132,7 @@ interface PendingArrivalIntent {
 function App() {
   const loadedSectionsMapId = useRef<string | null>(null);
   const pieceAreaContexts = useRef(new Map<string, string | undefined>());
-  const { dispatch } = useRegionsState();
+  const { state, dispatch } = useRegionsState();
   const mapViewportRef = useRef<MapViewportHandle | null>(null);
   const [
     journalAvailable,
@@ -342,6 +344,60 @@ const pendingProjectActionRef =
 
   const [navigationError, setNavigationError] =
     useState<string | null>(null);
+
+const [
+  journalViewOwnerFeatureId,
+  setJournalViewOwnerFeatureId,
+] = useState<string | null>(null);
+
+const [
+  journalViewEntryId,
+  setJournalViewEntryId,
+] = useState<string | null>(null);
+
+const [
+  journalViewPageIndex,
+  setJournalViewPageIndex,
+] = useState(0);
+
+useEffect(() => {
+  if (!journalViewOwnerFeatureId) {
+    return;
+  }
+
+  if (state.selectedFeatureId === journalViewOwnerFeatureId) {
+    return;
+  }
+
+  setJournalViewOwnerFeatureId(null);
+  setJournalViewEntryId(null);
+  setJournalViewPageIndex(0);
+}, [
+  journalViewOwnerFeatureId,
+  state.selectedFeatureId,
+]);
+
+function handleOpenJournalView(feature: Feature)
+{
+  if (
+    feature.type !== 'location' ||
+    !feature.journalPageId
+    ) 
+  {
+    return;
+  }
+
+  setJournalViewOwnerFeatureId(feature.id);
+  setJournalViewEntryId(feature.journalPageId);
+  setJournalViewPageIndex(0);
+}
+
+function handleCloseJournalView() 
+{
+  setJournalViewOwnerFeatureId(null);
+  setJournalViewEntryId(null);
+  setJournalViewPageIndex(0);
+}
 
     const [
   journalPageFeature,
@@ -5422,10 +5478,7 @@ mapMediaSlotsEnabled={
             id: 'journal-view-page',
             label: 'View',
             onInvoke: () => {
-              console.log(
-                '[Regions] View Journal Page:',
-                feature.journalPageId
-              );
+              handleOpenJournalView(feature);
             },
           },
         ],
@@ -5492,6 +5545,27 @@ mapMediaSlotsEnabled={
   </div>
 )}
   </section>
+
+  <JournalViewPanel
+  open={Boolean(
+    journalViewOwnerFeatureId &&
+    journalViewEntryId
+  )}
+  entryId={journalViewEntryId}
+  pageIndex={journalViewPageIndex}
+  onClose={handleCloseJournalView}
+  onPreviousPage={() => {
+    setJournalViewPageIndex((current) =>
+      Math.max(0, current - 1)
+    );
+  }}
+  onNextPage={() => {
+    setJournalViewPageIndex((current) =>
+      Math.min(2, current + 1)
+    );
+  }}
+/>
+
 </main>
     </div>
   );
