@@ -173,8 +173,11 @@ function JournalViewPanel({
             !error &&
             response && (
               <JournalViewRenderer
-                page={response.page}
-                onReferenceClick={(
+  page={response.page}
+  presentation={
+    response.presentation
+  }
+  onReferenceClick={(
                   targetEntryId
                 ) => {
                   console.log(

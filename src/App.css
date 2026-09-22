@@ -2280,8 +2280,8 @@ button.map-key-parent:hover {
   right: 20px;
   bottom: 20px;
 
-  width: min(440px, calc(42vw - 20px));
-  min-width: 340px;
+  width: min(460px, calc(46vw - 20px));
+min-width: 360px;
 
   background: #25282c;
 
@@ -2327,8 +2327,7 @@ box-shadow:
   height: 100%;
 
   box-sizing: border-box;
-
-  padding: 36px 34px 54px;
+  padding: 18px 18px 30px;
 
   overflow: hidden;
 
@@ -2385,10 +2384,10 @@ box-shadow:
 .journal-view-renderer {
   position: absolute;
 
-  top: 36px;
-  right: 34px;
-  bottom: 54px;
-  left: 34px;
+  top: 18px;
+  right: 18px;
+  bottom: 30px;
+  left: 18px;
 
   font-size: 14px;
   line-height: 1.55;

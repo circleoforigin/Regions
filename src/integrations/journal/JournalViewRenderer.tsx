@@ -1,10 +1,13 @@
 import type {
   JournalViewPage,
+  JournalViewPresentation,
   JournalViewTextRun,
 } from './JournalViewTypes';
 
 interface JournalViewRendererProps {
   page: JournalViewPage;
+  presentation: JournalViewPresentation;
+
   onReferenceClick?: (
     targetEntryId: string
   ) => void;
@@ -12,6 +15,7 @@ interface JournalViewRendererProps {
 
 function JournalViewRenderer({
   page,
+  presentation,
   onReferenceClick,
 }: JournalViewRendererProps) {
   function renderRuns(
@@ -62,7 +66,19 @@ function JournalViewRenderer({
   }
 
   return (
-    <div className="journal-view-renderer">
+  <div
+    className="journal-view-renderer"
+    style={{
+      fontFamily:
+        presentation.fontFamily,
+
+      fontSize:
+        presentation.fontSize,
+
+      lineHeight:
+        `${presentation.lineHeight}px`,
+    }}
+  >
       {page.fragments.map(
         (fragment, fragmentIndex) => {
           const baseStyle = {
@@ -73,10 +89,18 @@ function JournalViewRenderer({
           if (fragment.type === 'title') {
             return (
               <div
-                key={fragmentIndex}
-                className="journal-view-entry-title"
-                style={baseStyle}
-              >
+  key={fragmentIndex}
+  className="journal-view-entry-title"
+  style={{
+    ...baseStyle,
+
+    fontSize:
+      presentation.titleFontSize,
+
+    lineHeight:
+      `${presentation.titleLineHeight}px`,
+  }}
+>
                 {fragment.text}
               </div>
             );
@@ -87,7 +111,11 @@ function JournalViewRenderer({
               <div
                 key={fragmentIndex}
                 className="journal-view-entry-subtitle"
-                style={baseStyle}
+                style={{
+  ...baseStyle,
+  lineHeight:
+    `${fragment.height}px`,
+}}
               >
                 {fragment.text}
               </div>
@@ -109,10 +137,18 @@ function JournalViewRenderer({
           if (fragment.type === 'field') {
             return (
               <div
-                key={fragmentIndex}
-                className="journal-view-field-label"
-                style={baseStyle}
-              >
+  key={fragmentIndex}
+  className="journal-view-field-label"
+  style={{
+    ...baseStyle,
+
+    fontSize:
+      presentation.fieldFontSize,
+
+    lineHeight:
+      `${presentation.fieldLineHeight}px`,
+  }}
+>
                 {fragment.text}
               </div>
             );
