@@ -5560,8 +5560,9 @@ mapMediaSlotsEnabled={
     );
   }}
   onNextPage={() => {
-    setJournalViewPageIndex((current) =>
-      Math.min(2, current + 1)
+    setJournalViewPageIndex(
+      (current) =>
+        current + 1
     );
   }}
 />

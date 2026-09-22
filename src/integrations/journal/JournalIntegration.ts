@@ -2,6 +2,10 @@ import {
   moduleEventBus,
 } from '../../host/ModuleBus';
 
+import type {
+  JournalViewPageResponse,
+} from './JournalViewTypes';
+
 export interface JournalSectionSummary {
   sectionId: string;
   sectionName: string;
@@ -59,5 +63,21 @@ export async function goToJournalPage(
     {
       focus: true,
     }
+  );  
+}
+
+export async function getJournalViewPage(
+  entryId: string,
+  pageIndex: number,
+): Promise<JournalViewPageResponse> {
+  return moduleEventBus.command<
+    JournalViewPageResponse
+  >(
+    'journal',
+    'Journal.GetViewPage',
+    {
+      entryId,
+      pageIndex,
+    },
   );
 }

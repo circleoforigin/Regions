@@ -76,7 +76,23 @@ export interface JournalViewPage {
   fragments: JournalViewFragment[];
 }
 
+export interface JournalViewPresentation {
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+
+  titleFontSize: number;
+  titleLineHeight: number;
+
+  fieldFontSize: number;
+  fieldLineHeight: number;
+
+  pageWidth: number;
+  pageHeight: number;
+}
+
 export interface JournalViewPageResponse {
   pageCount: number;
   page: JournalViewPage;
+  presentation: JournalViewPresentation;
 }

@@ -1,121 +1,18 @@
+import {
+  useEffect,
+  useState,
+} from 'react';
+
+import {
+  getJournalViewPage,
+} from './JournalIntegration';
+
 import JournalViewRenderer
   from './JournalViewRenderer';
 
 import type {
-  JournalViewPage,
+  JournalViewPageResponse,
 } from './JournalViewTypes';
-
-
-const mockJournalPage: JournalViewPage = {
-  fragments: [
-    {
-      type: 'title',
-      text: 'The Ruined Shrine',
-      top: 0,
-      height: 36,
-    },
-    {
-      type: 'subtitle',
-      text: 'Temple of the Old Gods',
-      top: 40,
-      height: 24,
-    },
-    {
-      type: 'brief',
-      text:
-        'A crumbling shrine hidden among the foothills, ' +
-        'abandoned long enough that no living resident ' +
-        'remembers who first worshipped here.',
-      top: 88,
-      height: 70,
-    },
-    {
-      type: 'field',
-      text: 'Rumors',
-      top: 184,
-      height: 24,
-    },
-    {
-      type: 'item',
-      top: 216,
-      height: 46,
-      paragraphs: [
-        {
-          indented: false,
-          runs: [
-            {
-              text:
-                'Travelers report strange lights moving ' +
-                'through the ruins after sunset.',
-              bold: false,
-              italic: false,
-              underline: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      type: 'item',
-      top: 274,
-      height: 66,
-      paragraphs: [
-        {
-          indented: false,
-          runs: [
-            {
-              text:
-                'Several locals insist the activity is ' +
-                'connected to ',
-              bold: false,
-              italic: false,
-              underline: false,
-            },
-            {
-              text: 'the Black Abbey',
-              bold: false,
-              italic: false,
-              underline: true,
-              targetEntryId: 'mock-black-abbey',
-            },
-            {
-              text: '.',
-              bold: false,
-              italic: false,
-              underline: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      type: 'field',
-      text: 'Notes',
-      top: 366,
-      height: 24,
-    },
-    {
-      type: 'item',
-      top: 398,
-      height: 66,
-      paragraphs: [
-        {
-          indented: false,
-          runs: [
-            {
-              text:
-                'The altar bears an unfamiliar rune beneath ' +
-                'several layers of soot and weathering.',
-              bold: false,
-              italic: false,
-              underline: false,
-            },
-          ],
-        },
-      ],
-    },
-  ],
-};
 
 interface JournalViewPanelProps {
   open: boolean;
@@ -134,10 +31,91 @@ function JournalViewPanel({
   onPreviousPage,
   onNextPage,
 }: JournalViewPanelProps) {
-  const mockPageCount = 3;
+  const [
+    response,
+    setResponse,
+  ] = useState<
+    JournalViewPageResponse | null
+  >(null);
 
-  const canGoPrevious = pageIndex > 0;
-  const canGoNext = pageIndex < mockPageCount - 1;
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (
+      !open ||
+      !entryId
+    ) {
+      setResponse(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    setLoading(true);
+    setError(null);
+
+    void getJournalViewPage(
+      entryId,
+      pageIndex
+    )
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        setResponse(result);
+      })
+      .catch((requestError) => {
+        if (cancelled) {
+          return;
+        }
+
+        setResponse(null);
+
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : 'Unable to load Journal page.'
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    entryId,
+    pageIndex,
+  ]);
+
+  const pageCount =
+    response?.pageCount ?? 0;
+
+  const canGoPrevious =
+    !loading &&
+    pageIndex > 0;
+
+  const canGoNext =
+    !loading &&
+    pageCount > 0 &&
+    pageIndex < pageCount - 1;
 
   return (
     <aside
@@ -178,19 +156,34 @@ function JournalViewPanel({
             </button>
           )}
 
-          <JournalViewRenderer
-  page={mockJournalPage}
-  onReferenceClick={(targetEntryId) => {
-    console.log(
-      '[Regions] Journal View reference:',
-      targetEntryId
-    );
-  }}
-/>           
+          {loading && (
+            <div className="journal-view-status">
+              Loading Journal...
+            </div>
+          )}
 
-          <div className="journal-view-mock-debug">
-            Mock Entry: {entryId ?? 'none'}
-          </div>
+          {!loading &&
+            error && (
+              <div className="journal-view-status">
+                {error}
+              </div>
+            )}
+
+          {!loading &&
+            !error &&
+            response && (
+              <JournalViewRenderer
+                page={response.page}
+                onReferenceClick={(
+                  targetEntryId
+                ) => {
+                  console.log(
+                    '[Regions] Journal View reference:',
+                    targetEntryId
+                  );
+                }}
+              />
+            )}
 
           <button
             type="button"
