@@ -348,9 +348,12 @@ const pendingProjectActionRef =
     useState<string | null>(null);
 
 const [
-  journalViewOwnerFeatureId,
-  setJournalViewOwnerFeatureId,
-] = useState<string | null>(null);
+  journalViewOwner,
+  setJournalViewOwner,
+] = useState<{
+  id: string;
+  kind: 'feature' | 'area';
+} | null>(null);
 
 const [
   journalViewEntryId,
@@ -363,40 +366,47 @@ const [
 ] = useState(0);
 
 useEffect(() => {
-  if (!journalViewOwnerFeatureId) {
+  if (!journalViewOwner) {
     return;
   }
 
-  if (state.selectedFeatureId === journalViewOwnerFeatureId) {
+  if (
+    state.selectedFeatureId ===
+    journalViewOwner.id
+  ) {
     return;
   }
 
-  setJournalViewOwnerFeatureId(null);
+  setJournalViewOwner(null);
   setJournalViewEntryId(null);
   setJournalViewPageIndex(0);
 }, [
-  journalViewOwnerFeatureId,
+  journalViewOwner,
   state.selectedFeatureId,
 ]);
 
-function handleOpenJournalView(feature: Feature)
-{
-  if (
-    feature.type !== 'location' ||
-    !feature.journalPageId
-    ) 
-  {
+function handleOpenJournalView(
+  feature: Feature,
+  targetKind: 'feature' | 'area'
+) {
+  if (!feature.journalPageId) {
     return;
   }
 
-  setJournalViewOwnerFeatureId(feature.id);
-  setJournalViewEntryId(feature.journalPageId);
+  setJournalViewOwner({
+    id: feature.id,
+    kind: targetKind,
+  });
+
+  setJournalViewEntryId(
+    feature.journalPageId
+  );
+
   setJournalViewPageIndex(0);
 }
 
-function handleCloseJournalView() 
-{
-  setJournalViewOwnerFeatureId(null);
+function handleCloseJournalView() {
+  setJournalViewOwner(null);
   setJournalViewEntryId(null);
   setJournalViewPageIndex(0);
 }
@@ -490,6 +500,13 @@ const [
   journalPageFeature,
   setJournalPageFeature,
 ] = useState<Feature | null>(null);
+
+const [
+  journalPageTargetKind,
+  setJournalPageTargetKind,
+] = useState<
+  'feature' | 'area'
+>('feature');
 
 const [
   journalSections,
@@ -3355,7 +3372,8 @@ function handleSubtitleChange(featureId: string, subtitle: string) {
 }
 
 async function handleCreateJournalPageRequest(
-  feature: Feature
+  feature: Feature,
+  targetKind: 'feature' | 'area'
 ) {
   setJournalDialogLoading(true);
   setJournalDialogError(null);
@@ -3371,6 +3389,7 @@ async function handleCreateJournalPageRequest(
     }
 
     setJournalPageFeature(feature);
+    setJournalPageTargetKind(targetKind);
     setJournalSections(response.sections);
     setJournalSectionId(
       response.sections[0].sectionId
@@ -3410,13 +3429,31 @@ async function handleCreateJournalPage() {
       brief: journalBrief.trim(),
     });
 
-    updateFeatureEverywhere(
-      journalPageFeature.id,
-      (feature) => ({
-        ...feature,
-        journalPageId: page.pageId,
-      })
-    );
+    if (journalPageTargetKind === 'area') {
+  setActiveSections((current) =>
+    current.map((section) =>
+      section.id ===
+      journalPageFeature.id
+        ? {
+            ...section,
+            journalPageId:
+              page.pageId,
+            updatedAt:
+              new Date(),
+          }
+        : section
+    )
+  );
+} else {
+  updateFeatureEverywhere(
+    journalPageFeature.id,
+    (feature) => ({
+      ...feature,
+      journalPageId:
+        page.pageId,
+    })
+  );
+}
 
     markProjectDirty();
 
@@ -5741,12 +5778,15 @@ mapMediaSlotsEnabled={
   },
 },
           {
-            id: 'journal-view-page',
-            label: 'View',
-            onInvoke: () => {
-              handleOpenJournalView(feature);
-            },
-          },
+  id: 'journal-view-page',
+  label: 'View',
+  onInvoke: () => {
+    handleOpenJournalView(
+      feature,
+      targetKind
+    );
+  },
+},
         ],
       },
     ];
@@ -5758,24 +5798,25 @@ mapMediaSlotsEnabled={
     label: 'Journal',
     children: [
       {
-        id: 'journal-create-page',
-        label: 'Create Page...',
-        onInvoke: () => {
-          void handleConnectJournalPageRequest(
-            feature,
-            targetKind
-          );
-        },
-      },
-      {
-        id: 'journal-connect-page',
-        label: 'Connect to Page...',
-        onInvoke: () => {
-          void handleConnectJournalPageRequest(
-            feature
-          );
-        },
-      },
+  id: 'journal-create-page',
+  label: 'Create Page...',
+  onInvoke: () => {
+    void handleCreateJournalPageRequest(
+      feature,
+      targetKind
+    );
+  },
+},
+{
+  id: 'journal-connect-page',
+  label: 'Connect to Page...',
+  onInvoke: () => {
+    void handleConnectJournalPageRequest(
+      feature,
+      targetKind
+    );
+  },
+},
     ],
   },
 ];
@@ -5823,10 +5864,10 @@ mapMediaSlotsEnabled={
   </section>
 
   <JournalViewPanel
-  open={Boolean(
-    journalViewOwnerFeatureId &&
-    journalViewEntryId
-  )}
+  open={
+    Boolean(journalViewOwner) &&
+    Boolean(journalViewEntryId)
+  }
   entryId={journalViewEntryId}
   pageIndex={journalViewPageIndex}
   onClose={handleCloseJournalView}
