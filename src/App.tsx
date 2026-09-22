@@ -20,10 +20,17 @@ import {
 
 import './App.css';
 import type {
+  ProjectCreateRequest,
+  ProjectCreateResponse,
+  ProjectDeleteRequest,
+  ProjectDeleteResponse,
+  ProjectListResponse,
   ProjectLoadAcceptedPayload,
   ProjectLoadFailedPayload,
   ProjectLoadedPayload,
   ProjectLoadRequest,
+  ProjectRenameRequest,
+  ProjectRenameResponse,
 } from '@settingforge/module-sdk';
 
 import GlobalMediaSlotsDialog
@@ -865,7 +872,152 @@ updateJournalAvailability();
   }, []);
 
   useEffect(() => {
-  const unregisterStatus =
+    const unregisterList =
+    moduleEventBus.registerRequestHandler(
+      'project.list',
+      async () => {
+        const projects =
+          await projectRepository.loadProjects();
+
+        const response: ProjectListResponse = {
+          projects: projects.map((project) => ({
+            projectId: project.id,
+            projectName: project.name,
+          })),
+        };
+
+        return response;
+      }
+    );
+
+  const unregisterCreate =
+    moduleEventBus.registerRequestHandler(
+      'project.create',
+      async (request) => {
+        const payload = request.payload as
+          | Partial<ProjectCreateRequest>
+          | undefined;
+
+        const name =
+          payload?.name?.trim();
+
+        if (!name) {
+          throw new Error(
+            'project.create requires a name.'
+          );
+        }
+
+        const project =
+          await createProject(name);
+
+        const response: ProjectCreateResponse = {
+          projectId: project.id,
+          projectName: project.name,
+        };
+
+        return response;
+      }
+    );
+
+  const unregisterRename =
+    moduleEventBus.registerRequestHandler(
+      'project.rename',
+      async (request) => {
+        const payload = request.payload as
+          | Partial<ProjectRenameRequest>
+          | undefined;
+
+        const projectId =
+          payload?.projectId;
+
+        const name =
+          payload?.name?.trim();
+
+        if (!projectId || !name) {
+          throw new Error(
+            'project.rename requires projectId and name.'
+          );
+        }
+
+        const project =
+          await projectRepository.loadProject(
+            projectId
+          );
+
+        if (!project) {
+          throw new Error(
+            `Project "${projectId}" was not found.`
+          );
+        }
+
+        const renamedProject: Project = {
+          ...project,
+          name,
+          updatedAt: new Date(),
+        };
+
+        await projectRepository.saveProject(
+          renamedProject
+        );
+
+        if (
+          activeProject?.id === projectId
+        ) {
+          setActiveProject(
+            renamedProject
+          );
+
+          resetProjectDirty();
+        }
+
+        const response: ProjectRenameResponse = {
+          projectId: renamedProject.id,
+          projectName: renamedProject.name,
+        };
+
+        return response;
+      }
+    );
+
+  const unregisterDelete =
+    moduleEventBus.registerRequestHandler(
+      'project.delete',
+      async (request) => {
+        const payload = request.payload as
+          | Partial<ProjectDeleteRequest>
+          | undefined;
+
+        const projectId =
+          payload?.projectId;
+
+        if (!projectId) {
+          throw new Error(
+            'project.delete requires projectId.'
+          );
+        }
+
+        if (
+          activeProject?.id === projectId
+        ) {
+          throw new Error(
+            'The active Project must be closed before it can be deleted.'
+          );
+        }
+
+        const deleted =
+          await projectRepository.deleteProject(
+            projectId
+          );
+
+        const response: ProjectDeleteResponse = {
+          projectId,
+          deleted,
+        };
+
+        return response;
+      }
+    );
+    const unregisterStatus =
     moduleEventBus.registerRequestHandler(
       'project.status',
       () => ({
@@ -975,11 +1127,15 @@ updateJournalAvailability();
     );
 
   return () => {
-    unregisterStatus();
-    unregisterLoad();
-    unregisterSave();
-    unregisterClose();
-  };
+  unregisterList();
+  unregisterCreate();
+  unregisterRename();
+  unregisterDelete();
+  unregisterStatus();
+  unregisterLoad();
+  unregisterSave();
+  unregisterClose();
+};
 }, [activeProject, projectDirty]);  
 
 function markProjectDirty() {
@@ -1010,76 +1166,92 @@ function handleNewProject() {
   );
 }
 
-  async function handleCreateProject() {
-    const trimmedName =
-      newProjectName.trim();
+  async function createProject(
+  name: string
+): Promise<Project> {
+  const trimmedName = name.trim();
 
-    if (!trimmedName) {
-      return;
-    }
-
-    const now =
-      new Date();
-
-    const rootMap = createDefaultMap({
-      id: crypto.randomUUID(),
-      now,
-    });
-    const project: Project = {
-      id:
-        crypto.randomUUID(),
-
-      name:
-        trimmedName,
-
-      mapIds: [rootMap.id],
-
-      rootMapId: rootMap.id,
-
-      activeMapId: rootMap.id,
-
-      featureTypes: [],
-
-      pieces: [],
-
-      globalMediaSlots: [],
-
-      createdAt:
-        now,
-
-      updatedAt:
-        now,
-    };
-
-    try {
-      await mapRepository.saveMap(rootMap);
-      await projectRepository
-        .saveProject(
-          project
-        );
-
-      setActiveProject(project);
-      setActiveMap(rootMap);
-      setActiveFeatures([]);
-      setPendingMaps([]);
-      setPendingFeatures([]);
-      setDeletedSectionIds(new Set());
-      setDeletedSectionNodeIds(new Set());
-      setDeletedSectionEdgeIds(new Set());
-      setSectionMode(null);
-      setZoomControl(null);
-      await loadMapImage(rootMap);
-      resetProjectDirty();
-
-      setNewProjectName('');
-      setShowNewProjectDialog(false);
-    } catch (error) {
-      console.error(
-        'Unable to create project:',
-        error
-      );
-    }
+  if (!trimmedName) {
+    throw new Error(
+      'Project name is required.'
+    );
   }
+
+  const now = new Date();
+
+  const rootMap = createDefaultMap({
+    id: crypto.randomUUID(),
+    now,
+  });
+
+  const project: Project = {
+    id: crypto.randomUUID(),
+
+    name: trimmedName,
+
+    mapIds: [rootMap.id],
+
+    rootMapId: rootMap.id,
+
+    activeMapId: rootMap.id,
+
+    featureTypes: [],
+
+    pieces: [],
+
+    globalMediaSlots: [],
+
+    createdAt: now,
+
+    updatedAt: now,
+  };
+
+  await mapRepository.saveMap(rootMap);
+
+  await projectRepository.saveProject(
+    project
+  );
+
+  setActiveProject(project);
+  setActiveMap(rootMap);
+  setActiveFeatures([]);
+  setPendingMaps([]);
+  setPendingFeatures([]);
+  setDeletedSectionIds(new Set());
+  setDeletedSectionNodeIds(new Set());
+  setDeletedSectionEdgeIds(new Set());
+  setSectionMode(null);
+  setZoomControl(null);
+
+  await loadMapImage(rootMap);
+
+  resetProjectDirty();
+
+  return project;
+}
+
+async function handleCreateProject() {
+  const trimmedName =
+    newProjectName.trim();
+
+  if (!trimmedName) {
+    return;
+  }
+
+  try {
+    await createProject(
+      trimmedName
+    );
+
+    setNewProjectName('');
+    setShowNewProjectDialog(false);
+  } catch (error) {
+    console.error(
+      'Unable to create project:',
+      error
+    );
+  }
+}
 
   async function openLoadProjectDialog() {
   mapViewportRef.current?.cancelInteractions();
