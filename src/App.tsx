@@ -402,16 +402,16 @@ function handleCloseJournalView()
 }
 
 async function handleConnectJournalPageRequest(
-  feature: Feature
+  feature: Feature,
+  targetKind: 'feature' | 'area'
 ) {
-  if (
-    feature.type !== 'location' ||
-    feature.journalPageId
-  ) {
+  if (feature.journalPageId)
+  {
     return;
   }
 
   setJournalConnectFeature(feature);
+  setJournalConnectTargetKind(targetKind);
   setJournalPageCandidates([]);
   setJournalPageSearch(feature.name);
   setSelectedJournalPageId(null);
@@ -453,14 +453,34 @@ function handleConnectJournalPage() {
     return;
   }
 
-  updateFeatureEverywhere(
-    journalConnectFeature.id,
-    (feature) => ({
-      ...feature,
-      journalPageId:
-        selectedJournalPage.pageId,
-    })
-  );
+  if (
+    journalConnectTargetKind ===
+    'area'
+  ) {
+    setActiveSections((current) =>
+      current.map((section) =>
+        section.id ===
+        journalConnectFeature.id
+          ? {
+              ...section,
+              journalPageId:
+                selectedJournalPage.pageId,
+              updatedAt:
+                new Date(),
+            }
+          : section
+      )
+    );
+  } else {
+    updateFeatureEverywhere(
+      journalConnectFeature.id,
+      (feature) => ({
+        ...feature,
+        journalPageId:
+          selectedJournalPage.pageId,
+      })
+    );
+  }
 
   markProjectDirty();
   closeConnectJournalPageDialog();
@@ -500,6 +520,13 @@ const [
   journalConnectFeature,
   setJournalConnectFeature,
 ] = useState<Feature | null>(null);
+
+const [
+  journalConnectTargetKind,
+  setJournalConnectTargetKind,
+] = useState<
+  'feature' | 'area'
+>('feature');
 
 const [
   journalPageCandidates,
@@ -5680,11 +5707,11 @@ mapMediaSlotsEnabled={
         focusPiecePosition={focusPiecePosition}
         focusPieceRequestId={focusPieceRequestId}
         onFocusPieceComplete={() => setFocusPiecePosition(null)}
-       secondaryActions={(feature) => {
-  if (
-    !journalAvailable ||
-    feature.type !== 'location'
-  ) {
+        secondaryActions={(
+          feature,
+          targetKind
+        ) => {
+  if (!journalAvailable) {
     return [];
   }
 
@@ -5734,8 +5761,9 @@ mapMediaSlotsEnabled={
         id: 'journal-create-page',
         label: 'Create Page...',
         onInvoke: () => {
-          void handleCreateJournalPageRequest(
-            feature
+          void handleConnectJournalPageRequest(
+            feature,
+            targetKind
           );
         },
       },

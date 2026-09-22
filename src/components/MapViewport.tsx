@@ -180,7 +180,8 @@ focusPiecePosition?: Point | null;
 focusPieceRequestId?: number;
 onFocusPieceComplete?: () => void;
 secondaryActions?: (
-  feature: Feature
+  feature: Feature,
+  targetKind: 'feature' | 'area'
 ) => FeaturePopupAction[];
 
 onDeleteFeature?: (
@@ -501,18 +502,36 @@ function MapViewport({
   const linkedLocationMap = selectedArea?.targetMapId
     ? locationMaps.findLast((map) => map.id === selectedArea.targetMapId) : undefined;
   const areaPosition = selectedArea ? getAreaControlPosition(selectedArea) : null;
-  const selectedFeature: Feature | undefined = selectedArea && areaPosition ? {
-    id: selectedArea.id, name: selectedArea.name, subtitle: selectedArea.subtitle,
-    description: selectedArea.description, position: areaPosition,
-    type: selectedArea.targetMapId ? 'location' : 'feature',
-    targetMapId: selectedArea.targetMapId, featureTypeId: selectedArea.featureTypeId,
-    noteLinks: [],
-  } : features.find((feature) => feature.id === state.selectedFeatureId && isFeatureVisible(feature));
+const selectedFeature: Feature | undefined =
+  selectedArea && areaPosition
+    ? {
+        id: selectedArea.id,
+        name: selectedArea.name,
+        subtitle: selectedArea.subtitle,
+        description: selectedArea.description,
+        position: areaPosition,
+        type: selectedArea.targetMapId
+          ? 'location'
+          : 'feature',
+        targetMapId: selectedArea.targetMapId,
+        featureTypeId: selectedArea.featureTypeId,
+        journalPageId: selectedArea.journalPageId,
+        noteLinks: [],
+      }
+    : features.find(
+        (feature) =>
+          feature.id ===
+            state.selectedFeatureId &&
+          isFeatureVisible(feature)
+      );
 
 const selectedFeatureSecondaryActions =
-  selectedFeature && !selectedArea
+  selectedFeature
     ? secondaryActions?.(
-        selectedFeature
+        selectedFeature,
+        selectedArea
+          ? 'area'
+          : 'feature'
       ) ?? []
     : [];
 
@@ -3003,7 +3022,7 @@ function saveSectionProperties() {
             {selectedArea && <>
               <button type="button" onClick={() => {
                 setMediaAreaId(selectedArea.id); setExpandedActionsFeatureId(null);
-              }}>Media Assignment…</button>
+              }}>Media…</button>
               {!selectedArea.targetMapId && <button type="button"
                 onClick={() => { onAddAreaLocation?.(selectedArea); setExpandedActionsFeatureId(null); }}>Add Location</button>}
               {selectedArea.targetMapId && <button type="button" onClick={() => {

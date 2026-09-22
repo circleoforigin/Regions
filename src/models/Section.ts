@@ -32,6 +32,7 @@ export interface Section {
   controlPosition?: SectionPoint;
   targetMapId?: string;
   featureTypeId?: string;
+  journalPageId?: string;
   mediaSlotOverrides?: MediaSlotOverride[];
   locked?: boolean;
   edgeIds: string[];
