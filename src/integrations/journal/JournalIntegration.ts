@@ -16,6 +16,18 @@ export interface JournalSectionsResponse {
   sections: JournalSectionSummary[];
 }
 
+export interface JournalPageCandidate {
+  pageId: string;
+  title: string;
+  subtitle: string;
+  brief: string;
+}
+
+export interface JournalPagesResponse {
+  projectId: string;
+  pages: JournalPageCandidate[];
+}
+
 export interface JournalCreatePageRequest {
   sectionId: string;
   title: string;
@@ -37,6 +49,15 @@ export async function getJournalSections():
   return moduleEventBus.command<JournalSectionsResponse>(
     'journal',
     'Journal.GetSections',
+    {}
+  );
+}
+
+export async function getJournalPages():
+  Promise<JournalPagesResponse> {
+  return moduleEventBus.command<JournalPagesResponse>(
+    'journal',
+    'Journal.GetPages',
     {}
   );
 }

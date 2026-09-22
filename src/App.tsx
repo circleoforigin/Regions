@@ -11,8 +11,10 @@ import {
 } from 'react';
 import {
   createJournalPage,
+  getJournalPages,
   getJournalSections,
   goToJournalPage,
+  type JournalPageCandidate,
   type JournalSectionSummary,
 } from './integrations/journal/JournalIntegration';
 
@@ -399,7 +401,72 @@ function handleCloseJournalView()
   setJournalViewPageIndex(0);
 }
 
-    const [
+async function handleConnectJournalPageRequest(
+  feature: Feature
+) {
+  if (
+    feature.type !== 'location' ||
+    feature.journalPageId
+  ) {
+    return;
+  }
+
+  setJournalConnectFeature(feature);
+  setJournalPageCandidates([]);
+  setJournalPageSearch(feature.name);
+  setSelectedJournalPageId(null);
+  setJournalConnectError(null);
+  setJournalConnectLoading(true);
+
+  try {
+    const response =
+      await getJournalPages();
+
+    setJournalPageCandidates(
+      response.pages
+    );
+  } catch (error) {
+    setJournalConnectError(
+      error instanceof Error
+        ? error.message
+        : 'Unable to load Journal Pages.'
+    );
+  } finally {
+    setJournalConnectLoading(false);
+  }
+}
+
+function closeConnectJournalPageDialog() {
+  setJournalConnectFeature(null);
+  setJournalPageCandidates([]);
+  setJournalPageSearch('');
+  setSelectedJournalPageId(null);
+  setJournalConnectError(null);
+  setJournalConnectLoading(false);
+}
+
+function handleConnectJournalPage() {
+  if (
+    !journalConnectFeature ||
+    !selectedJournalPage
+  ) {
+    return;
+  }
+
+  updateFeatureEverywhere(
+    journalConnectFeature.id,
+    (feature) => ({
+      ...feature,
+      journalPageId:
+        selectedJournalPage.pageId,
+    })
+  );
+
+  markProjectDirty();
+  closeConnectJournalPageDialog();
+}
+
+const [
   journalPageFeature,
   setJournalPageFeature,
 ] = useState<Feature | null>(null);
@@ -427,6 +494,36 @@ const [
 const [
   journalDialogError,
   setJournalDialogError,
+] = useState<string | null>(null);
+
+const [
+  journalConnectFeature,
+  setJournalConnectFeature,
+] = useState<Feature | null>(null);
+
+const [
+  journalPageCandidates,
+  setJournalPageCandidates,
+] = useState<JournalPageCandidate[]>([]);
+
+const [
+  journalPageSearch,
+  setJournalPageSearch,
+] = useState('');
+
+const [
+  selectedJournalPageId,
+  setSelectedJournalPageId,
+] = useState<string | null>(null);
+
+const [
+  journalConnectLoading,
+  setJournalConnectLoading,
+] = useState(false);
+
+const [
+  journalConnectError,
+  setJournalConnectError,
 ] = useState<string | null>(null);
 
   const [viewportCenter, setViewportCenter] =
@@ -4085,6 +4182,35 @@ const pendingArrivalPiece = pendingArrival?.pieceId
     })
   : undefined;
 
+  const filteredJournalPages =
+  journalPageCandidates
+    .filter((page) => {
+      const search =
+        journalPageSearch
+          .trim()
+          .toLocaleLowerCase();
+
+      if (!search) {
+        return true;
+      }
+
+      return page.title
+        .toLocaleLowerCase()
+        .includes(search);
+    })
+    .sort((left, right) =>
+      left.title.localeCompare(
+        right.title
+      )
+    );
+
+const selectedJournalPage =
+  journalPageCandidates.find(
+    (page) =>
+      page.pageId ===
+      selectedJournalPageId
+  ) ?? null;
+
   return (
     <div className="regions-app">
       <MenuBar
@@ -5167,6 +5293,119 @@ mapMediaSlotsEnabled={
   </div>
 )}
 
+{journalConnectFeature && (
+  <div className="dialog-backdrop">
+    <div className="dialog journal-connect-dialog">
+      <h2>Connect to Journal Page</h2>
+
+      <label>
+        Search
+        <input
+          type="search"
+          value={journalPageSearch}
+          disabled={journalConnectLoading}
+          onChange={(event) => {
+            setJournalPageSearch(
+              event.target.value
+            );
+
+            setSelectedJournalPageId(
+              null
+            );
+          }}
+          autoFocus
+        />
+      </label>
+
+      {journalConnectLoading ? (
+        <p>Loading Journal Pages...</p>
+      ) : journalConnectError ? (
+        <p>{journalConnectError}</p>
+      ) : (
+        <div className="journal-connect-layout">
+          <div className="journal-connect-list">
+            {filteredJournalPages.length === 0 ? (
+              <p className="journal-connect-empty">
+                No matching Pages.
+              </p>
+            ) : (
+              filteredJournalPages.map(
+                (page) => (
+                  <button
+                    key={page.pageId}
+                    type="button"
+                    className={
+                      page.pageId ===
+                      selectedJournalPageId
+                        ? 'selected'
+                        : ''
+                    }
+                    onClick={() => {
+                      setSelectedJournalPageId(
+                        page.pageId
+                      );
+                    }}
+                  >
+                    {page.title}
+                  </button>
+                )
+              )
+            )}
+          </div>
+
+          <div className="journal-connect-details">
+            {selectedJournalPage ? (
+              <>
+                <strong>
+                  {selectedJournalPage.title}
+                </strong>
+
+                <span className="journal-connect-subtitle">
+                  {selectedJournalPage.subtitle ||
+                    'No subtitle'}
+                </span>
+
+                <p>
+                  {selectedJournalPage.brief ||
+                    'No brief available.'}
+                </p>
+              </>
+            ) : (
+              <span className="journal-connect-placeholder">
+                Select a Page to view its details.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          onClick={
+            closeConnectJournalPageDialog
+          }
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          disabled={
+            journalConnectLoading ||
+            !selectedJournalPage
+          }
+          onClick={
+            handleConnectJournalPage
+          }
+        >
+          Connect
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 {journalPageFeature && (
   <div className="dialog-backdrop">
     <div className="dialog journal-page-dialog">
@@ -5486,23 +5725,32 @@ mapMediaSlotsEnabled={
     ];
   }
 
-  return [
-    {
-      id: 'journal',
-      label: 'Journal',
-      children: [
-        {
-          id: 'journal-create-page',
-          label: 'Create Page...',
-          onInvoke: () => {
-            void handleCreateJournalPageRequest(
-              feature
-            );
-          },
+ return [
+  {
+    id: 'journal',
+    label: 'Journal',
+    children: [
+      {
+        id: 'journal-create-page',
+        label: 'Create Page...',
+        onInvoke: () => {
+          void handleCreateJournalPageRequest(
+            feature
+          );
         },
-      ],
-    },
-  ];
+      },
+      {
+        id: 'journal-connect-page',
+        label: 'Connect to Page...',
+        onInvoke: () => {
+          void handleConnectJournalPageRequest(
+            feature
+          );
+        },
+      },
+    ],
+  },
+];
 }}
         onDeleteFeature={handleDeleteFeature}
         onNewFeatureRequest={handleNewFeatureRequest}

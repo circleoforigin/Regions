@@ -2606,3 +2606,84 @@ box-shadow:
   background: rgba(0, 0, 0, 0.06);
   color: #26231e;
 }
+
+.journal-connect-dialog {
+  width: 620px;
+  max-width: calc(100vw - 48px);
+}
+
+.journal-connect-dialog > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.journal-connect-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px;
+  min-height: 240px;
+  margin-top: 12px;
+}
+
+.journal-connect-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #555b63;
+  padding: 6px;
+}
+
+.journal-connect-list button {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.journal-connect-list button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.journal-connect-list button.selected {
+  border-color: #6c737d;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.journal-connect-details {
+  min-width: 0;
+  border: 1px solid #555b63;
+  padding: 14px;
+}
+
+.journal-connect-details strong,
+.journal-connect-details span,
+.journal-connect-details p {
+  display: block;
+}
+
+.journal-connect-details strong {
+  font-size: 18px;
+}
+
+.journal-connect-subtitle {
+  margin-top: 4px;
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.journal-connect-details p {
+  margin-top: 16px;
+  line-height: 1.5;
+}
+
+.journal-connect-placeholder,
+.journal-connect-empty {
+  opacity: 0.65;
+}
