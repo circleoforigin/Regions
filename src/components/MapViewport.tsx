@@ -545,6 +545,8 @@ const selectedFeatureSecondaryActions =
     useState(false);
   const [nameDraft, setNameDraft] =
     useState('');
+  const [descriptionExpandedFeatureId, setDescriptionExpandedFeatureId] =
+    useState<string | null>(null);
 
   useEffect(() => {
     popupDragRef.current = null;
@@ -2143,12 +2145,22 @@ function handleContextMenu(
         ),
       }
     : null;
-  const connectorVisible = selectedAnchor && popupPosition
-    ? Math.hypot(
-        popupPosition.x - selectedAnchor.x,
-        popupPosition.y - selectedAnchor.y
-      ) >= 24
-    : false;
+  const popupTitleAnchor = popupPosition
+    ? {
+        x: popupPosition.x,
+        y:
+          popupPosition.y -
+          popupSize.height / 2 +
+          20,
+      }
+    : null;
+  const connectorVisible =
+    selectedAnchor && popupTitleAnchor
+      ? Math.hypot(
+          popupTitleAnchor.x - selectedAnchor.x,
+          popupTitleAnchor.y - selectedAnchor.y
+        ) >= 24
+      : false;
   const subtitle = selectedFeature?.subtitle?.trim();
   const actionsExpanded = selectedFeature
     ? expandedActionsFeatureId === selectedFeature.id
@@ -2754,22 +2766,22 @@ function saveSectionProperties() {
   );
 })}
 
-{connectorVisible && selectedAnchor && popupPosition && (
+{connectorVisible && selectedAnchor && popupTitleAnchor && (
   <svg className="feature-popup-connector" aria-hidden="true">
     <line
   className="connector-outline"
   x1={selectedAnchor.x}
   y1={selectedAnchor.y}
-  x2={popupPosition.x}
-  y2={popupPosition.y}
+  x2={popupTitleAnchor.x}
+  y2={popupTitleAnchor.y}
 />
 
 <line
   className="connector-line"
   x1={selectedAnchor.x}
   y1={selectedAnchor.y}
-  x2={popupPosition.x}
-  y2={popupPosition.y}
+  x2={popupTitleAnchor.x}
+  y2={popupTitleAnchor.y}
 />
   </svg>
 )}
@@ -3079,18 +3091,51 @@ function saveSectionProperties() {
       </div>
     </div>
 
-    <div className="feature-popup-content">
-    <div className="feature-popup-separator" />
+    <div className="feature-popup-description">
+  <button
+    type="button"
+    className="feature-popup-description-tab"
+    aria-expanded={
+      descriptionExpandedFeatureId === selectedFeature.id
+    }
+    onClick={() => {
+      setDescriptionExpandedFeatureId((current) =>
+        current === selectedFeature.id
+          ? null
+          : selectedFeature.id
+      );
+    }}
+  >
+    Description
+    <span
+      className="feature-popup-description-arrow"
+      aria-hidden="true"
+    >
+      {descriptionExpandedFeatureId === selectedFeature.id
+        ? '▴'
+        : '▾'}
+    </span>
+  </button>
 
-    <RichTextEditor
-      key={selectedFeature.id}
-      value={selectedFeature.description}
-      onChange={(description) => {
-        if (selectedArea) updateAreaIdentity(selectedArea.id, { description });
-        else onDescriptionChange?.(selectedFeature.id, description);
-      }}
-    />
+  {descriptionExpandedFeatureId === selectedFeature.id && (
+    <div className="feature-popup-description-extension">
+      <RichTextEditor
+        key={selectedFeature.id}
+        value={selectedFeature.description}
+        onChange={(description) => {
+          if (selectedArea) {
+            updateAreaIdentity(selectedArea.id, { description });
+          } else {
+            onDescriptionChange?.(
+              selectedFeature.id,
+              description
+            );
+          }
+        }}
+      />
     </div>
+  )}
+</div>
   </div>
 )}
 
