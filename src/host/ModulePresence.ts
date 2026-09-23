@@ -101,27 +101,9 @@ export class ModulePresenceStore {
   }
 
   announceReady(): void {
-    console.warn(
-    `[RegionsBoot] announceReady ${performance.now()}`
-  );
     moduleEventBus.emit(
       'module.ready',
-      {
-        capabilities: {
-          events: [
-            'regions.map.opened',
-            'regions.location.selected',
-            'regions.location.entered',
-          ],
-
-          actions: [
-            'project.status',
-            'project.load',
-            'project.save',
-            'project.close',
-          ],
-        },
-      }
+      {}
     );
   }
 

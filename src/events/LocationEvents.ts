@@ -1,4 +1,7 @@
-import type { ActionDefinition, ActionFieldDefinition } from '@settingforge/module-sdk';
+import type {
+  EventDefinition,
+  EventFieldDefinition,
+} from '@settingforge/module-sdk';
 import type { Piece } from '../models/Piece';
 import { isPieceTracked } from '../models/Piece';
 
@@ -27,7 +30,7 @@ export type LocationEvent =
   | { type: 'Regions.LocationEntered'; payload: LocationEnteredPayload }
   | { type: 'Regions.LocationContextChanged'; payload: LocationContextChangedPayload };
 
-const commonFields: ActionFieldDefinition[] = [
+const commonFields: EventFieldDefinition[] = [
   { key: 'projectId', label: 'Project ID', type: 'string' },
   { key: 'pieceId', label: 'Piece ID', type: 'string' },
   { key: 'tracked', label: 'Tracked', type: 'boolean' },
@@ -37,7 +40,7 @@ const commonFields: ActionFieldDefinition[] = [
   { key: 'locationName', label: 'Location Name', type: 'string' },
   { key: 'locationType', label: 'Location Type', type: 'string' },
 ];
-export const locationActionDefinitions: ActionDefinition[] = [
+export const locationEventDefinitions: EventDefinition[] = [
   {
     id: 'Regions.LocationEntered', label: 'Location Entered',
     description: 'A Piece entered a different Map or Area, regardless of tracking or focus.',
@@ -54,6 +57,36 @@ export const locationActionDefinitions: ActionDefinition[] = [
     fields: [...commonFields, { key: 'reason', label: 'Reason', type: 'string' }],
   },
 ];
+
+export const emitImageEventDefinition:
+  EventDefinition = {
+    id: 'Regions.EmitImage',
+    label: 'Emit Image',
+    description:
+      'Raised for each resolved image media slot.',
+    fields: [
+      {
+        key: 'slot',
+        label: 'Slot',
+        type: 'number',
+      },
+      {
+        key: 'filePath',
+        label: 'File Path',
+        type: 'string',
+      },
+      {
+        key: 'fileName',
+        label: 'File Name',
+        type: 'string',
+      },
+      {
+        key: 'source',
+        label: 'Source',
+        type: 'string',
+      },
+    ],
+  };
 
 export function createLocationEvents(
   projectId: string, piece: Piece, focusedPieceId: string | undefined,

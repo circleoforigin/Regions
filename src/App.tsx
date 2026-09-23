@@ -1,7 +1,12 @@
 import { copyAreaResourcesToLocation, copyLocationResourcesToArea } from './sections/AreaResources';
-import { createLocationEvents, locationActionDefinitions, type LocationContext } from './events/LocationEvents';
+import { createLocationEvents, type LocationContext } from './events/LocationEvents';
 import type { BoundaryAlignment } from './models/Map';
 import { findBoundaryCrossing, deriveAreaBoundary, isValidAlignment, transformBoundaryPoint } from './sections/BoundaryTransform';
+import {
+  regionsCommandDefinitions,
+  regionsEventDefinitions,
+  regionsQueryDefinitions,
+} from './capabilities/RegionsCapabilities';
 import {
   useEffect,
   useLayoutEffect,
@@ -840,21 +845,25 @@ const unsubscribePresence =
 
 updateJournalAvailability();
 
-    if (moduleEventBus.hosted) {
-      void moduleEventBus.registerActions([
-        ...locationActionDefinitions,
-        {
-          id: 'Regions.EmitImage',
-          label: 'Emit Image',
-          description: 'Raised for each resolved image media slot.',
-          fields: [
-            { key: 'slot', label: 'Slot', type: 'number' },
-            { key: 'filePath', label: 'File Path', type: 'string' },
-            { key: 'fileName', label: 'File Name', type: 'string' },
-            { key: 'source', label: 'Source', type: 'string' },
-          ],
-        },
-      ]).catch(() => undefined);
+if (moduleEventBus.hosted) {  
+
+void moduleEventBus
+  .registerCapabilities({
+    events:
+      regionsEventDefinitions,
+
+    commands:
+      regionsCommandDefinitions,
+
+    queries:
+      regionsQueryDefinitions,
+  })
+  .catch((error: unknown) => {
+    console.error(
+      '[Regions] Capability registration failed.',
+      error
+    );
+  });
     }
 
     return () => {
