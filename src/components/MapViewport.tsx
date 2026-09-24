@@ -129,7 +129,14 @@ interface MapViewportProps {
   offsetX: number;
   offsetY: number;
 };
+calibrationActive?: boolean;
 
+onCalibrationPoint?: (
+  point: {
+    x: number;
+    y: number;
+  }
+) => void;
 features: Feature[];
 pieces?: Piece[];
 allPieces?: Piece[];
@@ -268,6 +275,8 @@ function MapViewport({
   onParentMapChange,
   onMakeWorldRoot,
   imageRegistration,
+  calibrationActive = false,
+  onCalibrationPoint,
   features,
   pieces = [],
   allPieces = pieces,
@@ -1810,6 +1819,24 @@ function handleContextMenu(
     event:
       React.PointerEvent<HTMLDivElement>
   ) {
+      if (
+    calibrationActive &&
+    event.button === 0
+  ) {
+    const point =
+      screenToMap(
+        event.clientX,
+        event.clientY
+      );
+
+    if (point) {
+      onCalibrationPoint?.(
+        point
+      );
+    }
+
+    return;
+  }
     trackEdgePointer(event.clientX, event.clientY);
     if (event.button === 0) {
       dispatch({ type: 'contextMenu.close' });

@@ -45,6 +45,12 @@ import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
+import MapScaleCalibrationDialog
+  from './maps/MapScaleCalibrationDialog';
+
+import type {
+  MapScalePoint,
+} from './maps/MapScaleCalibration';
 import JournalViewPanel
   from './integrations/journal/JournalViewPanel';
 import type {
@@ -195,6 +201,25 @@ function App() {
     useRef<HTMLInputElement | null>(
       null
     );
+
+    const [
+  showScaleCalibrationDialog,
+  setShowScaleCalibrationDialog,
+] = useState(false);
+
+const [
+  scaleCalibrationFirstPoint,
+  setScaleCalibrationFirstPoint,
+] = useState<MapScalePoint | null>(
+  null
+);
+
+const [
+  scaleCalibrationSecondPoint,
+  setScaleCalibrationSecondPoint,
+] = useState<MapScalePoint | null>(
+  null
+);
 
     const [
   zoomControl,
@@ -881,6 +906,165 @@ void moduleEventBus
   }, []);
 
   useEffect(() => {
+    const unregisterGetPiecePosition =
+  moduleEventBus.registerRequestHandler(
+    'Regions.GetPiecePosition',
+    (request) => {
+      const payload =
+        request.payload as
+          | {
+              pieceId?: string;
+            }
+          | undefined;
+
+      if (!payload?.pieceId) {
+        throw new Error(
+          'Regions.GetPiecePosition requires pieceId.'
+        );
+      }
+
+      if (!activeProject) {
+        throw new Error(
+          'No Regions Project is active.'
+        );
+      }
+
+      const piece =
+        activeProject.pieces.find(
+          (candidate) =>
+            candidate.id ===
+            payload.pieceId
+        );
+
+      if (!piece) {
+        throw new Error(
+          `Piece "${payload.pieceId}" was not found.`
+        );
+      }
+
+      const spatialPiece =
+        resolveSpatialPiece(
+          piece.id,
+          activeProject.pieces
+        ) ?? piece;
+
+      return {
+        pieceId: spatialPiece.id,
+        mapId: spatialPiece.mapId,
+        position: {
+          ...spatialPiece.position,
+        },
+      };
+    }
+  );
+
+const unregisterGetFeaturePosition =
+  moduleEventBus.registerRequestHandler(
+    'Regions.GetFeaturePosition',
+    async (request) => {
+      const payload =
+        request.payload as
+          | {
+              featureId?: string;
+            }
+          | undefined;
+
+      if (!payload?.featureId) {
+        throw new Error(
+          'Regions.GetFeaturePosition requires featureId.'
+        );
+      }
+
+      if (!activeProject) {
+        throw new Error(
+          'No Regions Project is active.'
+        );
+      }
+
+      const maps =
+        await mapRepository.loadMaps();
+
+      for (const map of maps) {
+        if (
+          !map.featureIds.includes(
+            payload.featureId
+          )
+        ) {
+          continue;
+        }
+
+        const feature =
+          await featureRepository.loadFeature(
+            payload.featureId
+          );
+
+        if (!feature) {
+          break;
+        }
+
+        return {
+          featureId: feature.id,
+          mapId: map.id,
+          position: {
+            ...feature.position,
+          },
+        };
+      }
+
+      throw new Error(
+        `Feature "${payload.featureId}" was not found.`
+      );
+    }
+  );
+
+const unregisterGetMapScale =
+  moduleEventBus.registerRequestHandler(
+    'Regions.GetMapScale',
+    async (request) => {
+      const payload =
+        request.payload as
+          | {
+              mapId?: string;
+            }
+          | undefined;
+
+      if (!payload?.mapId) {
+        throw new Error(
+          'Regions.GetMapScale requires mapId.'
+        );
+      }
+
+      const map =
+        activeMap?.id === payload.mapId
+          ? activeMap
+          : await mapRepository.loadMap(
+              payload.mapId
+            );
+
+      if (!map) {
+        throw new Error(
+          `Map "${payload.mapId}" was not found.`
+        );
+      }
+
+      const distanceScale =
+        map.imageRegistration
+          ?.distanceScale;
+
+      return {
+        mapId: map.id,
+        calibrated:
+          distanceScale !== undefined,
+
+        distanceScale:
+          distanceScale
+            ? {
+                ...distanceScale,
+              }
+            : undefined,
+      };
+    }
+  );
     const unregisterList =
     moduleEventBus.registerRequestHandler(
       'project.list',
@@ -1144,6 +1328,9 @@ void moduleEventBus
   unregisterLoad();
   unregisterSave();
   unregisterClose();
+  unregisterGetMapScale();
+  unregisterGetFeaturePosition();
+  unregisterGetPiecePosition();
 };
 }, [activeProject, projectDirty]);  
 
@@ -4255,6 +4442,78 @@ function handleConfirmExistingNavigationFeature() {
   handleCreateExistingLocation(destinationMap);
 }
 
+function handleOpenScaleCalibration() {
+  if (!activeMap) {
+    return;
+  }
+
+  mapViewportRef.current
+    ?.cancelInteractions();
+
+  setScaleCalibrationFirstPoint(
+    null
+  );
+
+  setScaleCalibrationSecondPoint(
+    null
+  );
+
+  setShowScaleCalibrationDialog(
+    true
+  );
+}
+
+function handleCloseScaleCalibration() {
+  setShowScaleCalibrationDialog(
+    false
+  );
+
+  setScaleCalibrationFirstPoint(
+    null
+  );
+
+  setScaleCalibrationSecondPoint(
+    null
+  );
+}
+
+function handleScaleCalibrationPoint(
+  point: MapScalePoint
+) {
+  if (!scaleCalibrationFirstPoint) {
+    setScaleCalibrationFirstPoint(
+      point
+    );
+
+    return;
+  }
+
+  setScaleCalibrationSecondPoint(
+    point
+  );
+}
+
+function handleSaveScaleCalibration(
+  updatedMap: RegionMap
+) {
+  setActiveMap(
+    updatedMap
+  );
+
+  setPendingMaps((current) => [
+    ...current.filter(
+      (map) =>
+        map.id !== updatedMap.id
+    ),
+
+    updatedMap,
+  ]);
+
+  markProjectDirty();
+
+  handleCloseScaleCalibration();
+}
+
 async function handleAssignMapFile(
   file: File
 ) {
@@ -4480,7 +4739,12 @@ const selectedJournalPage =
   onAddPiece={handleAddPiece}
   onGoToPiece={() => openPieceBrowser('go')}
   onMigratePiece={() => openPieceBrowser('migrate')}
-  onAssignMapImage={() => assignMapInputRef.current?.click()}
+    onAssignMapImage={() =>
+    assignMapInputRef.current?.click()
+  }
+  onCalibrateScale={
+    handleOpenScaleCalibration
+  }
   onManageMapMediaSlots={() =>
   setShowMapMediaSlotsDialog(
     true
@@ -4538,6 +4802,39 @@ mapMediaSlotsEnabled={
     zoomControl?.fitMap
   }
 />
+
+{showScaleCalibrationDialog &&
+  activeMap && (
+    <MapScaleCalibrationDialog
+      map={activeMap}
+
+      firstPoint={
+        scaleCalibrationFirstPoint
+      }
+
+      secondPoint={
+        scaleCalibrationSecondPoint
+      }
+
+      onResetPoints={() => {
+        setScaleCalibrationFirstPoint(
+          null
+        );
+
+        setScaleCalibrationSecondPoint(
+          null
+        );
+      }}
+
+      onClose={
+        handleCloseScaleCalibration
+      }
+
+      onSave={
+        handleSaveScaleCalibration
+      }
+    />
+  )}
 
 {showSettingsDialog && (
   <div className="dialog-backdrop">
@@ -5887,7 +6184,15 @@ mapMediaSlotsEnabled={
           mapViewportRef.current?.cancelInteractions();
           setMapToMakeRoot(activeMap);
         }}
-        imageRegistration={activeMap.imageRegistration}
+                imageRegistration={
+          activeMap.imageRegistration
+        }
+        calibrationActive={
+          showScaleCalibrationDialog
+        }
+        onCalibrationPoint={
+          handleScaleCalibrationPoint
+        }
         features={activeFeatures}
         pieces={activeProject.pieces.filter((piece) => {
           return piece.mapId === activeMap.id &&
