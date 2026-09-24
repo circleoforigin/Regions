@@ -13,6 +13,10 @@ import {
   locationEventDefinitions,
 } from '../events/LocationEvents';
 
+import {
+  regionsSpatialQueryDefinitions,
+} from './RegionsSpatialCapabilities';
+
 export const regionsEventDefinitions:
   EventDefinition[] = [
     ...locationEventDefinitions,
@@ -26,4 +30,5 @@ export const regionsCommandDefinitions = [
 
 export const regionsQueryDefinitions = [
   ...projectQueryDefinitions,
+  ...regionsSpatialQueryDefinitions,
 ];

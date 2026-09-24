@@ -34,6 +34,7 @@ interface MenuBarProps {
   onGoToPiece: () => void;
   onMigratePiece: () => void;
   onAssignMapImage: () => void;
+  onCalibrateScale: () => void;
   onManageMapMediaSlots: () => void;
     mapMediaSlotsEnabled: boolean;
   onOpenSettings: () => void;
@@ -74,6 +75,7 @@ function MenuBar({
   onGoToPiece,
   onMigratePiece,
   onAssignMapImage,
+  onCalibrateScale,
   onManageMapMediaSlots,
   mapMediaSlotsEnabled,
   onOpenSettings,
@@ -110,14 +112,21 @@ function MenuBar({
 
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
+  const [piecesMenuOpen, setPiecesMenuOpen] = useState(false);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [pieceMenuOpen, setPieceMenuOpen] = useState(false);
   const [sectionsMenuOpen, setSectionsMenuOpen] = useState(false);
   const trackedPieces = pieces.filter(isPieceTracked);
 
   useEffect(() => {
-    if (!fileMenuOpen && !mapMenuOpen && !settingsMenuOpen &&
-        !pieceMenuOpen && !sectionsMenuOpen) return;
+       if (
+      !fileMenuOpen &&
+      !mapMenuOpen &&
+      !piecesMenuOpen &&
+      !settingsMenuOpen &&
+      !pieceMenuOpen &&
+      !sectionsMenuOpen
+    ) return;
 
     function handleOutsidePointerDown(
       event: PointerEvent
@@ -133,10 +142,12 @@ function MenuBar({
       ) {
         setFileMenuOpen(false);
         setMapMenuOpen(false);
+        setPiecesMenuOpen(false);
         setLayersMenuOpen(false);
         setSettingsMenuOpen(false);
         setPieceMenuOpen(false);
         setSectionsMenuOpen(false);
+        setPiecesMenuOpen(false);
       }
     }
 
@@ -151,9 +162,10 @@ function MenuBar({
         handleOutsidePointerDown
       );
     };
-  }, [
+   }, [
     fileMenuOpen,
     mapMenuOpen,
+    piecesMenuOpen,
     pieceMenuOpen,
     sectionsMenuOpen,
     settingsMenuOpen,
@@ -162,6 +174,7 @@ function MenuBar({
   function closeMenus() {
     setFileMenuOpen(false);
     setMapMenuOpen(false);
+    setPiecesMenuOpen(false);
     setLayersMenuOpen(false);
     setSettingsMenuOpen(false);
     setPieceMenuOpen(false);
@@ -210,6 +223,7 @@ function MenuBar({
             setSectionsMenuOpen(false);
             setPieceMenuOpen(false);
             setSectionsMenuOpen(false);
+            setPiecesMenuOpen(false);
           }}
         >
           Project
@@ -288,6 +302,7 @@ function MenuBar({
             setSettingsMenuOpen(false);
             setPieceMenuOpen(false);
             setSectionsMenuOpen(false);
+            setPiecesMenuOpen(false);
           }}
         >
           Map
@@ -324,50 +339,24 @@ function MenuBar({
             <button
               type="button"
               className="dropdown-item"
-              disabled={!addPieceEnabled}
-              onClick={() => {
-                closeMenus();
-                onAddPiece();
-              }}
-            >
-              Add Piece...
-            </button>
-
-            <button
-              type="button"
-              className="dropdown-item"
-              disabled={pieces.length === 0}
-              onClick={() => {
-                closeMenus();
-                onGoToPiece();
-              }}
-            >
-              Go to Piece...
-            </button>
-
-            <button
-              type="button"
-              className="dropdown-item"
-              disabled={!addPieceEnabled || pieces.length === 0}
-              onClick={() => {
-                closeMenus();
-                onMigratePiece();
-              }}
-            >
-              Migrate Piece...
-            </button>
-
-            <div className="dropdown-separator" />
-
-            <button
-              type="button"
-              className="dropdown-item"
               onClick={() => {
                 closeMenus();
                 onAssignMapImage();
               }}
             >
               Assign Map Image...
+            </button>
+
+                        <button
+              type="button"
+              className="dropdown-item"
+              disabled={!mapActive}
+              onClick={() => {
+                closeMenus();
+                onCalibrateScale();
+              }}
+            >
+              Calibrate Scale...
             </button>
 
             <button
@@ -448,6 +437,70 @@ function MenuBar({
         <button
           type="button"
           className="menu-item"
+          disabled={!projectName}
+          onClick={() => {
+            setPiecesMenuOpen(
+              (open) => !open
+            );
+            setFileMenuOpen(false);
+            setMapMenuOpen(false);
+            setLayersMenuOpen(false);
+            setSettingsMenuOpen(false);
+            setPieceMenuOpen(false);
+            setSectionsMenuOpen(false);
+          }}
+        >
+          Pieces
+        </button>
+
+        {piecesMenuOpen && (
+          <div className="dropdown-menu">
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={!addPieceEnabled}
+              onClick={() => {
+                closeMenus();
+                onAddPiece();
+              }}
+            >
+              Add Piece...
+            </button>
+
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={pieces.length === 0}
+              onClick={() => {
+                closeMenus();
+                onGoToPiece();
+              }}
+            >
+              Go to Piece...
+            </button>
+
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={
+                !addPieceEnabled ||
+                pieces.length === 0
+              }
+              onClick={() => {
+                closeMenus();
+                onMigratePiece();
+              }}
+            >
+              Migrate Piece...
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="menu-group">
+        <button
+          type="button"
+          className="menu-item"
           disabled={!mapActive}
           onClick={() => {
             setSectionsMenuOpen((open) => !open);
@@ -456,6 +509,7 @@ function MenuBar({
             setLayersMenuOpen(false);
             setSettingsMenuOpen(false);
             setPieceMenuOpen(false);
+            setPiecesMenuOpen(false);
           }}
         >
           Sections
@@ -507,6 +561,7 @@ function MenuBar({
             setLayersMenuOpen(false);
             setPieceMenuOpen(false);
             setSectionsMenuOpen(false);
+            setPiecesMenuOpen(false);
           }}
         >
           Settings
@@ -571,6 +626,7 @@ function MenuBar({
             setLayersMenuOpen(false);
             setSettingsMenuOpen(false);
             setSectionsMenuOpen(false);
+            setPiecesMenuOpen(false);
           }}
         >
           {trackedPieces.find((piece) => {

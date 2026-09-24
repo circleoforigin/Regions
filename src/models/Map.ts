@@ -2,10 +2,22 @@ import type {
   MediaSlotOverride,
 } from './MediaSlot';
 
+export type MapDistanceUnit =
+  | 'feet'
+  | 'miles'
+  | 'meters'
+  | 'kilometers';
+
 export interface MapImageRegistration {
   scale: number;
   offsetX: number;
   offsetY: number;
+
+  distanceScale?: {
+    distance: number;
+    pixels: number;
+    unit: MapDistanceUnit;
+  };
 }
 
 export interface BoundaryAlignment {
