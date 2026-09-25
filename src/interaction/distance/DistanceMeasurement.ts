@@ -1,4 +1,8 @@
 import type {
+  MapDistanceUnit,
+} from '../../models/Map';
+
+import type {
   SpatialPoint,
 } from '../../spatial/SpatialAnchor';
 
@@ -73,5 +77,48 @@ export function getTotalMapDistance(
     (total, segment) =>
       total + segment.mapDistance,
     0
+  );
+}
+
+export interface PhysicalDistance {
+  value: number;
+  unit: MapDistanceUnit;
+}
+
+export interface DistanceScale {
+  distance: number;
+  pixels: number;
+  unit: MapDistanceUnit;
+}
+
+export function convertMapDistance(
+  mapDistance: number,
+  scale: DistanceScale | undefined
+): PhysicalDistance | null {
+  if (
+    !scale ||
+    !Number.isFinite(scale.distance) ||
+    !Number.isFinite(scale.pixels) ||
+    scale.distance <= 0 ||
+    scale.pixels <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    value:
+      mapDistance *
+      (scale.distance / scale.pixels),
+    unit: scale.unit,
+  };
+}
+
+export function getTotalPhysicalDistance(
+  anchors: ResolvedDistanceAnchor[],
+  scale: DistanceScale | undefined
+): PhysicalDistance | null {
+  return convertMapDistance(
+    getTotalMapDistance(anchors),
+    scale
   );
 }

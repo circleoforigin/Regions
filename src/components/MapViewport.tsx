@@ -1,5 +1,5 @@
 import AreaMediaSlotsDialog from './AreaMediaSlotsDialog';
-import type { Map as RegionMap } from '../models/Map';
+import type { Map as RegionMap, MapImageRegistration } from '../models/Map';
 import type { GlobalMediaSlot, MediaSlotOverride } from '../models/MediaSlot';
 import type { BoundaryAlignment } from '../models/Map';
 import { isValidAlignment, transformBoundaryPoint } from '../sections/BoundaryTransform';
@@ -129,11 +129,7 @@ interface MapViewportProps {
   parentMapOptions: { id: string; name: string }[];
   onParentMapChange: (mapId: string) => void;
   onMakeWorldRoot: () => void;
-  imageRegistration?: {
-  scale: number;
-  offsetX: number;
-  offsetY: number;
-};
+  imageRegistration?: MapImageRegistration;
 calibrationActive?: boolean;
 
 calibrationFirstPoint?: Point | null;
@@ -2716,10 +2712,12 @@ function saveSectionProperties() {
     </svg>
 )}
 
-{interactionMode === 'distance' && (
-  <DistanceMeasurementOverlay
-    anchors={resolvedDistanceAnchors}
-    mapToScreen={mapToScreen}
+<DistanceMeasurementOverlay
+  anchors={resolvedDistanceAnchors}
+  distanceScale={
+    imageRegistration?.distanceScale
+  }
+  mapToScreen={mapToScreen}
     onRemoveAnchor={
       distanceMeasurement.removeAnchor
     }

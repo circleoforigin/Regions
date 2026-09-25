@@ -1,4 +1,9 @@
+import {
+  getTotalPhysicalDistance,
+} from './DistanceMeasurement';
+
 import type {
+  DistanceScale,
   ResolvedDistanceAnchor,
 } from './DistanceMeasurement';
 
@@ -9,6 +14,8 @@ interface Point {
 
 interface DistanceMeasurementOverlayProps {
   anchors: ResolvedDistanceAnchor[];
+
+  distanceScale?: DistanceScale;
 
   mapToScreen: (
     x: number,
@@ -22,9 +29,15 @@ interface DistanceMeasurementOverlayProps {
 
 export default function DistanceMeasurementOverlay({
   anchors,
+  distanceScale,
   mapToScreen,
   onRemoveAnchor,
 }: DistanceMeasurementOverlayProps) {
+  const totalDistance =
+    getTotalPhysicalDistance(
+      anchors,
+      distanceScale
+    );
   const screenAnchors = anchors.map(
     (resolved) => ({
       ...resolved,
