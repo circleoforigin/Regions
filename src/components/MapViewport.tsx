@@ -4,6 +4,8 @@ import type { GlobalMediaSlot, MediaSlotOverride } from '../models/MediaSlot';
 import type { BoundaryAlignment } from '../models/Map';
 import { isValidAlignment, transformBoundaryPoint } from '../sections/BoundaryTransform';
 import { getInteractionModePermissions } from '../interaction/InteractionModePermissions';
+import DistanceMeasurementOverlay from '../interaction/distance/DistanceMeasurementOverlay';
+import { useDistanceMeasurement } from '../interaction/distance/useDistanceMeasurement';
 import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
 import {
@@ -347,6 +349,7 @@ function MapViewport({
   const { state, dispatch } = useRegionsState();
   const interactionPermissions =
     getInteractionModePermissions(interactionMode);
+  const distanceMeasurement = useDistanceMeasurement();
   const { scale, panX, panY } = state.viewport;
   const pan = { x: panX, y: panY };
   const contextMenu = state.contextMenu;
@@ -1830,6 +1833,15 @@ function handleContextMenu(
     React.MouseEvent<HTMLDivElement>
 ) {
   event.preventDefault();
+
+  if (interactionMode === 'distance') {
+    distanceMeasurement.clear();
+    setPieceContextMenu(null);
+    setSectionContextMenu(null);
+    dispatch({ type: 'contextMenu.close' });
+    return;
+  }
+
   if (pendingArrivalPlacement) return;
   if (state.editingMode === 'move-feature') return;
   setPieceContextMenu(null);
@@ -1939,10 +1951,38 @@ function handleContextMenu(
     );
   }
 
-  function handlePointerDown(
+    function handlePointerDown(
     event:
       React.PointerEvent<HTMLDivElement>
   ) {
+    if (
+      interactionMode === 'distance' &&
+      event.button === 0
+    ) {
+      const target = event.target;
+
+      const mapBackground =
+        target === event.currentTarget ||
+        target instanceof HTMLImageElement;
+
+      if (mapBackground) {
+        const point = screenToMap(
+          event.clientX,
+          event.clientY
+        );
+
+        if (
+          point &&
+          isPointInsideMap(point)
+        ) {
+          event.preventDefault();
+          distanceMeasurement.addPoint(point);
+        }
+
+        return;
+      }
+    }
+
        if (
     calibrationActive &&
     event.button === 0
@@ -2528,9 +2568,7 @@ function saveSectionProperties() {
       onAuxClick={(event) => {
         if (event.button === 1) event.preventDefault();
       }}
-      onContextMenu={
-        handleContextMenu
-      }
+      onContextMenu={handleContextMenu}
     >
       <img
   className="map-viewport-image"
@@ -2654,7 +2692,15 @@ function saveSectionProperties() {
         </g>
       );
     })}
-  </svg>
+    </svg>
+)}
+
+{interactionMode === 'distance' && (
+  <DistanceMeasurementOverlay
+    points={distanceMeasurement.points}
+    mapToScreen={mapToScreen}
+    onRemovePoint={distanceMeasurement.removePoint}
+  />
 )}
 
 <svg className="section-geometry-layer" aria-hidden="true">
@@ -2971,10 +3017,19 @@ function saveSectionProperties() {
     position.y
   );
   const moveIsValid = !isMoving || isMovePositionValid(position);
+    const distanceSelected =
+    interactionMode === 'distance' &&
+    distanceMeasurement.points.some(
+      (point) =>
+        point.kind === 'feature' &&
+        point.featureId === feature.id
+    );
+
   const markerClasses = [
     'map-feature-marker',
     isConnection(feature) ? 'map-feature-connection' : '',
     state.selectedFeatureId === feature.id ? 'selected' : '',
+    distanceSelected ? 'distance-selected' : '',
     isMoving ? 'moving' : '',
     moveIsValid ? '' : 'invalid',
   ].filter(Boolean).join(' ');
@@ -2996,19 +3051,38 @@ function saveSectionProperties() {
           event.stopPropagation();
         }}
         onClick={() => {
-            if (suppressNextFeatureClickRef.current) {
-                suppressNextFeatureClickRef.current = false;
-                return;
-            }
+          if (suppressNextFeatureClickRef.current) {
+            suppressNextFeatureClickRef.current = false;
+            return;
+          }
 
-            if (state.editingMode === 'move-feature') return;
+          if (state.editingMode === 'move-feature') {
+            return;
+          }
 
-            dispatch({ type: 'feature.select', featureId: feature.id  });
+          if (interactionMode === 'distance') {
+            distanceMeasurement.addFeature(
+              feature.id,
+              feature.position
+            );
+            return;
+          }
+
+          dispatch({
+            type: 'feature.select',
+            featureId: feature.id,
+          });
         }}
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
           setPieceContextMenu(null);
+
+          if (interactionMode === 'distance') {
+            distanceMeasurement.clear();
+            return;
+          }
+
           if (state.editingMode === 'move-feature') return;
           const viewport = viewportRef.current;
           const point = screenToMap(event.clientX, event.clientY);

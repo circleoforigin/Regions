@@ -1,16 +1,17 @@
 import type { RichTextDocument } from './RichText';
+import type {
+  SpatialAnchor,
+  SpatialPoint,
+} from '../spatial/SpatialAnchor';
 
-export interface FeaturePosition {
-  x: number;
-  y: number;
-}
+export type FeaturePosition = SpatialPoint;
 
 export interface FeatureNoteLink {
   noteId: string;
   sectionId: string;
 }
 
-export interface Feature {
+export interface Feature extends SpatialAnchor {
   id: string;
   name: string;
   subtitle?: string;

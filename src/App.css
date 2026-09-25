@@ -2869,3 +2869,41 @@ box-shadow:
   left: auto;
   min-width: 145px;
 }
+
+.distance-measurement-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 8;
+}
+
+.distance-measurement-line {
+  stroke: white;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.distance-measurement-node {
+  fill: white;
+  stroke: black;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.distance-measurement-node-hitbox {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.map-feature-marker.distance-selected {
+  outline: 2px solid white;
+  outline-offset: 3px;
+}

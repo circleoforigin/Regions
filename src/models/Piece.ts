@@ -1,3 +1,7 @@
+import type {
+  SpatialAnchor,
+  SpatialPoint,
+} from '../spatial/SpatialAnchor';
 export type PieceKind = 'piece' | 'group';
 
 export type PieceShape =
@@ -13,15 +17,12 @@ export interface PieceAppearance {
   borderColor: string;
 }
 
-export interface Piece {
+export interface Piece extends SpatialAnchor {
   id: string;
   kind: PieceKind;
   name: string;
   mapId: string;
-  position: {
-    x: number;
-    y: number;
-  };
+  position: SpatialPoint;
   appearance: PieceAppearance;
   tracked?: boolean;
   memberPieceIds?: string[];
