@@ -6,7 +6,6 @@ import {
 import type {
   PathShapePoint,
   PathTerminalReference,
-  StandalonePathTerminal,
 } from '../models/Path';
 
 import type {
@@ -24,30 +23,12 @@ export function usePathAuthoring() {
     setDraft,
   ] = useState<PathDraft | null>(null);
 
-  const beginFromStandalone = useCallback(
+  const begin = useCallback(
     (
-      terminalId: string
+      terminal: PathTerminalReference
     ) => {
       setDraft({
-        start: {
-          kind: 'standalone',
-          terminalId,
-        },
-        shapePoints: [],
-      });
-    },
-    []
-  );
-
-  const beginFromFeature = useCallback(
-    (
-      featureId: string
-    ) => {
-      setDraft({
-        start: {
-          kind: 'feature',
-          featureId,
-        },
+        start: terminal,
         shapePoints: [],
       });
     },
@@ -128,6 +109,17 @@ export function usePathAuthoring() {
     []
   );
 
+  const takeDraft = useCallback(() => {
+    let result: PathDraft | null = null;
+
+    setDraft((current) => {
+      result = current;
+      return null;
+    });
+
+    return result;
+  }, []);
+
   const cancel = useCallback(() => {
     setDraft(null);
   }, []);
@@ -135,13 +127,12 @@ export function usePathAuthoring() {
   return {
     draft,
 
-    beginFromStandalone,
-    beginFromFeature,
-
+    begin,
     addShapePoint,
     moveShapePoint,
     removeShapePoint,
 
+    takeDraft,
     cancel,
   };
 }

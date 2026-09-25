@@ -2928,3 +2928,51 @@ box-shadow:
   border-color: #39ff14;
 }
 
+.mode-help {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+
+  min-width: 210px;
+  padding: 8px 10px;
+
+  border: 1px solid #555;
+  border-radius: 5px;
+
+  background: rgba(20, 20, 20, 0.9);
+  color: #ffffff;
+
+  pointer-events: none;
+  user-select: none;
+
+  font-size: 11px;
+}
+
+.mode-help-title {
+  margin-bottom: 6px;
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.mode-help-row {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+
+  line-height: 1.5;
+}
+
+.mode-help-input {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mode-help-action {
+  color: #cfcfcf;
+  text-align: right;
+  white-space: nowrap;
+}
+
