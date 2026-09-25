@@ -86,6 +86,7 @@ import {
 import type {
   Section,
   SectionEdge,
+  SectionKind,
   SectionNode,
 } from './models/Section';
 import {
@@ -6396,6 +6397,7 @@ onCalibrationPointMove={(
         onUnlinkAreaLocation={(area) => void handleUnlinkAreaLocation(area)}
         onAddAreaLocation={handleAddAreaLocation}
         onOpenAreaLocation={(area) => void handleOpenAreaLocation(area)}
+        interactionMode={interactionMode}
         sections={activeSections}
         sectionNodes={activeSectionNodes}
         sectionEdges={activeSectionEdges}

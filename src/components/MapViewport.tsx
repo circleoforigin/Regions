@@ -3,7 +3,9 @@ import type { Map as RegionMap } from '../models/Map';
 import type { GlobalMediaSlot, MediaSlotOverride } from '../models/MediaSlot';
 import type { BoundaryAlignment } from '../models/Map';
 import { isValidAlignment, transformBoundaryPoint } from '../sections/BoundaryTransform';
+import { getInteractionModePermissions } from '../interaction/InteractionModePermissions';
 import type { Feature } from '../models/Feature';
+import type { InteractionMode } from '../interaction/InteractionMode';
 import {
   Fragment,
   forwardRef,
@@ -221,6 +223,7 @@ pendingArrivalPlacement?: {
 };
 onPendingArrivalCommit?: (position: Point) => void;
   onPendingArrivalCancel?: () => void;
+  interactionMode: InteractionMode;
   sections?: Section[];
   sectionNodes?: SectionNode[];
   sectionEdges?: SectionEdge[];
@@ -320,6 +323,7 @@ function MapViewport({
   pendingArrivalPlacement,
   onPendingArrivalCommit,
   onPendingArrivalCancel,
+  interactionMode,
   sections = [],
   sectionNodes = [],
   sectionEdges = [],
@@ -341,6 +345,8 @@ function MapViewport({
   onMapMetadataChange,
 }: MapViewportProps, ref) {
   const { state, dispatch } = useRegionsState();
+  const interactionPermissions =
+    getInteractionModePermissions(interactionMode);
   const { scale, panX, panY } = state.viewport;
   const pan = { x: panX, y: panY };
   const contextMenu = state.contextMenu;
@@ -1362,7 +1368,7 @@ function isMovePositionValid(point: Point): boolean {
     sections,
     movingFeatureId,
     state.editingMode,
-  ]);
+  ]);  
 
   useEffect(() => {
     if (state.editingMode !== 'move-feature') return;
@@ -1375,6 +1381,23 @@ function isMovePositionValid(point: Point): boolean {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [dispatch, state.editingMode]);
+
+    useEffect(() => {
+    if (
+      interactionPermissions.canAuthorFeatures ||
+      state.editingMode !== 'move-feature'
+    ) {
+      return;
+    }
+
+    dispatch({
+      type: 'featureMove.cancel',
+    });
+  }, [
+    dispatch,
+    interactionPermissions.canAuthorFeatures,
+    state.editingMode,
+  ]);
 
   useEffect(() => {
     if (!pendingArrivalPlacement || !onPendingArrivalCancel) return;
@@ -1864,7 +1887,11 @@ function handleContextMenu(
       return;
     }
   }
-  setSectionContextMenu(null);
+    setSectionContextMenu(null);
+
+  if (interactionMode !== 'build') {
+    return;
+  }
 
   dispatch({
     type: 'contextMenu.open',
@@ -2163,7 +2190,12 @@ function handleContextMenu(
     event: React.PointerEvent<HTMLButtonElement>,
     piece: Piece
   ) {
-    if (event.button !== 0) return;
+    if (
+      event.button !== 0 ||
+      !interactionPermissions.canManipulatePieces
+    ) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     setPieceContextMenu(null);
@@ -2847,7 +2879,13 @@ function saveSectionProperties() {
         onPointerUp={handlePiecePointerUp}
         onPointerCancel={cancelPieceDrag}
         onLostPointerCapture={cancelPieceDrag}
-        onContextMenu={(event) => {
+                onContextMenu={(event) => {
+          if (
+            !interactionPermissions.canManipulatePieces
+          ) {
+            return;
+          }
+
           event.preventDefault();
           event.stopPropagation();
           const viewport = viewportRef.current;
@@ -3539,8 +3577,8 @@ function saveSectionProperties() {
       Add Connection...
     </button>
       </>
-    ) : (
-      <>
+      ) : interactionPermissions.canAuthorFeatures ? (
+        <>
         <button
           type="button"
           onClick={(event) => {
@@ -3604,7 +3642,7 @@ function saveSectionProperties() {
   Delete
 </button>
       </>
-    )}
+    ) : null}
   </div>
 )}    
 
