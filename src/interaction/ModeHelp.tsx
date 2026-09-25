@@ -1,135 +1,79 @@
 import type {
-  PathSegment,
-  PathShapePoint,
-} from '../models/Path';
+  InteractionMode,
+} from './InteractionMode';
 
-import type {
-  SpatialPoint,
-} from '../spatial/SpatialAnchor';
-
-import type {
-  ResolvedPathSegment,
-} from '../paths/PathMapState';
-
-function distanceSquared(
-  a: SpatialPoint,
-  b: SpatialPoint
-): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-
-  return dx * dx + dy * dy;
+interface HelpRow {
+  input: string;
+  action: string;
 }
 
-export function distanceToLineSegment(
-  point: SpatialPoint,
-  start: SpatialPoint,
-  end: SpatialPoint
-): number {
-  const lengthSquared =
-    distanceSquared(start, end);
+const HELP: Partial<
+  Record<InteractionMode, HelpRow[]>
+> = {
+  path: [
+    {
+      input: 'Ctrl + Click',
+      action: 'Terminal',
+    },
+    {
+      input: 'Right Click',
+      action: 'Shape Point',
+    },
+    {
+      input: 'Drag',
+      action: 'Move Node',
+    },
+    {
+      input: 'Shift + Click',
+      action: 'Delete Shape / Path',
+    },
+  ],
 
-  if (lengthSquared === 0) {
-    return Math.sqrt(
-      distanceSquared(point, start)
-    );
+  distance: [
+    {
+      input: 'Left Click',
+      action: 'Measure',
+    },
+    {
+      input: 'Right Click',
+      action: 'Remove / Clear',
+    },
+  ],
+};
+
+interface ModeHelpProps {
+  mode: InteractionMode;
+}
+
+export default function ModeHelp({
+  mode,
+}: ModeHelpProps) {
+  const rows = HELP[mode];
+
+  if (!rows || rows.length === 0) {
+    return null;
   }
 
-  const t = Math.max(
-    0,
-    Math.min(
-      1,
-      (
-        (point.x - start.x) *
-          (end.x - start.x) +
-        (point.y - start.y) *
-          (end.y - start.y)
-      ) / lengthSquared
-    )
+  return (
+    <div className="mode-help">
+      <div className="mode-help-title">
+        {mode.toUpperCase()}
+      </div>
+
+      {rows.map((row) => (
+        <div
+          className="mode-help-row"
+          key={`${row.input}-${row.action}`}
+        >
+          <span className="mode-help-input">
+            {row.input}
+          </span>
+
+          <span className="mode-help-action">
+            {row.action}
+          </span>
+        </div>
+      ))}
+    </div>
   );
-
-  const closest = {
-    x:
-      start.x +
-      t * (end.x - start.x),
-
-    y:
-      start.y +
-      t * (end.y - start.y),
-  };
-
-  return Math.sqrt(
-    distanceSquared(point, closest)
-  );
-}
-
-export function findPathLegIndex(
-  resolved: ResolvedPathSegment,
-  position: SpatialPoint
-): number {
-  const points = [
-    resolved.start.position,
-
-    ...resolved.segment.shapePoints.map(
-      (point) => point.position
-    ),
-
-    resolved.end.position,
-  ];
-
-  let closestLeg = 0;
-  let closestDistance = Infinity;
-
-  for (
-    let index = 0;
-    index < points.length - 1;
-    index += 1
-  ) {
-    const distance =
-      distanceToLineSegment(
-        position,
-        points[index],
-        points[index + 1]
-      );
-
-    if (distance < closestDistance) {
-      closestDistance = distance;
-      closestLeg = index;
-    }
-  }
-
-  return closestLeg;
-}
-
-export function insertPathShapePoint(
-  segment: PathSegment,
-  resolved: ResolvedPathSegment,
-  position: SpatialPoint
-): PathSegment {
-  const shapePoint: PathShapePoint = {
-    id: crypto.randomUUID(),
-    position,
-  };
-
-  const insertionIndex =
-    findPathLegIndex(
-      resolved,
-      position
-    );
-
-  const shapePoints = [
-    ...segment.shapePoints,
-  ];
-
-  shapePoints.splice(
-    insertionIndex,
-    0,
-    shapePoint
-  );
-
-  return {
-    ...segment,
-    shapePoints,
-    updatedAt: new Date(),
-  };
 }

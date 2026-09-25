@@ -63,6 +63,89 @@ export function distanceToLineSegment(
   );
 }
 
+export interface PathProjection {
+  position: SpatialPoint;
+  legIndex: number;
+}
+
+export function projectPointOntoPath(
+  resolved: ResolvedPathSegment,
+  position: SpatialPoint
+): PathProjection {
+  const points = [
+    resolved.start.position,
+
+    ...resolved.segment.shapePoints.map(
+      (point) => point.position
+    ),
+
+    resolved.end.position,
+  ];
+
+  let bestPosition = points[0];
+  let bestLegIndex = 0;
+  let bestDistanceSquared = Infinity;
+
+  for (
+    let index = 0;
+    index < points.length - 1;
+    index += 1
+  ) {
+    const start = points[index];
+    const end = points[index + 1];
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+
+    const lengthSquared =
+      dx * dx + dy * dy;
+
+    const t =
+      lengthSquared === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(
+              1,
+              (
+                (position.x - start.x) * dx +
+                (position.y - start.y) * dy
+              ) / lengthSquared
+            )
+          );
+
+    const projected = {
+      x: start.x + dx * t,
+      y: start.y + dy * t,
+    };
+
+    const projectedDistanceSquared =
+      distanceSquared(
+        position,
+        projected
+      );
+
+    if (
+      projectedDistanceSquared <
+      bestDistanceSquared
+    ) {
+      bestDistanceSquared =
+        projectedDistanceSquared;
+
+      bestPosition =
+        projected;
+
+      bestLegIndex =
+        index;
+    }
+  }
+
+  return {
+    position: bestPosition,
+    legIndex: bestLegIndex,
+  };
+}
+
 export function findPathLegIndex(
   resolved: ResolvedPathSegment,
   position: SpatialPoint

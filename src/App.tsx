@@ -95,6 +95,10 @@ import {
 } from './interaction/InteractionMode';
 import { useInteractionMode } from './interaction/useInteractionMode';
 import { featureRepository } from './features/FeatureRepository';
+import {
+  loadPathNetwork,
+  type PathNetwork,
+} from './paths/PathNetwork';
 import { resolveArea } from './sections/AreaContext';
 import { sectionRepository } from './sections/SectionRepository';
 import { sectionEdgeRepository } from './sections/SectionEdgeRepository';
@@ -179,6 +183,13 @@ function App() {
   );
 
   const [activeFeatures, setActiveFeatures] = useState<Feature[]>([]);
+    const [
+    activePathNetwork,
+    setActivePathNetwork,
+  ] = useState<PathNetwork>({
+    terminals: [],
+    segments: [],
+  });
   const [activeSections, setActiveSections] = useState<Section[]>([]);
   const [activeSectionNodes, setActiveSectionNodes] =
     useState<SectionNode[]>([]);
@@ -208,7 +219,31 @@ function App() {
 
   const activeProjectId = activeProject?.id ?? null;
   const activeMapId = activeMap?.id ?? null;
+  async function handlePathMapChange(
+    updater: (
+      map: RegionMap
+    ) => Promise<RegionMap>
+  ): Promise<void> {
+    if (!activeMap) {
+      return;
+    }
 
+    const updatedMap =
+      await updater(activeMap);
+
+    setActiveMap(updatedMap);
+
+    setPendingMaps((current) => [
+      ...current.filter(
+        (map) =>
+          map.id !== updatedMap.id
+      ),
+
+      updatedMap,
+    ]);
+
+    markProjectDirty();
+  }
   const assignMapInputRef =
     useRef<HTMLInputElement | null>(
       null
@@ -3156,6 +3191,10 @@ async function handleSelectProject(project: Project) {
     null
   );
   setActiveFeatures([]);
+  setActivePathNetwork({
+    terminals: [],
+    segments: [],
+  });
 
   if (project.activeMapId) {
     try {
@@ -3169,14 +3208,38 @@ async function handleSelectProject(project: Project) {
       setActiveMap(normalizedMap);
       clearActiveMapImage();
 
-      if (normalizedMap) {
-        const featuresPromise = featureRepository.loadFeatures(
-          normalizedMap.featureIds
-        );
-        const imagePromise = loadMapImage(normalizedMap);
-        const features = await featuresPromise;
+            if (normalizedMap) {
+        const featuresPromise =
+          featureRepository.loadFeatures(
+            normalizedMap.featureIds
+          );
 
-        setActiveFeatures(features);
+        const pathNetworkPromise =
+          loadPathNetwork(
+            normalizedMap
+          );
+
+        const imagePromise =
+          loadMapImage(
+            normalizedMap
+          );
+
+        const [
+          features,
+          pathNetwork,
+        ] = await Promise.all([
+          featuresPromise,
+          pathNetworkPromise,
+        ]);
+
+        setActiveFeatures(
+          features
+        );
+
+        setActivePathNetwork(
+          pathNetwork
+        );
+
         await imagePromise;
       }
     } catch (error) {
@@ -3355,6 +3418,10 @@ function closeProject() {
   );
 
   setActiveFeatures([]);
+  setActivePathNetwork({
+    terminals: [],
+    segments: [],
+  });
   setPendingMaps([]);
   setPendingFeatures([]);
   setPendingFeatureDeletionIds(
@@ -4642,8 +4709,17 @@ featureIds: [],
         now,
     };
 
-    setActiveMap(updatedMap);
-    if (!activeMap) setActiveFeatures([]);
+        setActiveMap(updatedMap);
+
+    if (!activeMap) {
+      setActiveFeatures([]);
+
+      setActivePathNetwork({
+        terminals: [],
+        segments: [],
+      });
+    }
+
     await loadMapImage(updatedMap);
     setActiveProject(updatedProject);
 
@@ -6262,6 +6338,17 @@ onCalibrationPointMove={(
   }
 }}
         features={activeFeatures}
+                pathNetwork={
+          activePathNetwork
+        }
+
+        onPathNetworkChange={
+          setActivePathNetwork
+        }
+
+        onPathMapChange={
+          handlePathMapChange
+        }
         pieces={activeProject.pieces.filter((piece) => {
           return piece.mapId === activeMap.id &&
             !isPieceGrouped(piece.id, activeProject.pieces) &&

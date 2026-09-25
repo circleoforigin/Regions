@@ -42,7 +42,24 @@ import {
 } from '../sections/SectionGeometry';
 import { findAreaReturnPath, validateAreaSegment } from '../sections/AreaDrawing';
 import { useProximityDismiss } from '../hooks/useProximityDismiss';
+import type {
+  Map as PathMap,
+} from '../models/Map';
 
+import type {
+  PathNetwork,
+} from '../paths/PathNetwork';
+
+import {
+  usePathInteraction,
+} from '../paths/usePathInteraction';
+
+import {
+  resolvePathTerminal,
+} from '../paths/PathMapState';
+
+import PathOverlay
+  from '../paths/PathOverlay';
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
 const NAVIGATION_ZOOM_RATIO = 0.5;
@@ -144,6 +161,17 @@ onCalibrationPointMove?: (
   point: Point
 ) => void;
 features: Feature[];
+pathNetwork: PathNetwork;
+
+onPathNetworkChange: (
+  network: PathNetwork
+) => void;
+
+onPathMapChange: (
+  updater: (
+    map: PathMap
+  ) => Promise<PathMap>
+) => Promise<void>;
 pieces?: Piece[];
 allPieces?: Piece[];
 focusedPieceId?: string;
@@ -288,6 +316,9 @@ function MapViewport({
   onCalibrationPoint,
   onCalibrationPointMove,
   features,
+  pathNetwork,
+  onPathNetworkChange,
+  onPathMapChange,
   pieces = [],
   allPieces = pieces,
   focusedPieceId,
@@ -346,11 +377,48 @@ function MapViewport({
   const { state, dispatch } = useRegionsState();
   const interactionPermissions =
     getInteractionModePermissions(interactionMode);
+    const pathInteraction =
+    usePathInteraction({
+      active:
+        interactionMode === 'path',
+
+      mapId,
+
+      network:
+        pathNetwork,
+
+      features,
+
+      onNetworkChange:
+        onPathNetworkChange,
+
+      onMapChange:
+        onPathMapChange,
+    });
   const distanceMeasurement = useDistanceMeasurement();
   const [
   distancePointer,
   setDistancePointer,
 ] = useState<Point | null>(null);
+  const [
+    pathPointer,
+    setPathPointer,
+  ] = useState<Point | null>(
+    null
+  );
+
+  const [
+    pathDragPreview,
+    setPathDragPreview,
+  ] = useState<{
+    kind: 'terminal' | 'shape';
+    id: string;
+    segmentId?: string;
+    position: Point;
+    pointerId: number;
+  } | null>(
+    null
+  );
 
 useEffect(() => {
   if (interactionMode === 'distance') {
@@ -363,6 +431,15 @@ useEffect(() => {
   interactionMode,
   distanceMeasurement.clear,
 ]);
+
+useEffect(() => {
+  if (interactionMode === 'path') {
+    return;
+  }
+
+  setPathPointer(null);
+  setPathDragPreview(null);
+}, [interactionMode]);
 
   const resolvedDistanceAnchors =
     resolveDistanceAnchors(
@@ -1100,6 +1177,25 @@ function mapToScreen(
       pan.y +
       mapY * scale,
   };
+}
+
+function getPathDraftStartPosition():
+  Point | null {
+  const draft =
+    pathInteraction.draft;
+
+  if (!draft) {
+    return null;
+  }
+
+  const resolved =
+    resolvePathTerminal(
+      draft.start,
+      pathNetwork.terminals,
+      features
+    );
+
+  return resolved?.position ?? null;
 }
 
 function isPointInsideMap(point: Point): boolean {

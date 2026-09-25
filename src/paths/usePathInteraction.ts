@@ -9,9 +9,11 @@ import type {
 } from '../models/Feature';
 
 import type {
-  PathSegment,
+  Map,
+} from '../models/Map';
+
+import type {
   PathTerminalReference,
-  StandalonePathTerminal,
 } from '../models/Path';
 
 import type {
@@ -21,37 +23,36 @@ import type {
 import {
   createPathSegment,
   createStandalonePathTerminal,
-} from '../paths/PathAuthoring';
+  splitPathSegment,
+} from './PathAuthoring';
 
 import {
   insertPathShapePoint,
-} from '../paths/PathGeometry';
+} from './PathGeometry';
 
 import {
   resolvePathSegment,
-} from '../paths/PathMapState';
+} from './PathMapState';
 
 import {
   deletePathSegment,
   deletePathShapePoint,
   movePathTerminal,
+  replacePathSegmentWithSplit,
   savePathSegment,
   savePathShapePointPosition,
   savePathTerminal,
   type PathNetwork,
-} from '../paths/PathNetwork';
+} from './PathNetwork';
 
 import {
   usePathAuthoring,
-} from '../paths/usePathAuthoring';
+} from './usePathAuthoring';
 
 interface UsePathInteractionOptions {
   active: boolean;
-
   mapId: string;
-
   network: PathNetwork;
-
   features: Feature[];
 
   onNetworkChange: (
@@ -60,10 +61,8 @@ interface UsePathInteractionOptions {
 
   onMapChange: (
     updater: (
-      map: import('../models/Map').Map
-    ) => Promise<
-      import('../models/Map').Map
-    >
+      map: Map
+    ) => Promise<Map>
   ) => Promise<void>;
 }
 
@@ -104,54 +103,6 @@ export function usePathInteraction({
     authoring.cancel,
   ]);
 
-  const createTerminalReference =
-    useCallback(
-      async (
-        position: SpatialPoint,
-        feature?: Feature
-      ): Promise<PathTerminalReference> => {
-        if (feature) {
-          return {
-            kind: 'feature',
-            featureId: feature.id,
-          };
-        }
-
-        const terminal =
-          createStandalonePathTerminal(
-            mapId,
-            position
-          );
-
-        await onMapChange(
-          async (map) =>
-            savePathTerminal(
-              map,
-              terminal
-            )
-        );
-
-        onNetworkChange({
-          ...network,
-          terminals: [
-            ...network.terminals,
-            terminal,
-          ],
-        });
-
-        return {
-          kind: 'standalone',
-          terminalId: terminal.id,
-        };
-      },
-      [
-        mapId,
-        network,
-        onMapChange,
-        onNetworkChange,
-      ]
-    );
-
   const handleTerminalIntent =
     useCallback(
       async (
@@ -162,14 +113,57 @@ export function usePathInteraction({
           return;
         }
 
-        const terminal =
-          await createTerminalReference(
-            position,
-            feature
-          );
+        let terminal:
+          PathTerminalReference;
+
+        let createdStandalone:
+          ReturnType<
+            typeof createStandalonePathTerminal
+          > | null = null;
+
+        if (feature) {
+          terminal = {
+            kind: 'feature',
+            featureId: feature.id,
+          };
+        } else {
+          createdStandalone =
+            createStandalonePathTerminal(
+              mapId,
+              position
+            );
+
+          terminal = {
+            kind: 'standalone',
+            terminalId:
+              createdStandalone.id,
+          };
+        }
 
         if (!authoring.draft) {
-          authoring.begin(terminal);
+          if (createdStandalone) {
+            await onMapChange(
+              async (map) =>
+                savePathTerminal(
+                  map,
+                  createdStandalone!
+                )
+            );
+
+            onNetworkChange({
+              ...network,
+
+              terminals: [
+                ...network.terminals,
+                createdStandalone,
+              ],
+            });
+          }
+
+          authoring.begin(
+            terminal
+          );
+
           return;
         }
 
@@ -182,15 +176,33 @@ export function usePathInteraction({
           );
 
         await onMapChange(
-          async (map) =>
-            savePathSegment(
-              map,
+          async (map) => {
+            let updatedMap = map;
+
+            if (createdStandalone) {
+              updatedMap =
+                await savePathTerminal(
+                  updatedMap,
+                  createdStandalone
+                );
+            }
+
+            return savePathSegment(
+              updatedMap,
               segment
-            )
+            );
+          }
         );
 
         onNetworkChange({
-          ...network,
+          terminals:
+            createdStandalone
+              ? [
+                  ...network.terminals,
+                  createdStandalone,
+                ]
+              : network.terminals,
+
           segments: [
             ...network.segments,
             segment,
@@ -202,7 +214,6 @@ export function usePathInteraction({
       [
         active,
         authoring,
-        createTerminalReference,
         mapId,
         network,
         onMapChange,
@@ -238,10 +249,15 @@ export function usePathInteraction({
         segmentId: string,
         position: SpatialPoint
       ) => {
+        if (!active) {
+          return;
+        }
+
         const segment =
           network.segments.find(
             (candidate) =>
-              candidate.id === segmentId
+              candidate.id ===
+              segmentId
           );
 
         if (!segment) {
@@ -288,6 +304,83 @@ export function usePathInteraction({
         });
       },
       [
+        active,
+        features,
+        network,
+        onMapChange,
+        onNetworkChange,
+      ]
+    );
+
+  const splitSegment =
+    useCallback(
+      async (
+        segmentId: string,
+        position: SpatialPoint
+      ) => {
+        if (!active) {
+          return;
+        }
+
+        const segment =
+          network.segments.find(
+            (candidate) =>
+              candidate.id ===
+              segmentId
+          );
+
+        if (!segment) {
+          return;
+        }
+
+        const resolved =
+          resolvePathSegment(
+            segment,
+            network.terminals,
+            features
+          );
+
+        if (!resolved) {
+          return;
+        }
+
+        const split =
+          splitPathSegment(
+            resolved,
+            position
+          );
+
+        await onMapChange(
+          async (map) =>
+            replacePathSegmentWithSplit(
+              map,
+              segment.id,
+              split.terminal,
+              split.first,
+              split.second
+            )
+        );
+
+        onNetworkChange({
+          terminals: [
+            ...network.terminals,
+            split.terminal,
+          ],
+
+          segments: [
+            ...network.segments.filter(
+              (candidate) =>
+                candidate.id !==
+                segment.id
+            ),
+
+            split.first,
+            split.second,
+          ],
+        });
+      },
+      [
+        active,
         features,
         network,
         onMapChange,
@@ -301,10 +394,15 @@ export function usePathInteraction({
         segmentId: string,
         pointId: string
       ) => {
+        if (!active) {
+          return;
+        }
+
         const segment =
           network.segments.find(
             (candidate) =>
-              candidate.id === segmentId
+              candidate.id ===
+              segmentId
           );
 
         if (!segment) {
@@ -331,6 +429,7 @@ export function usePathInteraction({
         });
       },
       [
+        active,
         network,
         onNetworkChange,
       ]
@@ -341,6 +440,10 @@ export function usePathInteraction({
       async (
         segmentId: string
       ) => {
+        if (!active) {
+          return;
+        }
+
         await onMapChange(
           async (map) => {
             const result =
@@ -377,6 +480,7 @@ export function usePathInteraction({
         );
       },
       [
+        active,
         network,
         onMapChange,
         onNetworkChange,
@@ -524,7 +628,8 @@ export function usePathInteraction({
     }, []);
 
   return {
-    draft: authoring.draft,
+    draft:
+      authoring.draft,
 
     movingTerminalId,
     movingShapePoint,
@@ -533,6 +638,8 @@ export function usePathInteraction({
     handleShapeIntent,
 
     insertShapePoint,
+    splitSegment,
+
     removeShapePoint,
     removeSegment,
 
@@ -543,7 +650,9 @@ export function usePathInteraction({
     commitShapeMove,
 
     cancelMove,
-    cancelDraft: authoring.cancel,
+
+    cancelDraft:
+      authoring.cancel,
   };
 }
 
