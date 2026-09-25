@@ -347,6 +347,23 @@ function MapViewport({
   const interactionPermissions =
     getInteractionModePermissions(interactionMode);
   const distanceMeasurement = useDistanceMeasurement();
+  const [
+  distancePointer,
+  setDistancePointer,
+] = useState<Point | null>(null);
+
+useEffect(() => {
+  if (interactionMode === 'distance') {
+    return;
+  }
+
+  distanceMeasurement.clear();
+  setDistancePointer(null);
+}, [
+  interactionMode,
+  distanceMeasurement.clear,
+]);
+
   const resolvedDistanceAnchors =
     resolveDistanceAnchors(
       distanceMeasurement.anchors,
@@ -2144,6 +2161,19 @@ function handleContextMenu(
       React.PointerEvent<HTMLDivElement>
   ) {
     trackEdgePointer(event.clientX, event.clientY);
+    if (interactionMode === 'distance') {
+  const viewport = viewportRef.current;
+
+  if (viewport) {
+    const rect =
+      viewport.getBoundingClientRect();
+
+    setDistancePointer({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    });
+  }
+}
     if (sectionMode || movingSectionNode) {
       const point = screenToMap(event.clientX, event.clientY);
       setSectionPointer(point);
@@ -2580,6 +2610,7 @@ function saveSectionProperties() {
       }}
       onPointerLeave={() => {
         pointerInsideViewportRef.current = false;
+        setDistancePointer(null);
         stopEdgeScrolling();
       }}
       onAuxClick={(event) => {
@@ -2714,14 +2745,16 @@ function saveSectionProperties() {
 
 <DistanceMeasurementOverlay
   anchors={resolvedDistanceAnchors}
-  distanceScale={
-    imageRegistration?.distanceScale
-  }
+  distanceScale={imageRegistration?.distanceScale}
+  pointerPosition={distancePointer}
   mapToScreen={mapToScreen}
-    onRemoveAnchor={
-      distanceMeasurement.removeAnchor
-    }
-  />
+  onRemoveAnchor={
+    distanceMeasurement.removeAnchor
+  }
+  onSelectTemporaryAnchor={
+    distanceMeasurement.addExistingPoint
+  }
+/>
 
 
 <svg className="section-geometry-layer" aria-hidden="true">

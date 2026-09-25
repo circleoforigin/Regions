@@ -1,4 +1,5 @@
 import {
+  formatPhysicalDistance,
   getTotalPhysicalDistance,
 } from './DistanceMeasurement';
 
@@ -16,7 +17,7 @@ interface DistanceMeasurementOverlayProps {
   anchors: ResolvedDistanceAnchor[];
 
   distanceScale?: DistanceScale;
-
+  pointerPosition: Point | null;
   mapToScreen: (
     x: number,
     y: number
@@ -25,19 +26,34 @@ interface DistanceMeasurementOverlayProps {
   onRemoveAnchor: (
     anchorId: string
   ) => void;
+
+  onSelectTemporaryAnchor: (
+    pointId: string,
+    position: Point
+) => void;
 }
 
 export default function DistanceMeasurementOverlay({
   anchors,
   distanceScale,
+  pointerPosition,
   mapToScreen,
   onRemoveAnchor,
+  onSelectTemporaryAnchor,
 }: DistanceMeasurementOverlayProps) {
   const totalDistance =
     getTotalPhysicalDistance(
       anchors,
       distanceScale
     );
+  const readout =
+  anchors.length < 2
+    ? null
+    : totalDistance
+      ? formatPhysicalDistance(
+          totalDistance
+        )
+      : 'Scale not calibrated';
   const screenAnchors = anchors.map(
     (resolved) => ({
       ...resolved,
@@ -48,7 +64,25 @@ export default function DistanceMeasurementOverlay({
     })
   );
 
+  const temporaryNodes = Array.from(
+    new Map(
+        screenAnchors
+        .filter(
+            (resolved) =>
+            resolved.anchor.kind ===
+            'temporary'
+        )
+        .map((resolved) => [
+            resolved.anchor.kind === 'temporary'
+            ? resolved.anchor.pointId
+            : '',
+            resolved,
+        ])
+    ).values()
+    );
+
   return (
+  <>
     <svg
       className="distance-measurement-layer"
       aria-hidden="true"
@@ -71,7 +105,7 @@ export default function DistanceMeasurementOverlay({
           );
         })}
 
-      {screenAnchors.map((resolved) => {
+      {temporaryNodes.map((resolved) => {
         if (
           resolved.anchor.kind !==
           'temporary'
@@ -93,6 +127,20 @@ export default function DistanceMeasurementOverlay({
               cx={resolved.screen.x}
               cy={resolved.screen.y}
               r={7}
+              onClick={(event) => {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (
+    resolved.anchor.kind ===
+    'temporary'
+  ) {
+    onSelectTemporaryAnchor(
+      resolved.anchor.pointId,
+      resolved.position
+    );
+  }
+}}
               onContextMenu={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -105,6 +153,19 @@ export default function DistanceMeasurementOverlay({
           </g>
         );
       })}
-    </svg>
-  );
+        </svg>
+
+    {readout && pointerPosition && (
+      <div
+        className="distance-measurement-readout"
+        style={{
+          left: pointerPosition.x + 16,
+          top: pointerPosition.y + 18,
+        }}
+      >
+        {readout}
+      </div>
+    )}
+  </>
+);
 }

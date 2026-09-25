@@ -16,18 +16,39 @@ export function useDistanceMeasurement() {
     useState<DistanceAnchor[]>([]);
 
   const addPoint = useCallback(
-    (position: SpatialPoint) => {
-      setAnchors((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          kind: 'temporary',
-          position,
-        },
-      ]);
-    },
-    []
-  );
+  (position: SpatialPoint) => {
+    const pointId = crypto.randomUUID();
+
+    setAnchors((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        kind: 'temporary',
+        pointId,
+        position,
+      },
+    ]);
+  },
+  []
+);
+
+const addExistingPoint = useCallback(
+  (
+    pointId: string,
+    position: SpatialPoint
+  ) => {
+    setAnchors((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        kind: 'temporary',
+        pointId,
+        position,
+      },
+    ]);
+  },
+  []
+);
 
   const addFeature = useCallback(
     (featureId: string) => {
@@ -73,13 +94,14 @@ export function useDistanceMeasurement() {
   }, []);
 
   return {
-    anchors,
-    addPoint,
-    addFeature,
-    addPiece,
-    removeAnchor,
-    clear,
-  };
+  anchors,
+  addPoint,
+  addExistingPoint,
+  addFeature,
+  addPiece,
+  removeAnchor,
+  clear,
+};
 }
 
 export type DistanceMeasurementController =

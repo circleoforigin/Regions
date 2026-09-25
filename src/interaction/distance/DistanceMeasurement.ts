@@ -8,9 +8,10 @@ import type {
 
 export type DistanceAnchor =
   | {
-      id: string;
-      kind: 'temporary';
-      position: SpatialPoint;
+    id: string;
+    kind: 'temporary';
+    pointId: string;
+    position: SpatialPoint;
     }
   | {
       id: string;
@@ -121,4 +122,17 @@ export function getTotalPhysicalDistance(
     getTotalMapDistance(anchors),
     scale
   );
+}
+
+export function formatPhysicalDistance(
+  distance: PhysicalDistance
+): string {
+  const value =
+    distance.value >= 100
+      ? distance.value.toFixed(0)
+      : distance.value >= 10
+        ? distance.value.toFixed(1)
+        : distance.value.toFixed(2);
+
+  return `${value} ${distance.unit}`;
 }
