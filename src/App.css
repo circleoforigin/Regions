@@ -2851,3 +2851,21 @@ box-shadow:
 
   pointer-events: none;
 }
+
+/* =========================
+   INTERACTION MODE
+   ========================= */
+
+.menu-mode-control {
+  position: relative;
+}
+
+.menu-mode-control > button {
+  min-width: 92px;
+}
+
+.menu-mode-dropdown {
+  right: 0;
+  left: auto;
+  min-width: 145px;
+}

@@ -8,8 +8,9 @@ import {
   defaultLayerVisibility,
   type RegionsLayer,
 } from '../state/RegionsState';
-import type { SectionKind } from '../models/Section';
 import type { Piece } from '../models/Piece';
+import type { InteractionMode } from '../interaction/InteractionMode';
+import ModeSelector from '../interaction/ModeSelector';
 import { isPieceTracked } from '../models/Piece';
 
 const LAYER_OPTIONS: { id: RegionsLayer; label: string }[] = [
@@ -40,8 +41,8 @@ interface MenuBarProps {
   onOpenSettings: () => void;
   onManageGlobalMediaSlots: () => void;
   onManageFeatureTypes: () => void;
-  sectionMode: SectionKind | null;
-  onSectionModeChange: (mode: SectionKind | null) => void;
+  interactionMode: InteractionMode;
+  onInteractionModeChange: (mode: InteractionMode) => void;
 
   projectName?: string;
   mapActive: boolean;
@@ -81,8 +82,8 @@ function MenuBar({
   onOpenSettings,
   onManageGlobalMediaSlots,
   onManageFeatureTypes,
-  sectionMode,
-  onSectionModeChange,
+  interactionMode,
+  onInteractionModeChange,
   projectName,
   mapActive,
   parentMapAvailable,
@@ -115,7 +116,6 @@ function MenuBar({
   const [piecesMenuOpen, setPiecesMenuOpen] = useState(false);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [pieceMenuOpen, setPieceMenuOpen] = useState(false);
-  const [sectionsMenuOpen, setSectionsMenuOpen] = useState(false);
   const trackedPieces = pieces.filter(isPieceTracked);
 
   useEffect(() => {
@@ -124,8 +124,7 @@ function MenuBar({
       !mapMenuOpen &&
       !piecesMenuOpen &&
       !settingsMenuOpen &&
-      !pieceMenuOpen &&
-      !sectionsMenuOpen
+      !pieceMenuOpen
     ) return;
 
     function handleOutsidePointerDown(
@@ -146,7 +145,6 @@ function MenuBar({
         setLayersMenuOpen(false);
         setSettingsMenuOpen(false);
         setPieceMenuOpen(false);
-        setSectionsMenuOpen(false);
         setPiecesMenuOpen(false);
       }
     }
@@ -167,7 +165,6 @@ function MenuBar({
     mapMenuOpen,
     piecesMenuOpen,
     pieceMenuOpen,
-    sectionsMenuOpen,
     settingsMenuOpen,
   ]);
 
@@ -178,7 +175,6 @@ function MenuBar({
     setLayersMenuOpen(false);
     setSettingsMenuOpen(false);
     setPieceMenuOpen(false);
-    setSectionsMenuOpen(false);
   }
 
   function handleNewProject() {
@@ -220,9 +216,7 @@ function MenuBar({
             setMapMenuOpen(false);
             setLayersMenuOpen(false);
             setSettingsMenuOpen(false);
-            setSectionsMenuOpen(false);
             setPieceMenuOpen(false);
-            setSectionsMenuOpen(false);
             setPiecesMenuOpen(false);
           }}
         >
@@ -301,7 +295,6 @@ function MenuBar({
             setFileMenuOpen(false);
             setSettingsMenuOpen(false);
             setPieceMenuOpen(false);
-            setSectionsMenuOpen(false);
             setPiecesMenuOpen(false);
           }}
         >
@@ -447,7 +440,6 @@ function MenuBar({
             setLayersMenuOpen(false);
             setSettingsMenuOpen(false);
             setPieceMenuOpen(false);
-            setSectionsMenuOpen(false);
           }}
         >
           Pieces
@@ -495,60 +487,7 @@ function MenuBar({
             </button>
           </div>
         )}
-      </div>
-
-      <div className="menu-group">
-        <button
-          type="button"
-          className="menu-item"
-          disabled={!mapActive}
-          onClick={() => {
-            setSectionsMenuOpen((open) => !open);
-            setFileMenuOpen(false);
-            setMapMenuOpen(false);
-            setLayersMenuOpen(false);
-            setSettingsMenuOpen(false);
-            setPieceMenuOpen(false);
-            setPiecesMenuOpen(false);
-          }}
-        >
-          Sections
-        </button>
-
-        {sectionsMenuOpen && (
-          <div className="dropdown-menu">
-            {(['area', 'zone', 'border', 'boundary'] as SectionKind[])
-              .map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  className="dropdown-item"
-                  onClick={() => {
-                    onSectionModeChange(kind);
-                    closeMenus();
-                  }}
-                >
-                  <span className="dropdown-check">
-                    {sectionMode === kind ? '✓' : ''}
-                  </span>
-                  {kind[0].toUpperCase() + kind.slice(1)}
-                </button>
-              ))}
-            <div className="dropdown-separator" />
-            <button
-              type="button"
-              className="dropdown-item"
-              disabled={!sectionMode}
-              onClick={() => {
-                onSectionModeChange(null);
-                closeMenus();
-              }}
-            >
-              Exit Section Mode
-            </button>
-          </div>
-        )}
-      </div>
+      </div>      
 
       <div className="menu-group">
         <button
@@ -560,7 +499,6 @@ function MenuBar({
             setMapMenuOpen(false);
             setLayersMenuOpen(false);
             setPieceMenuOpen(false);
-            setSectionsMenuOpen(false);
             setPiecesMenuOpen(false);
           }}
         >
@@ -613,7 +551,16 @@ function MenuBar({
         </div>
       )}
 
-      <div className="menu-bar-spacer" />
+            <div className="menu-bar-spacer" />
+
+      <ModeSelector
+        mode={interactionMode}
+        disabled={!mapActive}
+        onChange={(mode) => {
+          closeMenus();
+          onInteractionModeChange(mode);
+        }}
+      />
 
       <div className="menu-piece-control">
         <button
@@ -625,7 +572,6 @@ function MenuBar({
             setMapMenuOpen(false);
             setLayersMenuOpen(false);
             setSettingsMenuOpen(false);
-            setSectionsMenuOpen(false);
             setPiecesMenuOpen(false);
           }}
         >

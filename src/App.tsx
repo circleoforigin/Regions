@@ -86,9 +86,13 @@ import {
 import type {
   Section,
   SectionEdge,
-  SectionKind,
   SectionNode,
 } from './models/Section';
+import {
+  interactionModeToSectionKind,
+  type InteractionMode,
+} from './interaction/InteractionMode';
+import { useInteractionMode } from './interaction/useInteractionMode';
 import { featureRepository } from './features/FeatureRepository';
 import { resolveArea } from './sections/AreaContext';
 import { sectionRepository } from './sections/SectionRepository';
@@ -179,7 +183,14 @@ function App() {
     useState<SectionNode[]>([]);
   const [activeSectionEdges, setActiveSectionEdges] =
     useState<SectionEdge[]>([]);
-  const [sectionMode, setSectionMode] = useState<SectionKind | null>(null);
+  const {
+    interactionMode,
+    setInteractionMode,
+    resetInteractionMode,
+  } = useInteractionMode();
+
+  const sectionMode =
+    interactionModeToSectionKind(interactionMode);
   const [deletedSectionIds, setDeletedSectionIds] =
     useState<Set<string>>(() => new Set());
   const [deletedSectionNodeIds, setDeletedSectionNodeIds] =
@@ -694,7 +705,7 @@ const [
 
   useLayoutEffect(() => {
     mapViewportRef.current?.cancelInteractions();
-    setSectionMode(null);
+    resetInteractionMode();
     loadedSectionsMapId.current = null;
   // Active Map identity is the sole authority for this cleanup.
   // oxlint-disable-next-line react-hooks/exhaustive-deps
@@ -1340,9 +1351,39 @@ function markProjectDirty() {
   setDirtyRevision((current) => current + 1);
 }
 
-function handleSectionModeChange(mode: SectionKind | null) {
+function handleInteractionModeChange(
+  mode: InteractionMode
+) {
   mapViewportRef.current?.cancelInteractions();
-  setSectionMode(mode);
+  setInteractionMode(mode);
+}
+
+function handleSectionModeChange(
+  mode: SectionKind | null
+) {
+  mapViewportRef.current?.cancelInteractions();
+
+  switch (mode) {
+    case 'area':
+      setInteractionMode('area');
+      break;
+
+    case 'zone':
+      setInteractionMode('zone');
+      break;
+
+    case 'border':
+      setInteractionMode('territory');
+      break;
+
+    case 'boundary':
+      setInteractionMode('boundary');
+      break;
+
+    default:
+      setInteractionMode('explore');
+      break;
+  }
 }
 
 function resetProjectDirty() {
@@ -1416,7 +1457,7 @@ function handleNewProject() {
   setDeletedSectionIds(new Set());
   setDeletedSectionNodeIds(new Set());
   setDeletedSectionEdgeIds(new Set());
-  setSectionMode(null);
+  resetInteractionMode();
   setZoomControl(null);
 
   await loadMapImage(rootMap);
@@ -3085,7 +3126,7 @@ function handleConfirmMakeWorldRoot() {
 }
 
 async function handleSelectProject(project: Project) {
-  setSectionMode(null);
+  resetInteractionMode();
   setDeletedSectionIds(new Set());
   setDeletedSectionNodeIds(new Set());
   setDeletedSectionEdgeIds(new Set());
@@ -3290,7 +3331,7 @@ function handleSaveProject() {
 }
 
 function closeProject() {
-  setSectionMode(null);
+  resetInteractionMode();
   setDeletedSectionIds(new Set());
   setDeletedSectionNodeIds(new Set());
   setDeletedSectionEdgeIds(new Set());
@@ -4769,8 +4810,10 @@ mapMediaSlotsEnabled={
   onManageGlobalMediaSlots={() =>
     setShowGlobalMediaSlotsDialog(true)
   }
-  sectionMode={sectionMode}
-  onSectionModeChange={handleSectionModeChange}
+  interactionMode={interactionMode}
+  onInteractionModeChange={
+    handleInteractionModeChange
+  }
   projectName={
     activeProject?.name
   }
