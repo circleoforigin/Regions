@@ -2722,7 +2722,7 @@ function saveSectionProperties() {
       distanceMeasurement.removeAnchor
     }
   />
-)}
+
 
 <svg className="section-geometry-layer" aria-hidden="true">
   {visibleSections.map((section) => {
