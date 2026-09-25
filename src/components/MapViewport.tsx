@@ -2233,12 +2233,26 @@ function handleContextMenu(
     stopEdgeScrolling();
   }
 
-  function handlePiecePointerDown(
+   function handlePiecePointerDown(
     event: React.PointerEvent<HTMLButtonElement>,
     piece: Piece
   ) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    if (interactionMode === 'distance') {
+      event.preventDefault();
+      event.stopPropagation();
+
+      distanceMeasurement.addPiece(
+        piece.id
+      );
+
+      return;
+    }
+
     if (
-      event.button !== 0 ||
       !interactionPermissions.canManipulatePieces
     ) {
       return;
@@ -2905,11 +2919,26 @@ function saveSectionProperties() {
   const position = piecePreview?.pieceId === piece.id
     ? piecePreview.position
     : piece.position;
-  const screenPosition = mapToScreen(position.x, position.y);
+
+  const screenPosition =
+    mapToScreen(
+      position.x,
+      position.y
+    );
+
+  const distanceSelected =
+    interactionMode === 'distance' &&
+    distanceMeasurement.anchors.some(
+      (anchor) =>
+        anchor.kind === 'piece' &&
+        anchor.pieceId === piece.id
+    );
+
   const className = [
     'map-piece',
     `map-piece-${piece.appearance.shape}`,
     piece.id === focusedPieceId ? 'focused' : '',
+    distanceSelected ? 'distance-selected' : '',
     piecePreview?.pieceId === piece.id ? 'dragging' : '',
     partyDropTargetId &&
       (piece.id === partyDropTargetId || piece.id === piecePreview?.pieceId)
@@ -2927,14 +2956,44 @@ function saveSectionProperties() {
           left: screenPosition.x,
           top: screenPosition.y,
           backgroundColor: piece.appearance.fillColor,
-          borderColor: piece.appearance.borderColor,
+          borderColor: distanceSelected
+            ? '#39ff14'
+            : piece.appearance.borderColor,
+          cursor:
+            interactionMode === 'explore'
+              ? 'grab'
+              : 'pointer',
         }}
         onPointerDown={(event) => handlePiecePointerDown(event, piece)}
         onPointerMove={handlePiecePointerMove}
         onPointerUp={handlePiecePointerUp}
         onPointerCancel={cancelPieceDrag}
         onLostPointerCapture={cancelPieceDrag}
-                onContextMenu={(event) => {
+        
+        onContextMenu={(event) => {
+          if (interactionMode === 'distance') {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const anchor =
+              distanceMeasurement.anchors
+                .slice()
+                .reverse()
+                .find(
+                  (candidate) =>
+                    candidate.kind === 'piece' &&
+                    candidate.pieceId === piece.id
+                );
+
+            if (anchor) {
+              distanceMeasurement.removeAnchor(
+                anchor.id
+              );
+            }
+
+            return;
+          }
+
           if (
             !interactionPermissions.canManipulatePieces
           ) {
