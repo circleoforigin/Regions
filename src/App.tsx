@@ -183,7 +183,8 @@ function App() {
   );
 
   const [activeFeatures, setActiveFeatures] = useState<Feature[]>([]);
-    const [
+  
+  const [
     activePathNetwork,
     setActivePathNetwork,
   ] = useState<PathNetwork>({
@@ -219,6 +220,7 @@ function App() {
 
   const activeProjectId = activeProject?.id ?? null;
   const activeMapId = activeMap?.id ?? null;
+  
   async function handlePathMapChange(
     updater: (
       map: RegionMap
@@ -3208,7 +3210,7 @@ async function handleSelectProject(project: Project) {
       setActiveMap(normalizedMap);
       clearActiveMapImage();
 
-            if (normalizedMap) {
+      if (normalizedMap) {
         const featuresPromise =
           featureRepository.loadFeatures(
             normalizedMap.featureIds
@@ -6304,7 +6306,7 @@ mapMediaSlotsEnabled={
           mapViewportRef.current?.cancelInteractions();
           setMapToMakeRoot(activeMap);
         }}
-                imageRegistration={
+        imageRegistration={
           activeMap.imageRegistration
         }
         calibrationActive={
@@ -6338,7 +6340,7 @@ onCalibrationPointMove={(
   }
 }}
         features={activeFeatures}
-                pathNetwork={
+        pathNetwork={
           activePathNetwork
         }
 

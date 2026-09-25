@@ -80,99 +80,61 @@ export async function savePathSegment(
   };
 }
 
-export function splitPathSegment(
-  resolved: ResolvedPathSegment,
-  requestedPosition: SpatialPoint
-): {
-  terminal: StandalonePathTerminal;
-  first: PathSegment;
-  second: PathSegment;
-} {
-  const projection =
-    projectPointOntoPath(
-      resolved,
-      requestedPosition
-    );
+export async function replacePathSegmentWithSplit(
+  map: Map,
+  originalSegmentId: string,
+  terminal: StandalonePathTerminal,
+  first: PathSegment,
+  second: PathSegment
+): Promise<Map> {
+  await pathTerminalRepository.saveTerminal(
+    terminal
+  );
 
-  const original =
-    resolved.segment;
+  await Promise.all([
+    pathSegmentRepository.saveSegment(
+      first
+    ),
 
-  const terminal =
-    createStandalonePathTerminal(
-      original.mapId,
-      projection.position
-    );
+    pathSegmentRepository.saveSegment(
+      second
+    ),
+  ]);
 
-  const terminalReference:
-    PathTerminalReference = {
-      kind: 'standalone',
-      terminalId: terminal.id,
-    };
+  await pathSegmentRepository.deleteSegment(
+    originalSegmentId
+  );
 
-  const now = new Date();
+  const terminalIds =
+    map.pathTerminalIds ?? [];
 
-  const sharedProperties = {
-    mapId: original.mapId,
-    name: original.name,
-    kindId: original.kindId,
-    subtypeId: original.subtypeId,
-    qualityId: original.qualityId,
-    layerId: original.layerId,
-  };
-
-  const first: PathSegment = {
-    ...sharedProperties,
-
-    id: crypto.randomUUID(),
-
-    start: original.start,
-    end: terminalReference,
-
-    shapePoints:
-      original.shapePoints
-        .slice(
-          0,
-          projection.legIndex
-        )
-        .map((point) => ({
-          ...point,
-          position: {
-            ...point.position,
-          },
-        })),
-
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  const second: PathSegment = {
-    ...sharedProperties,
-
-    id: crypto.randomUUID(),
-
-    start: terminalReference,
-    end: original.end,
-
-    shapePoints:
-      original.shapePoints
-        .slice(
-          projection.legIndex
-        )
-        .map((point) => ({
-          ...point,
-          position: {
-            ...point.position,
-          },
-        })),
-
-    createdAt: now,
-    updatedAt: now,
-  };
+  const segmentIds =
+    map.pathSegmentIds ?? [];
 
   return {
-    terminal,
-    first,
-    second,
+    ...map,
+
+    pathTerminalIds:
+      terminalIds.includes(
+        terminal.id
+      )
+        ? terminalIds
+        : [
+            ...terminalIds,
+            terminal.id,
+          ],
+
+    pathSegmentIds: [
+      ...segmentIds.filter(
+        (id) =>
+          id !== originalSegmentId
+      ),
+
+      first.id,
+      second.id,
+    ],
+
+    updatedAt: new Date(),
   };
 }
 
