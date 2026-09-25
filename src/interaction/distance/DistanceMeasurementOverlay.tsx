@@ -1,4 +1,6 @@
-import type { DistancePoint } from './DistanceMeasurement';
+import type {
+  ResolvedDistanceAnchor,
+} from './DistanceMeasurement';
 
 interface Point {
   x: number;
@@ -6,66 +8,90 @@ interface Point {
 }
 
 interface DistanceMeasurementOverlayProps {
-  points: DistancePoint[];
-  mapToScreen: (x: number, y: number) => Point;
-  onRemovePoint: (pointId: string) => void;
+  anchors: ResolvedDistanceAnchor[];
+
+  mapToScreen: (
+    x: number,
+    y: number
+  ) => Point;
+
+  onRemoveAnchor: (
+    anchorId: string
+  ) => void;
 }
 
 export default function DistanceMeasurementOverlay({
-  points,
+  anchors,
   mapToScreen,
-  onRemovePoint,
+  onRemoveAnchor,
 }: DistanceMeasurementOverlayProps) {
-  const screenPoints = points.map((point) => ({
-    ...point,
-    screen: mapToScreen(
-      point.position.x,
-      point.position.y
-    ),
-  }));
+  const screenAnchors = anchors.map(
+    (resolved) => ({
+      ...resolved,
+      screen: mapToScreen(
+        resolved.position.x,
+        resolved.position.y
+      ),
+    })
+  );
 
   return (
     <svg
       className="distance-measurement-layer"
       aria-hidden="true"
     >
-      {screenPoints.slice(1).map((point, index) => {
-        const previous = screenPoints[index];
+      {screenAnchors
+        .slice(1)
+        .map((resolved, index) => {
+          const previous =
+            screenAnchors[index];
+
+          return (
+            <line
+              key={`${previous.anchor.id}-${resolved.anchor.id}`}
+              className="distance-measurement-line"
+              x1={previous.screen.x}
+              y1={previous.screen.y}
+              x2={resolved.screen.x}
+              y2={resolved.screen.y}
+            />
+          );
+        })}
+
+      {screenAnchors.map((resolved) => {
+        if (
+          resolved.anchor.kind !==
+          'temporary'
+        ) {
+          return null;
+        }
 
         return (
-          <line
-            key={`${previous.id}-${point.id}`}
-            className="distance-measurement-line"
-            x1={previous.screen.x}
-            y1={previous.screen.y}
-            x2={point.screen.x}
-            y2={point.screen.y}
-          />
+          <g key={resolved.anchor.id}>
+            <circle
+              className="distance-measurement-node"
+              cx={resolved.screen.x}
+              cy={resolved.screen.y}
+              r={5}
+            />
+
+            <circle
+              className="distance-measurement-node-hitbox"
+              cx={resolved.screen.x}
+              cy={resolved.screen.y}
+              r={7}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                onRemoveAnchor(
+                  resolved.anchor.id
+                );
+              }}
+            />
+          </g>
         );
       })}
-
-      {screenPoints.map((point) => (
-        <g key={point.id}>
-          <circle
-            className="distance-measurement-node"
-            cx={point.screen.x}
-            cy={point.screen.y}
-            r={5}
-          />
-
-          <circle
-            className="distance-measurement-node-hitbox"
-            cx={point.screen.x}
-            cy={point.screen.y}
-            r={7}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onRemovePoint(point.id);
-            }}
-          />
-        </g>
-      ))}
     </svg>
   );
 }

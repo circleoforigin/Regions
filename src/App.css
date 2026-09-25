@@ -2889,8 +2889,8 @@ box-shadow:
 }
 
 .distance-measurement-node {
-  fill: white;
-  stroke: black;
+  fill: #39ff14;
+  stroke: #000000;
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
@@ -2903,7 +2903,7 @@ box-shadow:
   cursor: pointer;
 }
 
-.map-feature-marker.distance-selected {
-  outline: 2px solid white;
-  outline-offset: 3px;
+.map-feature-marker.distance-selected .map-feature-dot {
+  background: #39ff14;
+  border-color: #000000;
 }

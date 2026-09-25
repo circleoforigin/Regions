@@ -6,6 +6,7 @@ import { isValidAlignment, transformBoundaryPoint } from '../sections/BoundaryTr
 import { getInteractionModePermissions } from '../interaction/InteractionModePermissions';
 import DistanceMeasurementOverlay from '../interaction/distance/DistanceMeasurementOverlay';
 import { useDistanceMeasurement } from '../interaction/distance/useDistanceMeasurement';
+import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceAnchors';
 import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
 import {
@@ -350,6 +351,12 @@ function MapViewport({
   const interactionPermissions =
     getInteractionModePermissions(interactionMode);
   const distanceMeasurement = useDistanceMeasurement();
+  const resolvedDistanceAnchors =
+    resolveDistanceAnchors(
+      distanceMeasurement.anchors,
+      features,
+      pieces
+    );
   const { scale, panX, panY } = state.viewport;
   const pan = { x: panX, y: panY };
   const contextMenu = state.contextMenu;
@@ -2697,9 +2704,11 @@ function saveSectionProperties() {
 
 {interactionMode === 'distance' && (
   <DistanceMeasurementOverlay
-    points={distanceMeasurement.points}
+    anchors={resolvedDistanceAnchors}
     mapToScreen={mapToScreen}
-    onRemovePoint={distanceMeasurement.removePoint}
+    onRemoveAnchor={
+      distanceMeasurement.removeAnchor
+    }
   />
 )}
 
@@ -3019,10 +3028,10 @@ function saveSectionProperties() {
   const moveIsValid = !isMoving || isMovePositionValid(position);
     const distanceSelected =
     interactionMode === 'distance' &&
-    distanceMeasurement.points.some(
-      (point) =>
-        point.kind === 'feature' &&
-        point.featureId === feature.id
+    distanceMeasurement.anchors.some(
+      (anchor) =>
+        anchor.kind === 'feature' &&
+        anchor.featureId === feature.id
     );
 
   const markerClasses = [
@@ -3062,8 +3071,7 @@ function saveSectionProperties() {
 
           if (interactionMode === 'distance') {
             distanceMeasurement.addFeature(
-              feature.id,
-              feature.position
+              feature.id
             );
             return;
           }
