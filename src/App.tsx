@@ -6188,11 +6188,35 @@ mapMediaSlotsEnabled={
           activeMap.imageRegistration
         }
         calibrationActive={
-          showScaleCalibrationDialog
-        }
-        onCalibrationPoint={
-          handleScaleCalibrationPoint
-        }
+  showScaleCalibrationDialog
+}
+
+calibrationFirstPoint={
+  scaleCalibrationFirstPoint
+}
+
+calibrationSecondPoint={
+  scaleCalibrationSecondPoint
+}
+
+onCalibrationPoint={
+  handleScaleCalibrationPoint
+}
+
+onCalibrationPointMove={(
+  pointIndex,
+  point
+) => {
+  if (pointIndex === 0) {
+    setScaleCalibrationFirstPoint(
+      point
+    );
+  } else {
+    setScaleCalibrationSecondPoint(
+      point
+    );
+  }
+}}
         features={activeFeatures}
         pieces={activeProject.pieces.filter((piece) => {
           return piece.mapId === activeMap.id &&

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -28,6 +29,11 @@ interface MapScaleCalibrationDialogProps {
   ) => void;
 }
 
+interface WindowPosition {
+  x: number;
+  y: number;
+}
+
 function MapScaleCalibrationDialog({
   map,
   firstPoint,
@@ -49,6 +55,20 @@ function MapScaleCalibrationDialog({
       ?.distanceScale
       ?.unit ?? 'miles'
   );
+
+  const [
+    position,
+    setPosition,
+  ] = useState<WindowPosition>({
+    x: 24,
+    y: 72,
+  });
+
+  const dragRef = useRef<{
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
 
   useEffect(() => {
     const existing =
@@ -119,18 +139,176 @@ function MapScaleCalibrationDialog({
     });
   }
 
-  return (
-    <div className="dialog-backdrop">
-      <div className="dialog">
-        <h2>Calibrate Scale</h2>
+  function handleDragStart(
+    event:
+      React.PointerEvent<HTMLDivElement>
+  ) {
+    const windowElement =
+      event.currentTarget
+        .parentElement;
 
+    if (!windowElement) {
+      return;
+    }
+
+    const rect =
+      windowElement
+        .getBoundingClientRect();
+
+    dragRef.current = {
+      pointerId:
+        event.pointerId,
+
+      offsetX:
+        event.clientX -
+        rect.left,
+
+      offsetY:
+        event.clientY -
+        rect.top,
+    };
+
+    event.currentTarget
+      .setPointerCapture(
+        event.pointerId
+      );
+  }
+
+  function handleDragMove(
+    event:
+      React.PointerEvent<HTMLDivElement>
+  ) {
+    const drag =
+      dragRef.current;
+
+    if (
+      !drag ||
+      drag.pointerId !==
+        event.pointerId
+    ) {
+      return;
+    }
+
+    const windowElement =
+      event.currentTarget
+        .parentElement;
+
+    if (!windowElement) {
+      return;
+    }
+
+    const rect =
+      windowElement
+        .getBoundingClientRect();
+
+    const maxX =
+      Math.max(
+        0,
+        window.innerWidth -
+          rect.width
+      );
+
+    const maxY =
+      Math.max(
+        0,
+        window.innerHeight -
+          rect.height
+      );
+
+    setPosition({
+      x: Math.max(
+        0,
+        Math.min(
+          maxX,
+          event.clientX -
+            drag.offsetX
+        )
+      ),
+
+      y: Math.max(
+        0,
+        Math.min(
+          maxY,
+          event.clientY -
+            drag.offsetY
+        )
+      ),
+    });
+  }
+
+  function handleDragEnd(
+    event:
+      React.PointerEvent<HTMLDivElement>
+  ) {
+    if (
+      dragRef.current
+        ?.pointerId !==
+      event.pointerId
+    ) {
+      return;
+    }
+
+    dragRef.current = null;
+
+    try {
+      event.currentTarget
+        .releasePointerCapture(
+          event.pointerId
+        );
+    } catch {
+      // Capture may already
+      // have been released.
+    }
+  }
+
+  return (
+    <div
+      className="scale-calibration-window"
+      style={{
+        left: position.x,
+        top: position.y,
+      }}
+    >
+      <div
+        className="scale-calibration-titlebar"
+        onPointerDown={
+          handleDragStart
+        }
+        onPointerMove={
+          handleDragMove
+        }
+        onPointerUp={
+          handleDragEnd
+        }
+        onPointerCancel={
+          handleDragEnd
+        }
+      >
+        <span>
+          Calibrate Scale
+        </span>
+
+        <button
+          type="button"
+          className="scale-calibration-close"
+          onPointerDown={(event) =>
+            event.stopPropagation()
+          }
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="scale-calibration-content">
         <p>
           Click two points on the map
           with a known distance between
           them.
         </p>
 
-        <p>
+        <p className="scale-calibration-status">
           {!firstPoint
             ? 'Click the first point.'
             : !secondPoint
@@ -142,6 +320,7 @@ function MapScaleCalibrationDialog({
 
         <label>
           Distance
+
           <input
             type="number"
             min="0"
@@ -157,6 +336,7 @@ function MapScaleCalibrationDialog({
 
         <label>
           Unit
+
           <select
             value={unit}
             onChange={(event) =>
@@ -185,33 +365,36 @@ function MapScaleCalibrationDialog({
           </select>
         </label>
 
-        {(firstPoint ||
-          secondPoint) && (
+        <div className="scale-calibration-actions">
           <button
             type="button"
+            disabled={
+              !firstPoint &&
+              !secondPoint
+            }
             onClick={
               onResetPoints
             }
           >
             Reset Points
           </button>
-        )}
 
-        <div className="dialog-buttons">
-          <button
-            type="button"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
+          <div className="scale-calibration-actions-right">
+            <button
+              type="button"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
 
-          <button
-            type="button"
-            disabled={!canSave}
-            onClick={handleSave}
-          >
-            Save
-          </button>
+            <button
+              type="button"
+              disabled={!canSave}
+              onClick={handleSave}
+            >
+              Save
+            </button>
+          </div>
         </div>
       </div>
     </div>

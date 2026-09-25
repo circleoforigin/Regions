@@ -131,11 +131,16 @@ interface MapViewportProps {
 };
 calibrationActive?: boolean;
 
+calibrationFirstPoint?: Point | null;
+calibrationSecondPoint?: Point | null;
+
 onCalibrationPoint?: (
-  point: {
-    x: number;
-    y: number;
-  }
+  point: Point
+) => void;
+
+onCalibrationPointMove?: (
+  pointIndex: 0 | 1,
+  point: Point
 ) => void;
 features: Feature[];
 pieces?: Piece[];
@@ -276,7 +281,10 @@ function MapViewport({
   onMakeWorldRoot,
   imageRegistration,
   calibrationActive = false,
+  calibrationFirstPoint,
+  calibrationSecondPoint,
   onCalibrationPoint,
+  onCalibrationPointMove,
   features,
   pieces = [],
   allPieces = pieces,
@@ -387,6 +395,13 @@ function MapViewport({
     startPosition: Point;
     grabOffset: Point;
     moved: boolean;
+  } | null>(null);
+
+  const calibrationDragRef =
+  useRef<{
+    pointIndex: 0 | 1;
+    pointerId: number;
+    target: SVGCircleElement;
   } | null>(null);
 
   const latestPointerRef = useRef<Point | null>(null);
@@ -755,6 +770,88 @@ useEffect(() => {
   }
   alignmentDragRef.current = null;
 }, [sectionMode, boundaryAlignment]);
+
+function handleCalibrationNodePointerDown(
+  event:
+    React.PointerEvent<SVGCircleElement>,
+  pointIndex: 0 | 1
+) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  calibrationDragRef.current = {
+    pointIndex,
+    pointerId: event.pointerId,
+    target: event.currentTarget,
+  };
+
+  event.currentTarget.setPointerCapture(
+    event.pointerId
+  );
+}
+
+function handleCalibrationNodePointerMove(
+  event:
+    React.PointerEvent<SVGCircleElement>
+) {
+  const drag =
+    calibrationDragRef.current;
+
+  if (
+    !drag ||
+    drag.pointerId !== event.pointerId
+  ) {
+    return;
+  }
+
+  const point =
+    screenToMap(
+      event.clientX,
+      event.clientY
+    );
+
+  if (
+    !point ||
+    !isPointInsideMap(point)
+  ) {
+    return;
+  }
+
+  onCalibrationPointMove?.(
+    drag.pointIndex,
+    point
+  );
+}
+
+function handleCalibrationNodePointerUp(
+  event:
+    React.PointerEvent<SVGCircleElement>
+) {
+  const drag =
+    calibrationDragRef.current;
+
+  if (
+    !drag ||
+    drag.pointerId !== event.pointerId
+  ) {
+    return;
+  }
+
+  calibrationDragRef.current = null;
+
+  try {
+    event.currentTarget
+      .releasePointerCapture(
+        event.pointerId
+      );
+  } catch {
+    // Pointer capture may
+    // already be released.
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+}
 
 function stopPanelMapScrolling() {
   latestPointerRef.current = null;
@@ -1819,7 +1916,7 @@ function handleContextMenu(
     event:
       React.PointerEvent<HTMLDivElement>
   ) {
-      if (
+       if (
     calibrationActive &&
     event.button === 0
   ) {
@@ -1829,7 +1926,10 @@ function handleContextMenu(
         event.clientY
       );
 
-    if (point) {
+    if (
+      point &&
+      isPointInsideMap(point)
+    ) {
       onCalibrationPoint?.(
         point
       );
@@ -2427,6 +2527,103 @@ function saveSectionProperties() {
     `translate(-50%, -50%) scale(${scale * registration.scale})`,
 }}
 />
+
+{calibrationActive && (
+  <svg
+    className="scale-calibration-layer"
+    aria-hidden="true"
+  >
+    {calibrationFirstPoint &&
+      calibrationSecondPoint && (() => {
+        const first =
+          mapToScreen(
+            calibrationFirstPoint.x,
+            calibrationFirstPoint.y
+          );
+
+        const second =
+          mapToScreen(
+            calibrationSecondPoint.x,
+            calibrationSecondPoint.y
+          );
+
+        return (
+          <line
+            className="scale-calibration-connector"
+            x1={first.x}
+            y1={first.y}
+            x2={second.x}
+            y2={second.y}
+          />
+        );
+      })()}
+
+    {[
+      calibrationFirstPoint,
+      calibrationSecondPoint,
+    ].map((point, index) => {
+      if (!point) {
+        return null;
+      }
+
+      const screen =
+        mapToScreen(
+          point.x,
+          point.y
+        );
+
+      const pointIndex =
+        index as 0 | 1;
+
+      return (
+        <g
+          key={
+            pointIndex === 0
+              ? 'calibration-first'
+              : 'calibration-second'
+          }
+        >
+          <line
+            className="scale-calibration-marker"
+            x1={screen.x}
+            y1={screen.y - 14}
+            x2={screen.x}
+            y2={screen.y + 14}
+          />
+
+          <circle
+            className="scale-calibration-node-hitbox"
+            cx={screen.x}
+            cy={screen.y}
+            r={6}
+            onPointerDown={(event) =>
+              handleCalibrationNodePointerDown(
+                event,
+                pointIndex
+              )
+            }
+            onPointerMove={
+              handleCalibrationNodePointerMove
+            }
+            onPointerUp={
+              handleCalibrationNodePointerUp
+            }
+            onPointerCancel={
+              handleCalibrationNodePointerUp
+            }
+          />
+
+          <circle
+            className="scale-calibration-node"
+            cx={screen.x}
+            cy={screen.y}
+            r={4}
+          />
+        </g>
+      );
+    })}
+  </svg>
+)}
 
 <svg className="section-geometry-layer" aria-hidden="true">
   {visibleSections.map((section) => {

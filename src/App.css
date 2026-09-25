@@ -2687,3 +2687,167 @@ box-shadow:
 .journal-connect-empty {
   opacity: 0.65;
 }
+
+/* =========================
+   MAP SCALE CALIBRATION
+   ========================= */
+
+.scale-calibration-window {
+  position: fixed;
+  z-index: 2000;
+
+  width: 360px;
+  box-sizing: border-box;
+
+  background: #252525;
+  border: 1px solid #454545;
+
+  box-shadow:
+    0 12px 32px
+    rgba(0, 0, 0, 0.5);
+}
+
+.scale-calibration-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 9px 10px;
+
+  background: #1d1d1d;
+  border-bottom: 1px solid #454545;
+
+  color: #ffffff;
+  font-weight: 600;
+
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.scale-calibration-close {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+
+  border: 0;
+  background: transparent;
+
+  color: #bdbdbd;
+  font-size: 20px;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+.scale-calibration-close:hover {
+  color: #ffffff;
+}
+
+.scale-calibration-content {
+  padding: 16px;
+}
+
+.scale-calibration-content p {
+  margin: 0 0 12px;
+}
+
+.scale-calibration-status {
+  color: #cfcfcf;
+}
+
+.scale-calibration-content label {
+  display: grid;
+  gap: 6px;
+
+  margin-top: 12px;
+
+  color: #cfcfcf;
+  font-size: 13px;
+}
+
+.scale-calibration-content input,
+.scale-calibration-content select {
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 8px 10px;
+
+  background: #181818;
+  color: #ffffff;
+
+  border: 1px solid #454545;
+}
+
+.scale-calibration-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  margin-top: 18px;
+}
+
+.scale-calibration-actions-right {
+  display: flex;
+  gap: 8px;
+}
+
+.scale-calibration-actions button {
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.scale-calibration-actions button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* =========================
+   SCALE CALIBRATION MARKERS
+   ========================= */
+
+.scale-calibration-layer {
+  position: absolute;
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: visible;
+
+  pointer-events: none;
+
+  z-index: 40;
+}
+
+.scale-calibration-connector {
+  stroke: #39ff14;
+  stroke-width: 2;
+
+  pointer-events: none;
+}
+
+.scale-calibration-marker {
+  stroke: #39ff14;
+  stroke-width: 3;
+
+  pointer-events: none;
+}
+
+.scale-calibration-node-hitbox {
+  fill: transparent;
+
+  pointer-events: all;
+  cursor: pointer;
+
+  touch-action: none;
+}
+
+.scale-calibration-node {
+  fill: #ffffff;
+  stroke: #39ff14;
+  stroke-width: 2;
+
+  pointer-events: none;
+}
