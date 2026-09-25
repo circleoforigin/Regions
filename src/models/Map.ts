@@ -69,6 +69,9 @@ export interface Map {
   featureIds: string[];
   sectionIds?: string[];
 
+  pathTerminalIds?: string[];
+  pathSegmentIds?: string[];
+
   createdAt: Date;
   updatedAt: Date;
 }
