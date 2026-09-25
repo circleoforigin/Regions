@@ -16,6 +16,14 @@ import type {
   Feature,
 } from '../models/Feature';
 
+interface PathDragPreview {
+  kind: 'terminal' | 'shape';
+  id: string;
+  segmentId?: string;
+  position: SpatialPoint;
+  pointerId: number;
+}
+
 interface PathOverlayProps {
   terminals:
     StandalonePathTerminal[];
@@ -34,6 +42,9 @@ interface PathOverlayProps {
 
   draftPointer?:
     SpatialPoint | null;
+
+  dragPreview?:
+    PathDragPreview | null;
 
   mapToScreen: (
     x: number,
@@ -64,6 +75,13 @@ interface PathOverlayProps {
     segmentId: string,
     pointId: string
   ) => void;
+
+  onNodePointerUp: (
+    event:
+      React.PointerEvent<SVGCircleElement>
+  ) => void;
+
+  onNodePointerCancel: () => void;
 }
 
 export default function PathOverlay({
@@ -74,6 +92,7 @@ export default function PathOverlay({
   draftStartPosition,
   draftShapePoints = [],
   draftPointer,
+  dragPreview,
 
   mapToScreen,
 
@@ -81,11 +100,55 @@ export default function PathOverlay({
   onSegmentShiftClick,
   onTerminalPointerDown,
   onShapePointerDown,
+  onNodePointerUp,
+  onNodePointerCancel,
 }: PathOverlayProps) {
+  const displayedTerminals =
+    terminals.map((terminal) =>
+      dragPreview?.kind ===
+        'terminal' &&
+      dragPreview.id === terminal.id
+        ? {
+            ...terminal,
+            position:
+              dragPreview.position,
+          }
+        : terminal
+    );
+
+  const displayedSegments =
+    segments.map((segment) => {
+      if (
+        dragPreview?.kind !==
+          'shape' ||
+        dragPreview.segmentId !==
+          segment.id
+      ) {
+        return segment;
+      }
+
+      return {
+        ...segment,
+
+        shapePoints:
+          segment.shapePoints.map(
+            (point) =>
+              point.id ===
+                dragPreview.id
+                ? {
+                    ...point,
+                    position:
+                      dragPreview.position,
+                  }
+                : point
+          ),
+      };
+    });
+
   const resolved =
     resolvePathSegments(
-      segments,
-      terminals,
+      displayedSegments,
+      displayedTerminals,
       features
     );
 
@@ -116,12 +179,12 @@ export default function PathOverlay({
                 )
                 .join(' ')
             }
-            onContextMenu={(event) => {
+            onContextMenu={(event) =>
               onSegmentRightClick(
                 event,
                 item.segment.id
-              );
-            }}
+              )
+            }
             onClick={(event) => {
               if (!event.shiftKey) {
                 return;
@@ -136,7 +199,7 @@ export default function PathOverlay({
         );
       })}
 
-      {segments.flatMap(
+      {displayedSegments.flatMap(
         (segment) =>
           segment.shapePoints.map(
             (point) => {
@@ -161,13 +224,22 @@ export default function PathOverlay({
                         point.id
                       )
                   }
+                  onPointerUp={
+                    onNodePointerUp
+                  }
+                  onPointerCancel={
+                    onNodePointerCancel
+                  }
+                  onLostPointerCapture={
+                    onNodePointerCancel
+                  }
                 />
               );
             }
           )
       )}
 
-      {terminals.map(
+      {displayedTerminals.map(
         (terminal) => {
           const screen =
             mapToScreen(
@@ -188,6 +260,15 @@ export default function PathOverlay({
                     event,
                     terminal.id
                   )
+              }
+              onPointerUp={
+                onNodePointerUp
+              }
+              onPointerCancel={
+                onNodePointerCancel
+              }
+              onLostPointerCapture={
+                onNodePointerCancel
               }
             />
           );

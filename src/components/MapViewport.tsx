@@ -1950,7 +1950,34 @@ function handleContextMenu(
 ) {
   event.preventDefault();
 
-  if (interactionMode === 'distance') {
+if (interactionMode === 'path') {
+  const point =
+    screenToMap(
+      event.clientX,
+      event.clientY
+    );
+
+  if (
+    point &&
+    isPointInsideMap(point) &&
+    pathInteraction.draft
+  ) {
+    pathInteraction.handleShapeIntent(
+      point
+    );
+  }
+
+  setPieceContextMenu(null);
+  setSectionContextMenu(null);
+
+  dispatch({
+    type: 'contextMenu.close',
+  });
+
+  return;
+}
+
+if (interactionMode === 'distance') {
     distanceMeasurement.clear();
     setPieceContextMenu(null);
     setSectionContextMenu(null);
@@ -2098,6 +2125,39 @@ function handleContextMenu(
         return;
       }
     }
+
+    if (
+  interactionMode === 'path' &&
+  event.button === 0 &&
+  event.ctrlKey
+) {
+  const target = event.target;
+
+  const mapBackground =
+    target === event.currentTarget ||
+    target instanceof HTMLImageElement;
+
+  if (mapBackground) {
+    const point = screenToMap(
+      event.clientX,
+      event.clientY
+    );
+
+    if (
+      point &&
+      isPointInsideMap(point)
+    ) {
+      event.preventDefault();
+
+      void pathInteraction
+        .handleTerminalIntent(
+          point
+        );
+    }
+
+    return;
+  }
+}
 
        if (
     calibrationActive &&
@@ -2256,8 +2316,41 @@ function handleContextMenu(
     event:
       React.PointerEvent<HTMLDivElement>
   ) {
-    trackEdgePointer(event.clientX, event.clientY);
-    if (interactionMode === 'distance') {
+    trackEdgePointer(
+  event.clientX,
+  event.clientY
+);
+
+if (interactionMode === 'path') {
+  const point =
+    screenToMap(
+      event.clientX,
+      event.clientY
+    );
+
+  setPathPointer(
+    point &&
+    isPointInsideMap(point)
+      ? point
+      : null
+  );
+
+  if (
+    pathDragPreview?.pointerId ===
+      event.pointerId &&
+    point &&
+    isPointInsideMap(point)
+  ) {
+    setPathDragPreview({
+      ...pathDragPreview,
+      position: point,
+    });
+
+    return;
+  }
+}
+
+if (interactionMode === 'distance') {
   const viewport = viewportRef.current;
 
   if (viewport) {
@@ -2587,6 +2680,151 @@ function cancelSubtitleEdit() {
   setEditingSubtitle(false);
 }
 
+function handlePathTerminalPointerDown(
+  event:
+    React.PointerEvent<SVGCircleElement>,
+  terminalId: string
+) {
+  if (
+    interactionMode !== 'path' ||
+    event.button !== 0
+  ) {
+    return;
+  }
+
+  const terminal =
+    pathNetwork.terminals.find(
+      (candidate) =>
+        candidate.id === terminalId
+    );
+
+  if (!terminal) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  event.currentTarget.setPointerCapture(
+    event.pointerId
+  );
+
+  pathInteraction.beginTerminalMove(
+    terminalId
+  );
+
+  setPathDragPreview({
+    kind: 'terminal',
+    id: terminalId,
+    position: terminal.position,
+    pointerId: event.pointerId,
+  });
+}
+
+function handlePathShapePointerDown(
+  event:
+    React.PointerEvent<SVGCircleElement>,
+  segmentId: string,
+  pointId: string
+) {
+  if (
+    interactionMode !== 'path' ||
+    event.button !== 0
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (event.shiftKey) {
+    void pathInteraction.removeShapePoint(
+      segmentId,
+      pointId
+    );
+
+    return;
+  }
+
+  const segment =
+    pathNetwork.segments.find(
+      (candidate) =>
+        candidate.id === segmentId
+    );
+
+  const point =
+    segment?.shapePoints.find(
+      (candidate) =>
+        candidate.id === pointId
+    );
+
+  if (!point) {
+    return;
+  }
+
+  event.currentTarget.setPointerCapture(
+    event.pointerId
+  );
+
+  pathInteraction.beginShapeMove(
+    segmentId,
+    pointId
+  );
+
+  setPathDragPreview({
+    kind: 'shape',
+    id: pointId,
+    segmentId,
+    position: point.position,
+    pointerId: event.pointerId,
+  });
+}
+
+function handlePathNodePointerUp(
+  event:
+    React.PointerEvent<SVGCircleElement>
+) {
+  if (
+    !pathDragPreview ||
+    pathDragPreview.pointerId !==
+      event.pointerId
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const preview =
+    pathDragPreview;
+
+  setPathDragPreview(null);
+
+  releasePointerCaptureSafely(
+    event.currentTarget,
+    event.pointerId
+  );
+
+  if (preview.kind === 'terminal') {
+    void pathInteraction
+      .commitTerminalMove(
+        preview.position
+      );
+
+    return;
+  }
+
+  void pathInteraction
+    .commitShapeMove(
+      preview.position
+    );
+}
+
+function cancelPathNodeMove() {
+  setPathDragPreview(null);
+  pathInteraction.cancelMove();
+}
+
 function handleSectionNodePointerDown(
   event: React.PointerEvent<HTMLButtonElement>,
   node: SectionNode
@@ -2852,6 +3090,99 @@ function saveSectionProperties() {
   }
 />
 
+{interactionMode === 'path' && (
+  <PathOverlay
+    terminals={
+      pathNetwork.terminals
+    }
+    segments={
+      pathNetwork.segments
+    }
+    features={features}
+    draftStartPosition={
+      getPathDraftStartPosition()
+    }
+    draftShapePoints={
+      pathInteraction.draft
+        ?.shapePoints.map(
+          (point) =>
+            point.position
+        ) ?? []
+    }
+    draftPointer={
+      pathPointer
+    }
+    dragPreview={
+      pathDragPreview
+    }
+    mapToScreen={
+      mapToScreen
+    }
+    onSegmentRightClick={(
+      event,
+      segmentId
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const point =
+        screenToMap(
+          event.clientX,
+          event.clientY
+        );
+
+      if (!point) {
+        return;
+      }
+
+      if (event.ctrlKey) {
+        void pathInteraction
+          .splitSegment(
+            segmentId,
+            point
+          );
+
+        return;
+      }
+
+      void pathInteraction
+        .insertShapePoint(
+          segmentId,
+          point
+        );
+    }}
+    onSegmentShiftClick={(
+      event,
+      segmentId
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (
+        window.confirm(
+          'Delete this Path segment?'
+        )
+      ) {
+        void pathInteraction
+          .removeSegment(
+            segmentId
+          );
+      }
+    }}
+    onTerminalPointerDown={
+      handlePathTerminalPointerDown
+    }
+    onShapePointerDown={
+      handlePathShapePointerDown
+    }
+    onNodePointerUp={
+      handlePathNodePointerUp
+    }
+    onNodePointerCancel={
+      cancelPathNodeMove
+    }
+  />
+)}
 
 <svg className="section-geometry-layer" aria-hidden="true">
   {visibleSections.map((section) => {
@@ -3241,12 +3572,39 @@ function saveSectionProperties() {
           top: screenPosition.y,
         }}
         onPointerDown={(event) => {
-          if (state.editingMode === 'move-feature') return;
-          setPieceContextMenu(null);
-          event.stopPropagation();
-        }}
-        onClick={() => {
-          if (suppressNextFeatureClickRef.current) {
+  if (
+    state.editingMode ===
+      'move-feature'
+  ) {
+    return;
+  }
+
+  setPieceContextMenu(null);
+  event.stopPropagation();
+
+  if (
+    interactionMode === 'path' &&
+    event.button === 0 &&
+    event.ctrlKey
+  ) {
+    event.preventDefault();
+
+    void pathInteraction
+      .handleTerminalIntent(
+        feature.position,
+        feature
+      );
+  }
+}}
+        onClick={(event) => {
+  if (
+    interactionMode === 'path' &&
+    event.ctrlKey
+  ) {
+    return;
+  }
+
+  if (suppressNextFeatureClickRef.current) {
             suppressNextFeatureClickRef.current = false;
             return;
           }
