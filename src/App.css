@@ -944,6 +944,7 @@
   background: transparent;
   transform: translate(-50%, -50%);
   cursor: pointer;
+  transform-origin: center;
 }
 
 .map-feature-marker.moving {
@@ -971,6 +972,15 @@
   box-sizing: border-box;
 
   transform: translate(-50%, -50%);
+  transition:
+    transform 140ms ease-out;
+  transform-origin: center;
+}
+
+.map-feature-marker:hover .map-feature-dot {
+  transform:
+    translate(-50%, -50%)
+    scale(1.3);
 }
 
 .map-feature-connection .map-feature-dot {
@@ -3057,6 +3067,14 @@ box-shadow:
   stroke: #111111;
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
+  transition:
+    transform 140ms ease-out;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.path-terminal-node:hover {
+  transform: scale(1.3);
 }
 
 .path-terminal-node-editable {
@@ -3070,7 +3088,7 @@ box-shadow:
 }
 
 .path-terminal-node-display {
-  pointer-events: none;
+  pointer-events: visiblePainted;
 }
 
 .path-terminal-context-menu {

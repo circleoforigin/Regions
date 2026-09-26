@@ -34,7 +34,12 @@ export type DistanceAnchor =
         segmentId: string;
         position: SpatialPoint;
       }
-  ) &
+    | {
+        id: string;
+        kind: 'terminal';
+        terminalId: string;
+      }
+    ) &
     DistanceAnchorLegOptions;
 
 export interface ResolvedDistanceAnchor {

@@ -82,6 +82,24 @@ const addExistingPoint = useCallback(
     []
   );
 
+  const addTerminal = useCallback(
+  (
+    terminalId: string,
+    usePathFromPrevious = false
+  ) => {
+    setAnchors((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        kind: 'terminal',
+        terminalId,
+        usePathFromPrevious,
+      },
+    ]);
+  },
+  []
+);
+
     const addPath = useCallback(
     (
       segmentId: string,
@@ -148,6 +166,7 @@ const addExistingPoint = useCallback(
     addExistingPoint,
     addFeature,
     addPiece,
+    addTerminal,
     addPath,
     removeFeature,
     removeAnchor,

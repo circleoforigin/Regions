@@ -1,5 +1,6 @@
 import type { Feature } from '../../models/Feature';
 import type { Piece } from '../../models/Piece';
+import type { StandalonePathTerminal } from '../../models/Path';
 
 import type {
   DistanceAnchor,
@@ -9,7 +10,8 @@ import type {
 export function resolveDistanceAnchors(
   anchors: DistanceAnchor[],
   features: Feature[],
-  pieces: Piece[]
+  pieces: Piece[],
+  terminals: StandalonePathTerminal[]
 ): ResolvedDistanceAnchor[] {
   const resolved: ResolvedDistanceAnchor[] = [];
 
@@ -49,6 +51,24 @@ export function resolveDistanceAnchors(
 
       continue;
     }
+
+    if (anchor.kind === 'terminal') {
+  const terminal = terminals.find(
+    (candidate) =>
+      candidate.id === anchor.terminalId
+  );
+
+  if (!terminal) {
+    continue;
+  }
+
+  resolved.push({
+    anchor,
+    position: terminal.position,
+  });
+
+  continue;
+}
 
     const piece = pieces.find(
       (candidate) =>

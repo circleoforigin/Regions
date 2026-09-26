@@ -451,11 +451,12 @@ useEffect(() => {
 }, [interactionMode]);
 
   const resolvedDistanceAnchors =
-    resolveDistanceAnchors(
-      distanceMeasurement.anchors,
-      features,
-      pieces
-    );
+  resolveDistanceAnchors(
+    distanceMeasurement.anchors,
+    features,
+    pieces,
+    pathNetwork.terminals
+  );
 
   const resolvedPathSegments =
     resolvePathSegments(
@@ -608,12 +609,15 @@ useEffect(() => {
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pieceContextMenuRef = useRef<HTMLDivElement | null>(null);
   const sectionContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const pathTerminalContextMenuRef =
+    useRef<HTMLDivElement | null>(null);
 
-  useProximityDismiss(
-    Boolean(pathTerminalContextMenu),
-    '.path-terminal-context-menu',
-    () => setPathTerminalContextMenu(null)
-  );
+  useProximityDismiss({
+  open: pathTerminalContextMenu !== null,
+  ref: pathTerminalContextMenuRef,
+  onDismiss: () =>
+    setPathTerminalContextMenu(null),
+});
   useProximityDismiss({
     open: contextMenu !== null,
     ref: contextMenuRef,
@@ -3117,6 +3121,7 @@ function saveSectionProperties() {
 
 {pathTerminalContextMenu && (
   <div
+    ref={pathTerminalContextMenuRef}
     className="path-terminal-context-menu"
     style={{
       left:
@@ -3187,6 +3192,15 @@ function saveSectionProperties() {
       distanceMeasurement.addPath(
         segmentId,
         position,
+        usePath
+      );
+    }}
+    onDistanceTerminalClick={(
+      terminalId,
+      usePath
+    ) => {
+      distanceMeasurement.addTerminal(
+        terminalId,
         usePath
       );
     }}

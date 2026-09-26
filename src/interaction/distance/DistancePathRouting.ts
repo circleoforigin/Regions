@@ -52,6 +52,17 @@ function getRouteEndpoint(
     };
   }
 
+  if (anchor.anchor.kind === 'terminal') {
+  return {
+    kind: 'terminal',
+    reference: {
+      kind: 'standalone',
+      terminalId:
+        anchor.anchor.terminalId,
+    },
+  };
+}
+
   if (anchor.anchor.kind === 'feature') {
     const reference =
       featureTerminalReference(
