@@ -55,8 +55,13 @@ import {
 } from '../paths/usePathInteraction';
 
 import {
+  resolvePathSegments,
   resolvePathTerminal,
 } from '../paths/PathMapState';
+
+import {
+  getDistanceSegmentsWithPaths,
+} from '../interaction/distance/DistancePathRouting';
 
 import PathOverlay
   from '../paths/PathOverlay';
@@ -446,6 +451,19 @@ useEffect(() => {
       distanceMeasurement.anchors,
       features,
       pieces
+    );
+
+  const resolvedPathSegments =
+    resolvePathSegments(
+      pathNetwork.segments,
+      pathNetwork.terminals,
+      features
+    );
+
+  const distanceSegments =
+    getDistanceSegmentsWithPaths(
+      resolvedDistanceAnchors,
+      resolvedPathSegments
     );
   const { scale, panX, panY } = state.viewport;
   const pan = { x: panX, y: panY };
@@ -3079,6 +3097,7 @@ function saveSectionProperties() {
 
 <DistanceMeasurementOverlay
   anchors={resolvedDistanceAnchors}
+  segments={distanceSegments}
   distanceScale={imageRegistration?.distanceScale}
   pointerPosition={distancePointer}
   mapToScreen={mapToScreen}
@@ -3637,7 +3656,7 @@ function saveSectionProperties() {
       );
   }
 }}
-        onClick={() => {
+onClick={(event) => {
   if (suppressNextFeatureClickRef.current) {
     suppressNextFeatureClickRef.current = false;
     return;
@@ -3650,12 +3669,11 @@ function saveSectionProperties() {
     return;
   }
 
-  if (
-    interactionMode ===
-      'distance'
-  ) {
+  if (interactionMode === 'distance')
+  {
     distanceMeasurement.addFeature(
-      feature.id
+      feature.id,
+      event.ctrlKey
     );
 
     return;

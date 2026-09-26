@@ -1,10 +1,11 @@
 import {
+  convertMapDistance,
   formatPhysicalDistance,
-  getTotalPhysicalDistance,
 } from './DistanceMeasurement';
 
 import type {
   DistanceScale,
+  DistanceSegment,
   ResolvedDistanceAnchor,
 } from './DistanceMeasurement';
 
@@ -15,7 +16,7 @@ interface Point {
 
 interface DistanceMeasurementOverlayProps {
   anchors: ResolvedDistanceAnchor[];
-
+  segments: DistanceSegment[];
   distanceScale?: DistanceScale;
   pointerPosition: Point | null;
   mapToScreen: (
@@ -35,15 +36,20 @@ interface DistanceMeasurementOverlayProps {
 
 export default function DistanceMeasurementOverlay({
   anchors,
+  segments,
   distanceScale,
   pointerPosition,
   mapToScreen,
   onRemoveAnchor,
   onSelectTemporaryAnchor,
 }: DistanceMeasurementOverlayProps) {
-  const totalDistance =
-    getTotalPhysicalDistance(
-      anchors,
+    const totalDistance =
+    convertMapDistance(
+      segments.reduce(
+        (total, segment) =>
+          total + segment.mapDistance,
+        0
+      ),
       distanceScale
     );
   const readout =
@@ -64,22 +70,25 @@ export default function DistanceMeasurementOverlay({
     })
   );
 
-  const temporaryNodes = Array.from(
-    new Map(
-        screenAnchors
-        .filter(
-            (resolved) =>
-            resolved.anchor.kind ===
-            'temporary'
-        )
-        .map((resolved) => [
-            resolved.anchor.kind === 'temporary'
-            ? resolved.anchor.pointId
-            : '',
-            resolved,
-        ])
-    ).values()
-    );
+  const visibleNodes = Array.from(
+  new Map(
+    screenAnchors
+      .filter(
+        (resolved) =>
+          resolved.anchor.kind ===
+            'temporary' ||
+          resolved.anchor.kind ===
+            'path'
+      )
+      .map((resolved) => [
+        resolved.anchor.kind ===
+          'temporary'
+          ? `temporary:${resolved.anchor.pointId}`
+          : resolved.anchor.id,
+        resolved,
+      ])
+  ).values()
+);
 
   return (
   <>
@@ -87,32 +96,40 @@ export default function DistanceMeasurementOverlay({
       className="distance-measurement-layer"
       aria-hidden="true"
     >
-      {screenAnchors
-        .slice(1)
-        .map((resolved, index) => {
-          const previous =
-            screenAnchors[index];
-
-          return (
-            <line
-              key={`${previous.anchor.id}-${resolved.anchor.id}`}
-              className="distance-measurement-line"
-              x1={previous.screen.x}
-              y1={previous.screen.y}
-              x2={resolved.screen.x}
-              y2={resolved.screen.y}
-            />
+            {segments.map((segment) => {
+        const points =
+          segment.points.map((point) =>
+            mapToScreen(
+              point.x,
+              point.y
+            )
           );
-        })}
 
-      {temporaryNodes.map((resolved) => {
-        if (
-          resolved.anchor.kind !==
-          'temporary'
-        ) {
-          return null;
-        }
+        return (
+          <polyline
+            key={
+              `${segment.start.anchor.id}-${segment.end.anchor.id}`
+            }
+            className={[
+              'distance-measurement-line',
+              segment.kind === 'path'
+                ? 'distance-measurement-path'
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            points={points
+              .map(
+                (point) =>
+                  `${point.x},${point.y}`
+              )
+              .join(' ')}
+          />
+        );
+      })}
 
+      {visibleNodes.map((resolved) => {
+        
         return (
           <g key={resolved.anchor.id}>
             <circle
@@ -123,32 +140,28 @@ export default function DistanceMeasurementOverlay({
             />
 
             <circle
-              className="distance-measurement-node-hitbox"
-              cx={resolved.screen.x}
-              cy={resolved.screen.y}
-              r={7}
-              onClick={(event) => {
-  event.preventDefault();
-  event.stopPropagation();
+                className="distance-measurement-node-hitbox"
+                cx={resolved.screen.x}
+                cy={resolved.screen.y}
+                r={7}
+                onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
 
-  if (
-    resolved.anchor.kind ===
-    'temporary'
-  ) {
-    onSelectTemporaryAnchor(
-      resolved.anchor.pointId,
-      resolved.position
-    );
-  }
-}}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
+                    if (resolved.anchor.kind === 'temporary') 
+                    {
+                        onSelectTemporaryAnchor(
+                            resolved.anchor.pointId,
+                            resolved.position
+                        );
+                    }
+                }}
+                onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
 
-                onRemoveAnchor(
-                  resolved.anchor.id
-                );
-              }}
+                onRemoveAnchor(resolved.anchor.id);
+                }}
             />
           </g>
         );

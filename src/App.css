@@ -2896,6 +2896,13 @@ box-shadow:
   pointer-events: none;
 }
 
+.distance-measurement-path {
+  stroke: #39ff14;
+  stroke-width: 5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
 .distance-measurement-node {
   stroke: #39ff14;
   fill: #ffffff;

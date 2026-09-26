@@ -47,6 +47,13 @@ function terminalKey(
     : `terminal:${reference.terminalId}`;
 }
 
+function shapeKey(
+  segmentId: string,
+  shapePointId: string
+): string {
+  return `shape:${segmentId}:${shapePointId}`;
+}
+
 function pointDistance(
   a: SpatialPoint,
   b: SpatialPoint
@@ -57,127 +64,6 @@ function pointDistance(
   );
 }
 
-function polylineDistance(
-  points: SpatialPoint[]
-): number {
-  let total = 0;
-
-  for (
-    let index = 1;
-    index < points.length;
-    index += 1
-  ) {
-    total += pointDistance(
-      points[index - 1],
-      points[index]
-    );
-  }
-
-  return total;
-}
-
-function reversePoints(
-  points: SpatialPoint[]
-): SpatialPoint[] {
-  return [...points].reverse();
-}
-
-function pathFromStartToPosition(
-  segment: ResolvedPathSegment,
-  position: SpatialPoint
-): SpatialPoint[] {
-  const projection =
-    projectPointOntoPath(
-      segment,
-      position
-    );
-
-  const points =
-    getPathSegmentPoints(segment);
-
-  return [
-    ...points.slice(
-      0,
-      projection.legIndex + 1
-    ),
-    projection.position,
-  ];
-}
-
-function pathFromPositionToEnd(
-  segment: ResolvedPathSegment,
-  position: SpatialPoint
-): SpatialPoint[] {
-  const projection =
-    projectPointOntoPath(
-      segment,
-      position
-    );
-
-  const points =
-    getPathSegmentPoints(segment);
-
-  return [
-    projection.position,
-    ...points.slice(
-      projection.legIndex + 1
-    ),
-  ];
-}
-
-function pathBetweenPositions(
-  segment: ResolvedPathSegment,
-  start: SpatialPoint,
-  end: SpatialPoint
-): SpatialPoint[] {
-  const startProjection =
-    projectPointOntoPath(
-      segment,
-      start
-    );
-
-  const endProjection =
-    projectPointOntoPath(
-      segment,
-      end
-    );
-
-  const points =
-    getPathSegmentPoints(segment);
-
-  if (
-    startProjection.legIndex ===
-    endProjection.legIndex
-  ) {
-    return [
-      startProjection.position,
-      endProjection.position,
-    ];
-  }
-
-  if (
-    startProjection.legIndex <
-    endProjection.legIndex
-  ) {
-    return [
-      startProjection.position,
-      ...points.slice(
-        startProjection.legIndex + 1,
-        endProjection.legIndex + 1
-      ),
-      endProjection.position,
-    ];
-  }
-
-  return reversePoints(
-    pathBetweenPositions(
-      segment,
-      end,
-      start
-    )
-  );
-}
-
 function addEdge(
   graph: Map<string, GraphEdge[]>,
   from: string,
@@ -185,35 +71,45 @@ function addEdge(
   points: SpatialPoint[],
   segmentId: string
 ) {
-  const edge: GraphEdge = {
-    to,
-    points,
-    segmentId,
-    distance:
-      polylineDistance(points),
-  };
-
-  const existing =
-    graph.get(from) ?? [];
+  const distance =
+    points.length >= 2
+      ? pointDistance(
+          points[0],
+          points[points.length - 1]
+        )
+      : 0;
 
   graph.set(
     from,
-    [...existing, edge]
+    [
+      ...(graph.get(from) ?? []),
+      {
+        to,
+        distance,
+        points,
+        segmentId,
+      },
+    ]
   );
+
+  if (!graph.has(to)) {
+    graph.set(to, []);
+  }
 }
 
 function addBidirectionalEdge(
   graph: Map<string, GraphEdge[]>,
   from: string,
   to: string,
-  points: SpatialPoint[],
+  start: SpatialPoint,
+  end: SpatialPoint,
   segmentId: string
 ) {
   addEdge(
     graph,
     from,
     to,
-    points,
+    [start, end],
     segmentId
   );
 
@@ -221,9 +117,125 @@ function addBidirectionalEdge(
     graph,
     to,
     from,
-    reversePoints(points),
+    [end, start],
     segmentId
   );
+}
+
+function getGeometryKeys(
+  segment: ResolvedPathSegment
+): string[] {
+  return [
+    terminalKey(
+      segment.segment.start
+    ),
+
+    ...segment.segment.shapePoints.map(
+      (point) =>
+        shapeKey(
+          segment.segment.id,
+          point.id
+        )
+    ),
+
+    terminalKey(
+      segment.segment.end
+    ),
+  ];
+}
+
+function attachSegmentEndpoint(
+  graph: Map<string, GraphEdge[]>,
+  syntheticKey: string,
+  endpoint: Extract<
+    PathRouteEndpoint,
+    { kind: 'segment' }
+  >,
+  segments: ResolvedPathSegment[]
+): boolean {
+  const segment =
+    segments.find(
+      (candidate) =>
+        candidate.segment.id ===
+        endpoint.segmentId
+    );
+
+  if (!segment) {
+    return false;
+  }
+
+  const projection =
+    projectPointOntoPath(
+      segment,
+      endpoint.position
+    );
+
+  const points =
+    getPathSegmentPoints(segment);
+
+  const keys =
+    getGeometryKeys(segment);
+
+  const beforeIndex =
+    projection.legIndex;
+
+  const afterIndex =
+    projection.legIndex + 1;
+
+  const before =
+    points[beforeIndex];
+
+  const after =
+    points[afterIndex];
+
+  const beforeDistance =
+    pointDistance(
+      projection.position,
+      before
+    );
+
+  const afterDistance =
+    pointDistance(
+      projection.position,
+      after
+    );
+
+  /*
+   * A Path-mounted measurement joins the
+   * network through the nearest existing
+   * Path geometry node bounding the leg.
+   *
+   * Those nodes are either:
+   * - a Terminal
+   * - a Shape Point
+   *
+   * This guarantees routed measurement
+   * follows the authored Path geometry.
+   */
+  const useBefore =
+    beforeDistance <= afterDistance;
+
+  const targetIndex =
+    useBefore
+      ? beforeIndex
+      : afterIndex;
+
+  const targetPoint =
+    points[targetIndex];
+
+  const targetKey =
+    keys[targetIndex];
+
+  addBidirectionalEdge(
+    graph,
+    syntheticKey,
+    targetKey,
+    projection.position,
+    targetPoint,
+    segment.segment.id
+  );
+
+  return true;
 }
 
 export function findPathRoute(
@@ -234,160 +246,114 @@ export function findPathRoute(
   const graph =
     new Map<string, GraphEdge[]>();
 
-  for (const resolved of segments) {
-    addBidirectionalEdge(
-      graph,
-      terminalKey(
-        resolved.segment.start
-      ),
-      terminalKey(
-        resolved.segment.end
-      ),
-      getPathSegmentPoints(resolved),
-      resolved.segment.id
-    );
-  }
-
-  const START = '__route_start__';
-  const END = '__route_end__';
-
-  if (start.kind === 'terminal') {
-    addBidirectionalEdge(
-      graph,
-      START,
-      terminalKey(start.reference),
-      [],
-      ''
-    );
-  } else {
-    const segment =
-      segments.find(
-        (candidate) =>
-          candidate.segment.id ===
-            start.segmentId
-      );
-
-    if (!segment) {
-      return null;
-    }
-
-    const toStart =
-      pathFromStartToPosition(
-        segment,
-        start.position
-      );
-
-    const toEnd =
-      pathFromPositionToEnd(
-        segment,
-        start.position
-      );
-
-    addBidirectionalEdge(
-      graph,
-      START,
-      terminalKey(
-        segment.segment.start
-      ),
-      reversePoints(toStart),
-      segment.segment.id
-    );
-
-    addBidirectionalEdge(
-      graph,
-      START,
-      terminalKey(
-        segment.segment.end
-      ),
-      toEnd,
-      segment.segment.id
-    );
-  }
-
-  if (end.kind === 'terminal') {
-    addBidirectionalEdge(
-      graph,
-      END,
-      terminalKey(end.reference),
-      [],
-      ''
-    );
-  } else {
-    const segment =
-      segments.find(
-        (candidate) =>
-          candidate.segment.id ===
-            end.segmentId
-      );
-
-    if (!segment) {
-      return null;
-    }
-
-    const fromStart =
-      pathFromStartToPosition(
-        segment,
-        end.position
-      );
-
-    const toEnd =
-      pathFromPositionToEnd(
-        segment,
-        end.position
-      );
-
-    addBidirectionalEdge(
-      graph,
-      terminalKey(
-        segment.segment.start
-      ),
-      END,
-      fromStart,
-      segment.segment.id
-    );
-
-    addBidirectionalEdge(
-      graph,
-      terminalKey(
-        segment.segment.end
-      ),
-      END,
-      reversePoints(toEnd),
-      segment.segment.id
-    );
-  }
-
   /*
-   * If both temporary endpoints lie on
-   * the same Segment, they may travel
-   * directly between their positions
-   * without visiting either Terminal.
+   * Shape Points are real routing vertices.
+   *
+   * A PathSegment is therefore represented
+   * as the exact authored chain:
+   *
+   * Terminal
+   *   -> Shape
+   *   -> Shape
+   *   -> Terminal
    */
-  if (
-    start.kind === 'segment' &&
-    end.kind === 'segment' &&
-    start.segmentId === end.segmentId
-  ) {
-    const segment =
-      segments.find(
-        (candidate) =>
-          candidate.segment.id ===
-            start.segmentId
-      );
+  for (const segment of segments) {
+    const points =
+      getPathSegmentPoints(segment);
 
-    if (segment) {
+    const keys =
+      getGeometryKeys(segment);
+
+    for (
+      let index = 1;
+      index < points.length;
+      index += 1
+    ) {
       addBidirectionalEdge(
         graph,
-        START,
-        END,
-        pathBetweenPositions(
-          segment,
-          start.position,
-          end.position
-        ),
+        keys[index - 1],
+        keys[index],
+        points[index - 1],
+        points[index],
         segment.segment.id
       );
     }
+  }
+
+  const START =
+    '__route_start__';
+
+  const END =
+    '__route_end__';
+
+  graph.set(START, []);
+  graph.set(END, []);
+
+  if (start.kind === 'terminal') {
+    const key =
+      terminalKey(
+        start.reference
+      );
+
+    addEdge(
+      graph,
+      START,
+      key,
+      [],
+      ''
+    );
+  } else if (
+    !attachSegmentEndpoint(
+      graph,
+      START,
+      start,
+      segments
+    )
+  ) {
+    return null;
+  }
+
+  if (end.kind === 'terminal') {
+    const key =
+      terminalKey(
+        end.reference
+      );
+
+    addEdge(
+      graph,
+      key,
+      END,
+      [],
+      ''
+    );
+  } else {
+    const endpointKey =
+      '__route_end_attachment__';
+
+    graph.set(endpointKey, []);
+
+    if (
+      !attachSegmentEndpoint(
+        graph,
+        endpointKey,
+        end,
+        segments
+      )
+    ) {
+      return null;
+    }
+
+    /*
+     * attachSegmentEndpoint is bidirectional,
+     * so the network can reach endpointKey.
+     */
+    addEdge(
+      graph,
+      endpointKey,
+      END,
+      [],
+      ''
+    );
   }
 
   const distances =
@@ -407,9 +373,6 @@ export function findPathRoute(
       graph.keys()
     );
 
-  unvisited.add(START);
-  unvisited.add(END);
-
   for (const node of unvisited) {
     distances.set(
       node,
@@ -420,8 +383,8 @@ export function findPathRoute(
   }
 
   while (unvisited.size > 0) {
-    let current: string | null =
-      null;
+    let current:
+      string | null = null;
 
     let currentDistance =
       Infinity;
@@ -503,8 +466,8 @@ export function findPathRoute(
     return null;
   }
 
-  const routeEdges: GraphEdge[] =
-    [];
+  const routeEdges:
+    GraphEdge[] = [];
 
   let cursor = END;
 
@@ -523,11 +486,11 @@ export function findPathRoute(
     cursor = step.node;
   }
 
-  const points: SpatialPoint[] =
-    [];
+  const points:
+    SpatialPoint[] = [];
 
-  const segmentIds: string[] =
-    [];
+  const segmentIds:
+    string[] = [];
 
   for (const edge of routeEdges) {
     if (
@@ -546,8 +509,10 @@ export function findPathRoute(
 
       if (
         previousPoint &&
-        previousPoint.x === point.x &&
-        previousPoint.y === point.y
+        previousPoint.x ===
+          point.x &&
+        previousPoint.y ===
+          point.y
       ) {
         continue;
       }

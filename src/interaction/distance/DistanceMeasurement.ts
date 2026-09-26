@@ -6,30 +6,36 @@ import type {
   SpatialPoint,
 } from '../../spatial/SpatialAnchor';
 
+interface DistanceAnchorLegOptions {
+  usePathFromPrevious?: boolean;
+}
+
 export type DistanceAnchor =
-  | {
-    id: string;
-    kind: 'temporary';
-    pointId: string;
-    position: SpatialPoint;
-    }
-  | {
-      id: string;
-      kind: 'feature';
-      featureId: string;
-    }
+  (
     | {
-      id: string;
-      kind: 'piece';
-      pieceId: string;
-    }
-  | {
-      id: string;
-      kind: 'path';
-      segmentId: string;
-      position: SpatialPoint;
-      usePathFromPrevious: boolean;
-    };
+        id: string;
+        kind: 'temporary';
+        pointId: string;
+        position: SpatialPoint;
+      }
+    | {
+        id: string;
+        kind: 'feature';
+        featureId: string;
+      }
+    | {
+        id: string;
+        kind: 'piece';
+        pieceId: string;
+      }
+    | {
+        id: string;
+        kind: 'path';
+        segmentId: string;
+        position: SpatialPoint;
+      }
+  ) &
+    DistanceAnchorLegOptions;
 
 export interface ResolvedDistanceAnchor {
   anchor: DistanceAnchor;
@@ -40,6 +46,8 @@ export interface DistanceSegment {
   start: ResolvedDistanceAnchor;
   end: ResolvedDistanceAnchor;
   mapDistance: number;
+  kind: 'straight' | 'path';
+  points: SpatialPoint[];
 }
 
 export function getMapDistance(
@@ -72,6 +80,11 @@ export function getDistanceSegments(
         start.position,
         end.position
       ),
+      kind: 'straight',
+      points: [
+        start.position,
+        end.position,
+      ],
     });
   }
 

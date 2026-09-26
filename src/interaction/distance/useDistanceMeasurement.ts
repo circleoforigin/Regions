@@ -51,13 +51,17 @@ const addExistingPoint = useCallback(
 );
 
   const addFeature = useCallback(
-    (featureId: string) => {
+  (
+    featureId: string,
+    usePathFromPrevious = false
+  ) => {
       setAnchors((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           kind: 'feature',
           featureId,
+          usePathFromPrevious,
         },
       ]);
     },
@@ -121,7 +125,7 @@ const addExistingPoint = useCallback(
       });
     },
     []
-  );
+  );  
 
   const removeAnchor = useCallback(
     (anchorId: string) => {
@@ -145,6 +149,7 @@ const addExistingPoint = useCallback(
     addFeature,
     addPiece,
     addPath,
+    removeFeature,
     removeAnchor,
     clear,
   };
