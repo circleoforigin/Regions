@@ -936,6 +936,7 @@
 
 .map-feature-marker {
   position: absolute;
+  z-index: 7;
   width: 18px;
   height: 18px;
   padding: 0;
@@ -955,14 +956,21 @@
 }
 
 .map-feature-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+
   display: block;
   width: 15px;
   height: 15px;
-  margin: 4px;
+  margin: 0;
+
   border: 3px solid #0a0a0a;
   border-radius: 50%;
   background: #fefefe;
   box-sizing: border-box;
+
+  transform: translate(-50%, -50%);
 }
 
 .map-feature-connection .map-feature-dot {
@@ -2988,7 +2996,7 @@ box-shadow:
 
 .path-segment {
   fill: none;
-  stroke: #ffffff;
+  stroke: #000000;
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;

@@ -3674,18 +3674,25 @@ function saveSectionProperties() {
           const point = screenToMap(event.clientX, event.clientY);
           if (!viewport || !point) return;
           const rect = viewport.getBoundingClientRect();
-          dispatch({ type: 'feature.clearSelection' });
-          dispatch({
-            type: 'contextMenu.open',
-            menu: {
-              kind: 'feature',
-              targetId: feature.id,
-              screenX: event.clientX - rect.left,
-              screenY: event.clientY - rect.top,
-              mapX: point.x,
-              mapY: point.y,
-            },
-          });
+          if (interactionMode === 'build') {
+  dispatch({
+    type: 'feature.clearSelection',
+  });
+
+  dispatch({
+    type: 'contextMenu.open',
+    menu: {
+      kind: 'feature',
+      targetId: feature.id,
+      screenX:
+        event.clientX - rect.left,
+      screenY:
+        event.clientY - rect.top,
+      mapX: point.x,
+      mapY: point.y,
+    },
+  });
+}
         }}
       >
         <span className="map-feature-dot" />
