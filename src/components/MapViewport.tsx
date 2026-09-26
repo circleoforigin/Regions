@@ -239,7 +239,9 @@ onNewFeatureRequest?: (
   x: number,
   y: number
 ) => void;
-
+onPromotePathTerminal?: (
+  terminalId: string
+) => void;
 onNewLocationRequest?: (
   x: number,
   y: number
@@ -354,6 +356,7 @@ function MapViewport({
   onDeleteFeature,
   secondaryActions,
   onNewFeatureRequest,
+  onPromotePathTerminal,
   onNewLocationRequest,
   onNewConnectionRequest,
   pendingArrivalPlacement,
@@ -550,6 +553,14 @@ useEffect(() => {
     x: number;
     y: number;
   } | null>(null);
+  const [
+    pathTerminalContextMenu,
+    setPathTerminalContextMenu,
+  ] = useState<{
+    terminalId: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [partyMembersMenuOpen, setPartyMembersMenuOpen] = useState(false);
   const [sectionDraft, setSectionDraft] = useState<{
     kind: SectionKind;
@@ -598,6 +609,11 @@ useEffect(() => {
   const pieceContextMenuRef = useRef<HTMLDivElement | null>(null);
   const sectionContextMenuRef = useRef<HTMLDivElement | null>(null);
 
+  useProximityDismiss(
+    Boolean(pathTerminalContextMenu),
+    '.path-terminal-context-menu',
+    () => setPathTerminalContextMenu(null)
+  );
   useProximityDismiss({
     open: contextMenu !== null,
     ref: contextMenuRef,
@@ -3099,6 +3115,44 @@ function saveSectionProperties() {
     </svg>
 )}
 
+{pathTerminalContextMenu && (
+  <div
+    className="path-terminal-context-menu"
+    style={{
+      left:
+        pathTerminalContextMenu.x,
+      top:
+        pathTerminalContextMenu.y,
+    }}
+    onPointerDown={(event) =>
+      event.stopPropagation()
+    }
+    onContextMenu={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    }}
+  >
+    <button
+      type="button"
+      onClick={() => {
+        const terminalId =
+          pathTerminalContextMenu
+            .terminalId;
+
+        setPathTerminalContextMenu(
+          null
+        );
+
+        onPromotePathTerminal?.(
+          terminalId
+        );
+      }}
+    >
+      Promote to Feature
+    </button>
+  </div>
+)}
+
 <DistanceMeasurementOverlay
   anchors={resolvedDistanceAnchors}
   segments={distanceSegments}
@@ -3115,8 +3169,12 @@ function saveSectionProperties() {
 
 {layerVisibility.paths && (
   <PathOverlay
-    editing={
+        editing={
       interactionMode === 'path'
+    }
+    terminalPromotionEnabled={
+      interactionMode === 'path' ||
+      interactionMode === 'build'
     }
     distanceTargeting={
       interactionMode === 'distance'
@@ -3212,6 +3270,26 @@ function saveSectionProperties() {
     onTerminalPointerDown={
       handlePathTerminalPointerDown
     }
+        onTerminalContextMenu={(
+      event,
+      terminalId
+    ) => {
+      if (
+        interactionMode !== 'path' &&
+        interactionMode !== 'build'
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      setPathTerminalContextMenu({
+        terminalId,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    }}
     onShapePointerDown={
       handlePathShapePointerDown
     }

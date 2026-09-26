@@ -97,6 +97,7 @@ import { useInteractionMode } from './interaction/useInteractionMode';
 import { featureRepository } from './features/FeatureRepository';
 import {
   loadPathNetwork,
+  promotePathTerminalToFeature,
   type PathNetwork,
 } from './paths/PathNetwork';
 import { resolveArea } from './sections/AreaContext';
@@ -4290,6 +4291,81 @@ setPendingFeatureDeletionIds(
   }
 }
 
+async function handlePromotePathTerminal(
+  terminalId: string
+) {
+  if (!activeMap) {
+    return;
+  }
+
+  const terminal =
+    activePathNetwork.terminals.find(
+      (candidate) =>
+        candidate.id === terminalId
+    );
+
+  if (!terminal) {
+    return;
+  }
+
+  const feature: Feature = {
+    id: crypto.randomUUID(),
+    name: 'Feature',
+    position: {
+      ...terminal.position,
+    },
+    type: 'feature',
+    noteLinks: [],
+  };
+
+  try {
+    const result =
+      await promotePathTerminalToFeature(
+        activeMap,
+        terminalId,
+        feature.id,
+        activePathNetwork
+      );
+
+    setActivePathNetwork(
+      result.network
+    );
+
+    setActiveFeatures(
+      (current) => [
+        ...current,
+        feature,
+      ]
+    );
+
+    setActiveMap({
+      ...result.map,
+      featureIds: [
+        ...result.map.featureIds,
+        feature.id,
+      ],
+    });
+
+    setPendingFeatures(
+      (current) => [
+        ...current,
+        feature,
+      ]
+    );
+
+    markProjectDirty();
+  } catch (error) {
+    console.error(
+      'Unable to promote Path terminal:',
+      error
+    );
+
+    setNavigationError(
+      'Unable to promote this Path terminal.'
+    );
+  }
+}
+
 function handleNewFeatureRequest(x: number, y: number) {
   mapViewportRef.current?.cancelInteractions();
   setNewFeaturePosition({ x, y });
@@ -6466,6 +6542,7 @@ onCalibrationPointMove={(
 }}
         onDeleteFeature={handleDeleteFeature}
         onNewFeatureRequest={handleNewFeatureRequest}
+        onPromotePathTerminal={handlePromotePathTerminal}
         onNewLocationRequest={handleNewLocationRequest}
         onNewConnectionRequest={handleNewConnectionRequest}
         pendingArrivalPlacement={pendingArrival ? {

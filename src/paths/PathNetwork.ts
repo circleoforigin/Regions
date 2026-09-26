@@ -243,6 +243,132 @@ export async function deletePathSegment(
   };
 }
 
+export async function promotePathTerminalToFeature(
+  map: Map,
+  terminalId: string,
+  featureId: string,
+  network: PathNetwork
+): Promise<{
+  map: Map;
+  network: PathNetwork;
+}> {
+  const terminal =
+    network.terminals.find(
+      (candidate) =>
+        candidate.id === terminalId
+    );
+
+  if (!terminal) {
+    return {
+      map,
+      network,
+    };
+  }
+
+  const replaceReference = (
+    reference: PathSegment['start']
+  ): PathSegment['start'] => {
+    if (
+      reference.kind !== 'standalone' ||
+      reference.terminalId !== terminalId
+    ) {
+      return reference;
+    }
+
+    return {
+      kind: 'feature',
+      featureId,
+    };
+  };
+
+  const updatedSegments =
+    network.segments.map(
+      (segment) => {
+        const start =
+          replaceReference(
+            segment.start
+          );
+
+        const end =
+          replaceReference(
+            segment.end
+          );
+
+        if (
+          start === segment.start &&
+          end === segment.end
+        ) {
+          return segment;
+        }
+
+        return {
+          ...segment,
+          start,
+          end,
+          updatedAt: new Date(),
+        };
+      }
+    );
+
+  await Promise.all(
+    updatedSegments
+      .filter((segment) => {
+        const original =
+          network.segments.find(
+            (candidate) =>
+              candidate.id ===
+              segment.id
+          );
+
+        return (
+          original &&
+          (
+            original.start !==
+              segment.start ||
+            original.end !==
+              segment.end
+          )
+        );
+      })
+      .map((segment) =>
+        pathSegmentRepository.saveSegment(
+          segment
+        )
+      )
+  );
+
+  await pathTerminalRepository.deleteTerminal(
+    terminalId
+  );
+
+  return {
+    map: {
+      ...map,
+
+      pathTerminalIds:
+        (
+          map.pathTerminalIds ?? []
+        ).filter(
+          (id) =>
+            id !== terminalId
+        ),
+
+      updatedAt: new Date(),
+    },
+
+    network: {
+      terminals:
+        network.terminals.filter(
+          (candidate) =>
+            candidate.id !== terminalId
+        ),
+
+      segments:
+        updatedSegments,
+    },
+  };
+}
+
 export async function movePathTerminal(
   terminal: StandalonePathTerminal,
   position: {

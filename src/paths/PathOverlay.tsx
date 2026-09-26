@@ -26,6 +26,7 @@ interface PathDragPreview {
 
 interface PathOverlayProps {
   editing: boolean;
+  terminalPromotionEnabled: boolean;
   distanceTargeting: boolean;
   onDistancePathClick: (
     segmentId: string,
@@ -65,6 +66,11 @@ interface PathOverlayProps {
       React.PointerEvent<SVGCircleElement>,
     terminalId: string
   ) => void;
+  onTerminalContextMenu: (
+    event:
+      React.MouseEvent<SVGCircleElement>,
+    terminalId: string
+  ) => void;
   onShapePointerDown: (
     event:
       React.PointerEvent<SVGCircleElement>,
@@ -80,6 +86,7 @@ interface PathOverlayProps {
 
 export default function PathOverlay({
   editing,
+  terminalPromotionEnabled,
   distanceTargeting,
   onDistancePathClick,
   terminals,
@@ -96,6 +103,7 @@ export default function PathOverlay({
   onSegmentRightClick,
   onSegmentShiftClick,
   onTerminalPointerDown,
+  onTerminalContextMenu,
   onShapePointerDown,
   onNodePointerUp,
   onNodePointerCancel,
@@ -399,11 +407,19 @@ export default function PathOverlay({
                 'path-terminal-node',
                 editing
                   ? 'path-terminal-node-editable'
-                  : 'path-terminal-node-display',
+                  : terminalPromotionEnabled
+                    ? 'path-terminal-node-promotable'
+                    : 'path-terminal-node-display',
               ].join(' ')}
               cx={screen.x}
               cy={screen.y}
               r={5}
+              onContextMenu={(event) =>
+                onTerminalContextMenu(
+                  event,
+                  terminal.id
+                )
+              }
               onPointerDown={
                 editing
                   ? (event) =>
