@@ -12,31 +12,51 @@ const HELP: Partial<
 > = {
   path: [
     {
-      input: 'Ctrl + Click',
-      action: 'Terminal',
+      input: 'Ctrl + Left Click',
+      action: 'Start / End Path',
     },
     {
-      input: 'Right Click',
-      action: 'Shape Point',
+      input: 'Right Click Path',
+      action: 'Add Shape Point',
     },
     {
-      input: 'Drag',
+      input: 'Ctrl + Right Click Path',
+      action: 'Split at Terminal',
+    },
+    {
+      input: 'Drag Node',
       action: 'Move Node',
     },
     {
-      input: 'Shift + Click',
-      action: 'Delete Shape / Path',
+      input: 'Shift + Click Shape',
+      action: 'Delete Shape Point',
+    },
+    {
+      input: 'Shift + Click Path',
+      action: 'Delete Path',
     },
   ],
 
   distance: [
     {
       input: 'Left Click',
-      action: 'Measure',
+      action: 'Add Measurement Point',
     },
     {
-      input: 'Right Click',
-      action: 'Remove / Clear',
+      input: 'Left Click Path',
+      action: 'Measure to Path',
+    },
+    {
+      input: 'Ctrl + Left Click Path',
+      action: 'Measure Along Path',
+    },
+    {
+      input: 'Right Click Node',
+      action: 'Remove Point',
+    },
+    {
+      input: 'Right Click Elsewhere',
+      action: 'Clear Measurement',
     },
   ],
 };

@@ -2889,18 +2889,31 @@ box-shadow:
 }
 
 .distance-measurement-line {
-  stroke: white;
+  stroke: rgb(9, 194, 21);
   stroke-width: 2;
   stroke-dasharray: 6 4;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
 
+.distance-measurement-path-outline,
+.distance-measurement-path {
+  fill: none;
+  stroke-dasharray: 6 4;
+  stroke-linecap: butt;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.distance-measurement-path-outline {
+  stroke: #000000;
+  stroke-width: 4;
+}
+
 .distance-measurement-path {
   stroke: #39ff14;
-  stroke-width: 5;
-  stroke-linejoin: round;
-  stroke-linecap: round;
+  stroke-width: 2;
 }
 
 .distance-measurement-node {
@@ -3014,6 +3027,11 @@ box-shadow:
   cursor: pointer;
 }
 
+.path-segment-editable:hover {
+  stroke: #ffffff;
+  stroke-width: 5;
+}
+
 .path-segment-display {
   pointer-events: none;
 }
@@ -3035,12 +3053,19 @@ box-shadow:
 }
 
 .path-terminal-node {
-  fill: #111111;
-  stroke: #1df405;
+  fill: #39ff14;
+  stroke: #111111;
   stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
 
+.path-terminal-node-editable {
   pointer-events: all;
   cursor: pointer;
+}
+
+.path-terminal-node-display {
+  pointer-events: none;
 }
 
 .path-shape-node {

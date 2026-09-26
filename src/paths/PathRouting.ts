@@ -182,56 +182,21 @@ function attachSegmentEndpoint(
   const afterIndex =
     projection.legIndex + 1;
 
-  const before =
-    points[beforeIndex];
-
-  const after =
-    points[afterIndex];
-
-  const beforeDistance =
-    pointDistance(
-      projection.position,
-      before
-    );
-
-  const afterDistance =
-    pointDistance(
-      projection.position,
-      after
-    );
-
-  /*
-   * A Path-mounted measurement joins the
-   * network through the nearest existing
-   * Path geometry node bounding the leg.
-   *
-   * Those nodes are either:
-   * - a Terminal
-   * - a Shape Point
-   *
-   * This guarantees routed measurement
-   * follows the authored Path geometry.
-   */
-  const useBefore =
-    beforeDistance <= afterDistance;
-
-  const targetIndex =
-    useBefore
-      ? beforeIndex
-      : afterIndex;
-
-  const targetPoint =
-    points[targetIndex];
-
-  const targetKey =
-    keys[targetIndex];
+  addBidirectionalEdge(
+    graph,
+    syntheticKey,
+    keys[beforeIndex],
+    projection.position,
+    points[beforeIndex],
+    segment.segment.id
+  );
 
   addBidirectionalEdge(
     graph,
     syntheticKey,
-    targetKey,
+    keys[afterIndex],
     projection.position,
-    targetPoint,
+    points[afterIndex],
     segment.segment.id
   );
 
@@ -354,6 +319,47 @@ export function findPathRoute(
       [],
       ''
     );
+  }
+
+    if (
+    start.kind === 'segment' &&
+    end.kind === 'segment' &&
+    start.segmentId === end.segmentId
+  ) {
+    const segment =
+      segments.find(
+        (candidate) =>
+          candidate.segment.id ===
+          start.segmentId
+      );
+
+    if (segment) {
+      const startProjection =
+        projectPointOntoPath(
+          segment,
+          start.position
+        );
+
+      const endProjection =
+        projectPointOntoPath(
+          segment,
+          end.position
+        );
+
+      if (
+        startProjection.legIndex ===
+        endProjection.legIndex
+      ) {
+        addBidirectionalEdge(
+          graph,
+          START,
+          '__route_end_attachment__',
+          startProjection.position,
+          endProjection.position,
+          segment.segment.id
+        );
+      }
+    }
   }
 
   const distances =

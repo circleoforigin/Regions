@@ -105,25 +105,41 @@ export default function DistanceMeasurementOverlay({
             )
           );
 
+                const pointString =
+          points
+            .map(
+              (point) =>
+                `${point.x},${point.y}`
+            )
+            .join(' ');
+
+        if (segment.kind === 'path') {
+          return (
+            <g
+              key={
+                `${segment.start.anchor.id}-${segment.end.anchor.id}`
+              }
+            >
+              <polyline
+                className="distance-measurement-path-outline"
+                points={pointString}
+              />
+
+              <polyline
+                className="distance-measurement-path"
+                points={pointString}
+              />
+            </g>
+          );
+        }
+
         return (
           <polyline
             key={
               `${segment.start.anchor.id}-${segment.end.anchor.id}`
             }
-            className={[
-              'distance-measurement-line',
-              segment.kind === 'path'
-                ? 'distance-measurement-path'
-                : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            points={points
-              .map(
-                (point) =>
-                  `${point.x},${point.y}`
-              )
-              .join(' ')}
+            className="distance-measurement-line"
+            points={pointString}
           />
         );
       })}

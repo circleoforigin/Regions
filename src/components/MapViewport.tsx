@@ -9,6 +9,7 @@ import { useDistanceMeasurement } from '../interaction/distance/useDistanceMeasu
 import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceAnchors';
 import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
+import ModeHelp from '../interaction/ModeHelp';
 import {
   Fragment,
   forwardRef,
@@ -2970,6 +2971,9 @@ function saveSectionProperties() {
       }}
       onContextMenu={handleContextMenu}
     >
+      
+      <ModeHelp mode={interactionMode} />
+      
       <img
   className="map-viewport-image"
   src={imageUrl}

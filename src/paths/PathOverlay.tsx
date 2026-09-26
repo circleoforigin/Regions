@@ -384,7 +384,7 @@ export default function PathOverlay({
           )
       )}
 
-      {editing && displayedTerminals.map(
+            {displayedTerminals.map(
         (terminal) => {
           const screen =
             mapToScreen(
@@ -395,25 +395,38 @@ export default function PathOverlay({
           return (
             <circle
               key={terminal.id}
-              className="path-terminal-node"
+              className={[
+                'path-terminal-node',
+                editing
+                  ? 'path-terminal-node-editable'
+                  : 'path-terminal-node-display',
+              ].join(' ')}
               cx={screen.x}
               cy={screen.y}
               r={5}
               onPointerDown={
-                (event) =>
-                  onTerminalPointerDown(
-                    event,
-                    terminal.id
-                  )
+                editing
+                  ? (event) =>
+                      onTerminalPointerDown(
+                        event,
+                        terminal.id
+                      )
+                  : undefined
               }
               onPointerUp={
-                onNodePointerUp
+                editing
+                  ? onNodePointerUp
+                  : undefined
               }
               onPointerCancel={
-                onNodePointerCancel
+                editing
+                  ? onNodePointerCancel
+                  : undefined
               }
               onLostPointerCapture={
-                onNodePointerCancel
+                editing
+                  ? onNodePointerCancel
+                  : undefined
               }
             />
           );
