@@ -26,68 +26,62 @@ interface PathDragPreview {
 
 interface PathOverlayProps {
   editing: boolean;
-
+  distanceTargeting: boolean;
+  onDistancePathClick: (
+    segmentId: string,
+    position: SpatialPoint,
+    usePath: boolean
+  ) => void;
   terminals:
     StandalonePathTerminal[];
-
   segments:
     PathSegment[];
-
   features:
     Feature[];
-
   draftStartPosition?:
     SpatialPoint | null;
-
   draftShapePoints?:
     SpatialPoint[];
-
   draftPointer?:
     SpatialPoint | null;
-
   dragPreview?:
     PathDragPreview | null;
-
   mapToScreen: (
     x: number,
     y: number
   ) => SpatialPoint;
-
   onSegmentRightClick: (
     event:
       React.MouseEvent<SVGPolylineElement>,
     segmentId: string
   ) => void;
-
   onSegmentShiftClick: (
     event:
       React.MouseEvent<SVGPolylineElement>,
     segmentId: string
   ) => void;
-
   onTerminalPointerDown: (
     event:
       React.PointerEvent<SVGCircleElement>,
     terminalId: string
   ) => void;
-
   onShapePointerDown: (
     event:
       React.PointerEvent<SVGCircleElement>,
     segmentId: string,
     pointId: string
   ) => void;
-
   onNodePointerUp: (
     event:
       React.PointerEvent<SVGCircleElement>
   ) => void;
-
   onNodePointerCancel: () => void;
 }
 
 export default function PathOverlay({
   editing,
+  distanceTargeting,
+  onDistancePathClick,
   terminals,
   segments,
   features,
@@ -174,10 +168,12 @@ export default function PathOverlay({
           <polyline
             key={item.segment.id}
             className={[
-            'path-segment',
-            editing
-                ? 'path-segment-editable'
-                : 'path-segment-display',
+                'path-segment',
+                editing
+                    ? 'path-segment-editable'
+                    : distanceTargeting
+                        ? 'path-segment-distance-target'
+                        : 'path-segment-display',
             ].join(' ')}
             points={
               points
@@ -194,15 +190,156 @@ export default function PathOverlay({
               )
             }
             onClick={(event) => {
-              if (!event.shiftKey) {
-                return;
-              }
+  if (distanceTargeting) {
+    event.preventDefault();
+    event.stopPropagation();
 
-              onSegmentShiftClick(
-                event,
-                item.segment.id
-              );
-            }}
+    const svg =
+      event.currentTarget
+        .ownerSVGElement;
+
+    if (!svg) {
+      return;
+    }
+
+    const rect =
+      svg.getBoundingClientRect();
+
+    const screenPoint = {
+      x:
+        event.clientX -
+        rect.left,
+      y:
+        event.clientY -
+        rect.top,
+    };
+
+    const mapPoints =
+      getPathSegmentPoints(item);
+
+    const screenPoints =
+      mapPoints.map((point) =>
+        mapToScreen(
+          point.x,
+          point.y
+        )
+      );
+
+    let bestIndex = 0;
+    let bestT = 0;
+    let bestDistance =
+      Infinity;
+
+    for (
+      let index = 0;
+      index <
+      screenPoints.length - 1;
+      index += 1
+    ) {
+      const start =
+        screenPoints[index];
+
+      const end =
+        screenPoints[index + 1];
+
+      const dx =
+        end.x - start.x;
+
+      const dy =
+        end.y - start.y;
+
+      const lengthSquared =
+        dx * dx + dy * dy;
+
+      const t =
+        lengthSquared === 0
+          ? 0
+          : Math.max(
+              0,
+              Math.min(
+                1,
+                (
+                  (
+                    screenPoint.x -
+                    start.x
+                  ) * dx +
+                  (
+                    screenPoint.y -
+                    start.y
+                  ) * dy
+                ) /
+                  lengthSquared
+              )
+            );
+
+      const projected = {
+        x:
+          start.x +
+          dx * t,
+        y:
+          start.y +
+          dy * t,
+      };
+
+      const distance =
+        Math.hypot(
+          projected.x -
+            screenPoint.x,
+          projected.y -
+            screenPoint.y
+        );
+
+      if (
+        distance <
+        bestDistance
+      ) {
+        bestDistance =
+          distance;
+        bestIndex = index;
+        bestT = t;
+      }
+    }
+
+    const mapStart =
+      mapPoints[bestIndex];
+
+    const mapEnd =
+      mapPoints[
+        bestIndex + 1
+      ];
+
+    onDistancePathClick(
+      item.segment.id,
+      {
+        x:
+          mapStart.x +
+          (
+            mapEnd.x -
+            mapStart.x
+          ) * bestT,
+
+        y:
+          mapStart.y +
+          (
+            mapEnd.y -
+            mapStart.y
+          ) * bestT,
+      },
+      event.ctrlKey
+    );
+
+    return;
+  }
+
+  if (!event.shiftKey) {
+    return;
+  }
+
+  onSegmentShiftClick(
+    event,
+    item.segment.id
+  );
+}}
           />
         );
       })}

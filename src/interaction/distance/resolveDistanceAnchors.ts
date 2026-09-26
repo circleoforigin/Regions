@@ -41,6 +41,15 @@ export function resolveDistanceAnchors(
       continue;
     }
 
+    if (anchor.kind === 'path') {
+      resolved.push({
+        anchor,
+        position: anchor.position,
+      });
+
+      continue;
+    }
+
     const piece = pieces.find(
       (candidate) =>
         candidate.id === anchor.pieceId

@@ -3011,6 +3011,16 @@ box-shadow:
   pointer-events: none;
 }
 
+.path-segment-distance-target {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.path-segment-distance-target:hover {
+  stroke: #ffffff;
+  stroke-width: 5;
+}
+
 .path-segment-draft {
   stroke-dasharray: 7 5;
   pointer-events: none;

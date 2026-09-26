@@ -18,10 +18,17 @@ export type DistanceAnchor =
       kind: 'feature';
       featureId: string;
     }
-  | {
+    | {
       id: string;
       kind: 'piece';
       pieceId: string;
+    }
+  | {
+      id: string;
+      kind: 'path';
+      segmentId: string;
+      position: SpatialPoint;
+      usePathFromPrevious: boolean;
     };
 
 export interface ResolvedDistanceAnchor {

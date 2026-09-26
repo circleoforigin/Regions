@@ -3095,6 +3095,20 @@ function saveSectionProperties() {
     editing={
       interactionMode === 'path'
     }
+    distanceTargeting={
+      interactionMode === 'distance'
+    }
+    onDistancePathClick={(
+      segmentId,
+      position,
+      usePath
+    ) => {
+      distanceMeasurement.addPath(
+        segmentId,
+        position,
+        usePath
+      );
+    }}
     terminals={
       pathNetwork.terminals
     }
@@ -3665,7 +3679,9 @@ function saveSectionProperties() {
           setPieceContextMenu(null);
 
           if (interactionMode === 'distance') {
-            distanceMeasurement.clear();
+            distanceMeasurement.removeFeature(
+              feature.id
+            );
             return;
           }
 

@@ -78,6 +78,51 @@ const addExistingPoint = useCallback(
     []
   );
 
+    const addPath = useCallback(
+    (
+      segmentId: string,
+      position: SpatialPoint,
+      usePathFromPrevious: boolean
+    ) => {
+      setAnchors((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          kind: 'path',
+          segmentId,
+          position,
+          usePathFromPrevious,
+        },
+      ]);
+    },
+    []
+  );
+
+    const removeFeature = useCallback(
+    (featureId: string) => {
+      setAnchors((current) => {
+        const index =
+          current.findLastIndex(
+            (anchor) =>
+              anchor.kind ===
+                'feature' &&
+              anchor.featureId ===
+                featureId
+          );
+
+        if (index < 0) {
+          return current;
+        }
+
+        return current.filter(
+          (_, anchorIndex) =>
+            anchorIndex !== index
+        );
+      });
+    },
+    []
+  );
+
   const removeAnchor = useCallback(
     (anchorId: string) => {
       setAnchors((current) =>
@@ -94,14 +139,15 @@ const addExistingPoint = useCallback(
   }, []);
 
   return {
-  anchors,
-  addPoint,
-  addExistingPoint,
-  addFeature,
-  addPiece,
-  removeAnchor,
-  clear,
-};
+    anchors,
+    addPoint,
+    addExistingPoint,
+    addFeature,
+    addPiece,
+    addPath,
+    removeAnchor,
+    clear,
+  };
 }
 
 export type DistanceMeasurementController =
