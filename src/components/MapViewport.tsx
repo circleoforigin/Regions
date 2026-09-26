@@ -3090,8 +3090,11 @@ function saveSectionProperties() {
   }
 />
 
-{interactionMode === 'path' && (
+{layerVisibility.paths && (
   <PathOverlay
+    editing={
+      interactionMode === 'path'
+    }
     terminals={
       pathNetwork.terminals
     }
@@ -3532,7 +3535,30 @@ function saveSectionProperties() {
   );
 })()}
 
+{/*
+  Feature-backed Path terminals retain the Feature's
+  actual spatial position. Their marker supplies the
+  terminal visualization instead of drawing a second node.
+*/}
+
 {visibleFeatures.map((feature) => {
+    const pathTerminal =
+    interactionMode === 'path' &&
+    pathNetwork.segments.some(
+      (segment) =>
+        (
+          segment.start.kind ===
+            'feature' &&
+          segment.start.featureId ===
+            feature.id
+        ) ||
+        (
+          segment.end.kind ===
+            'feature' &&
+          segment.end.featureId ===
+            feature.id
+        )
+    );
   const isMoving = feature.id === movingFeatureId &&
     state.editingMode === 'move-feature';
   const position = isMoving && movingFeaturePreviewPosition
@@ -3556,6 +3582,7 @@ function saveSectionProperties() {
     isConnection(feature) ? 'map-feature-connection' : '',
     state.selectedFeatureId === feature.id ? 'selected' : '',
     distanceSelected ? 'distance-selected' : '',
+    pathTerminal ? 'path-terminal' : '',
     isMoving ? 'moving' : '',
     moveIsValid ? '' : 'invalid',
   ].filter(Boolean).join(' ');
@@ -3596,35 +3623,42 @@ function saveSectionProperties() {
       );
   }
 }}
-        onClick={(event) => {
+        onClick={() => {
+  if (suppressNextFeatureClickRef.current) {
+    suppressNextFeatureClickRef.current = false;
+    return;
+  }
+
   if (
-    interactionMode === 'path' &&
-    event.ctrlKey
+    state.editingMode ===
+      'move-feature'
   ) {
     return;
   }
 
-  if (suppressNextFeatureClickRef.current) {
-            suppressNextFeatureClickRef.current = false;
-            return;
-          }
+  if (
+    interactionMode ===
+      'distance'
+  ) {
+    distanceMeasurement.addFeature(
+      feature.id
+    );
 
-          if (state.editingMode === 'move-feature') {
-            return;
-          }
+    return;
+  }
 
-          if (interactionMode === 'distance') {
-            distanceMeasurement.addFeature(
-              feature.id
-            );
-            return;
-          }
+  if (
+    interactionMode !==
+      'explore'
+  ) {
+    return;
+  }
 
-          dispatch({
-            type: 'feature.select',
-            featureId: feature.id,
-          });
-        }}
+  dispatch({
+    type: 'feature.select',
+    featureId: feature.id,
+  });
+}}
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();

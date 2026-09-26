@@ -12,6 +12,7 @@ export interface RegionsPoint {
 export interface RegionsLayerVisibility {
   features: boolean;
   locations: boolean;
+  paths: boolean;
   areas: boolean;
   zones: boolean;
   borders: boolean;
@@ -23,6 +24,7 @@ export type RegionsLayer = keyof RegionsLayerVisibility;
 export const defaultLayerVisibility: RegionsLayerVisibility = {
   features: true,
   locations: true,
+  paths: true,
   areas: true,
   zones: true,
   borders: true,

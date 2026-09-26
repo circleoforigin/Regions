@@ -2992,9 +2992,15 @@ box-shadow:
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
 
+.path-segment-editable {
   pointer-events: stroke;
   cursor: pointer;
+}
+
+.path-segment-display {
+  pointer-events: none;
 }
 
 .path-segment-draft {
@@ -3005,7 +3011,7 @@ box-shadow:
 
 .path-terminal-node {
   fill: #111111;
-  stroke: #ffffff;
+  stroke: #1df405;
   stroke-width: 2;
 
   pointer-events: all;
@@ -3021,3 +3027,7 @@ box-shadow:
   cursor: pointer;
 }
 
+.map-feature-marker.path-terminal
+  .map-feature-dot {
+  border-color: #39ff14;
+}

@@ -16,6 +16,7 @@ import { isPieceTracked } from '../models/Piece';
 const LAYER_OPTIONS: { id: RegionsLayer; label: string }[] = [
   { id: 'features', label: 'Features' },
   { id: 'locations', label: 'Locations' },
+  { id: 'paths', label: 'Paths'},
   { id: 'areas', label: 'Areas' },
   { id: 'zones', label: 'Zones' },
   { id: 'borders', label: 'Borders' },

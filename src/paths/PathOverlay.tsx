@@ -25,6 +25,8 @@ interface PathDragPreview {
 }
 
 interface PathOverlayProps {
+  editing: boolean;
+
   terminals:
     StandalonePathTerminal[];
 
@@ -85,6 +87,7 @@ interface PathOverlayProps {
 }
 
 export default function PathOverlay({
+  editing,
   terminals,
   segments,
   features,
@@ -170,7 +173,12 @@ export default function PathOverlay({
         return (
           <polyline
             key={item.segment.id}
-            className="path-segment"
+            className={[
+            'path-segment',
+            editing
+                ? 'path-segment-editable'
+                : 'path-segment-display',
+            ].join(' ')}
             points={
               points
                 .map(
@@ -199,7 +207,7 @@ export default function PathOverlay({
         );
       })}
 
-      {displayedSegments.flatMap(
+      {editing && displayedSegments.flatMap(
         (segment) =>
           segment.shapePoints.map(
             (point) => {
@@ -239,7 +247,7 @@ export default function PathOverlay({
           )
       )}
 
-      {displayedTerminals.map(
+      {editing && displayedTerminals.map(
         (terminal) => {
           const screen =
             mapToScreen(
@@ -275,7 +283,7 @@ export default function PathOverlay({
         }
       )}
 
-      {draftStartPosition && (
+      {editing && draftStartPosition && (
         <polyline
           className="path-segment path-segment-draft"
           points={[
