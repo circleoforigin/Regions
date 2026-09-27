@@ -66,6 +66,10 @@ import {
 
 import PathOverlay
   from '../paths/PathOverlay';
+
+import PathSegmentPopup
+  from '../paths/PathSegmentPopup';
+
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
 const NAVIGATION_ZOOM_RATIO = 0.5;
@@ -406,15 +410,39 @@ function MapViewport({
     });
   const distanceMeasurement = useDistanceMeasurement();
   const [
-  distancePointer,
-  setDistancePointer,
-] = useState<Point | null>(null);
+    distancePointer,
+    setDistancePointer,
+  ] = useState<Point | null>(null);
   const [
     pathPointer,
     setPathPointer,
   ] = useState<Point | null>(
     null
   );
+  const [
+    selectedPathSegment,
+    setSelectedPathSegment,
+  ] = useState<{
+    segmentId: string;
+    anchor: Point;
+  } | null>(null);
+
+  const selectedPath =
+  selectedPathSegment
+    ? pathNetwork.segments.find(
+        (segment) =>
+          segment.id ===
+          selectedPathSegment.segmentId
+      )
+    : undefined;
+
+  const [
+    pathPopupOffset,
+    setPathPopupOffset,
+  ] = useState<Point>({
+    x: 90,
+    y: -60,
+  });
 
   const [
     pathDragPreview,
@@ -450,7 +478,46 @@ useEffect(() => {
   setPathDragPreview(null);
 }, [interactionMode]);
 
-  const resolvedDistanceAnchors =
+useEffect(() => {
+  if (interactionMode === 'explore') {
+    return;
+  }
+
+  setSelectedPathSegment(null);
+}, [interactionMode]);
+
+useEffect(() => {
+  if (!selectedPathSegment) {
+    return;
+  }
+
+  const stillExists =
+    pathNetwork.segments.some(
+      (segment) =>
+        segment.id ===
+        selectedPathSegment.segmentId
+    );
+
+  if (!stillExists) {
+    setSelectedPathSegment(null);
+  }
+}, [
+  selectedPathSegment,
+  pathNetwork.segments,
+]);
+
+useEffect(() => {
+  pathPopupDragRef.current = null;
+
+  setPathPopupOffset({
+    x: 90,
+    y: -60,
+  });
+}, [
+  selectedPathSegment?.segmentId,
+]);
+
+const resolvedDistanceAnchors =
   resolveDistanceAnchors(
     distanceMeasurement.anchors,
     features,
@@ -510,6 +577,13 @@ useEffect(() => {
     );
 
   const popupDragRef = useRef<{
+    pointerId: number;
+    target: HTMLDivElement;
+    startPointer: Point;
+    startOffset: Point;
+  } | null>(null);
+
+  const pathPopupDragRef = useRef<{
     pointerId: number;
     target: HTMLDivElement;
     startPointer: Point;
@@ -1738,6 +1812,79 @@ function endPopupDrag(event: React.PointerEvent<HTMLDivElement>) {
 
 function cancelPopupDrag() {
   popupDragRef.current = null;
+}
+
+function handlePathPopupPointerDown(
+  event: React.PointerEvent<HTMLDivElement>
+) {
+  if (event.button !== 0) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  event.currentTarget.setPointerCapture(
+    event.pointerId
+  );
+
+  pathPopupDragRef.current = {
+    pointerId: event.pointerId,
+    target: event.currentTarget,
+    startPointer: {
+      x: event.clientX,
+      y: event.clientY,
+    },
+    startOffset: pathPopupOffset,
+  };
+}
+
+function handlePathPopupPointerMove(
+  event: React.PointerEvent<HTMLDivElement>
+) {
+  const drag =
+    pathPopupDragRef.current;
+
+  if (
+    !drag ||
+    drag.pointerId !== event.pointerId
+  ) {
+    return;
+  }
+
+  setPathPopupOffset(
+    clampPopupOffset({
+      x:
+        drag.startOffset.x +
+        event.clientX -
+        drag.startPointer.x,
+
+      y:
+        drag.startOffset.y +
+        event.clientY -
+        drag.startPointer.y,
+    })
+  );
+}
+
+function endPathPopupDrag(
+  event: React.PointerEvent<HTMLDivElement>
+) {
+  if (
+    pathPopupDragRef.current?.pointerId !==
+    event.pointerId
+  ) {
+    return;
+  }
+
+  pathPopupDragRef.current = null;
+
+  releasePointerCaptureSafely(
+    event.currentTarget,
+    event.pointerId
+  );
+}
+
+function cancelPathPopupDrag() {
+  pathPopupDragRef.current = null;
 }
 
 function getSectionOwner(edgeOrNodeId: string) {
@@ -3174,7 +3321,7 @@ function saveSectionProperties() {
 
 {layerVisibility.paths && (
   <PathOverlay
-        editing={
+    editing={
       interactionMode === 'path'
     }
     terminalPromotionEnabled={
@@ -3184,6 +3331,18 @@ function saveSectionProperties() {
     distanceTargeting={
       interactionMode === 'distance'
     }
+    exploreTargeting={
+      interactionMode === 'explore'
+    }
+    onExplorePathClick={(
+      segmentId,
+      position
+    ) => {
+      setSelectedPathSegment({
+        segmentId,
+        anchor: position,
+      });
+    }}
     onDistancePathClick={(
       segmentId,
       position,
@@ -3843,6 +4002,69 @@ onClick={(event) => {
     </Fragment>
   );
 })}
+
+{selectedPath &&
+  selectedPathSegment &&
+  interactionMode === 'explore' &&
+  (() => {
+    const anchor =
+      mapToScreen(
+        selectedPathSegment.anchor.x,
+        selectedPathSegment.anchor.y
+      );
+
+    const popupPosition = {
+      x: anchor.x + pathPopupOffset.x,
+      y: anchor.y + pathPopupOffset.y,
+    };
+
+    const popupAnchor = {
+      x: popupPosition.x,
+      y: popupPosition.y + 24,
+    };
+
+    return (
+      <>
+        <svg
+          className="feature-popup-connector"
+          aria-hidden="true"
+        >
+          <line
+            className="connector-outline"
+            x1={anchor.x}
+            y1={anchor.y}
+            x2={popupAnchor.x}
+            y2={popupAnchor.y}
+          />
+
+          <line
+            className="connector-line"
+            x1={anchor.x}
+            y1={anchor.y}
+            x2={popupAnchor.x}
+            y2={popupAnchor.y}
+          />
+        </svg>
+
+        <PathSegmentPopup
+          segment={selectedPath}
+          position={popupPosition}
+          onPointerDown={
+            handlePathPopupPointerDown
+          }
+          onPointerMove={
+            handlePathPopupPointerMove
+          }
+          onPointerUp={
+            endPathPopupDrag
+          }
+          onPointerCancel={
+            cancelPathPopupDrag
+          }
+        />
+      </>
+    );
+  })()}
 
 {connectorVisible && selectedAnchor && popupTitleAnchor && (
   <svg className="feature-popup-connector" aria-hidden="true">
