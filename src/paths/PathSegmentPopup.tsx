@@ -1,10 +1,24 @@
-import type {
-  PointerEvent as ReactPointerEvent,
+import {
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
 } from 'react';
 
 import type {
   PathSegment,
 } from '../models/Path';
+
+import RichTextEditor
+  from '../components/RichTextEditor';
+
+import type {
+  RichTextDocument,
+} from '../models/RichText';
+
+type PathPopupTab =
+  | 'description'
+  | 'ruleset'
+  | null;
 
 interface PathSegmentPopupProps {
   segment: PathSegment;
@@ -13,6 +27,21 @@ interface PathSegmentPopupProps {
     x: number;
     y: number;
   };
+
+  onNameChange?: (
+    segmentId: string,
+    name: string
+  ) => void;
+
+  onSubtitleChange?: (
+    segmentId: string,
+    subtitle: string
+  ) => void;
+
+  onDescriptionChange?: (
+    segmentId: string,
+    description: RichTextDocument
+  ) => void;
 
   onPointerDown: (
     event: ReactPointerEvent<HTMLDivElement>
@@ -32,11 +61,117 @@ interface PathSegmentPopupProps {
 export default function PathSegmentPopup({
   segment,
   position,
+  onNameChange,
+  onSubtitleChange,
+  onDescriptionChange,
   onPointerDown,
   onPointerMove,
   onPointerUp,
   onPointerCancel,
 }: PathSegmentPopupProps) {
+  const [
+    editingName,
+    setEditingName,
+  ] = useState(false);
+
+  const [
+    nameDraft,
+    setNameDraft,
+  ] = useState('');
+
+  const [
+    editingSubtitle,
+    setEditingSubtitle,
+  ] = useState(false);
+
+  const [
+    subtitleDraft,
+    setSubtitleDraft,
+  ] = useState('');
+
+  const [
+    activeTab,
+    setActiveTab,
+  ] = useState<PathPopupTab>(null);
+
+  useEffect(() => {
+    setEditingName(false);
+    setNameDraft(
+      segment.name ?? ''
+    );
+
+    setEditingSubtitle(false);
+    setSubtitleDraft(
+      segment.subtitle ?? ''
+    );
+
+    setActiveTab(null);
+  }, [segment.id]);
+
+  function saveName() {
+    const nextName =
+      nameDraft.trim();
+
+    setEditingName(false);
+
+    if (
+      nextName ===
+      (segment.name ?? '')
+    ) {
+      return;
+    }
+
+    onNameChange?.(
+      segment.id,
+      nextName
+    );
+  }
+
+  function cancelNameEdit() {
+    setNameDraft(
+      segment.name ?? ''
+    );
+
+    setEditingName(false);
+  }
+
+  function saveSubtitle() {
+    const nextSubtitle =
+      subtitleDraft.trim();
+
+    setEditingSubtitle(false);
+
+    if (
+      nextSubtitle ===
+      (segment.subtitle ?? '')
+    ) {
+      return;
+    }
+
+    onSubtitleChange?.(
+      segment.id,
+      nextSubtitle
+    );
+  }
+
+  function cancelSubtitleEdit() {
+    setSubtitleDraft(
+      segment.subtitle ?? ''
+    );
+
+    setEditingSubtitle(false);
+  }
+
+  function toggleTab(
+    tab: Exclude<PathPopupTab, null>
+  ) {
+    setActiveTab((current) =>
+      current === tab
+        ? null
+        : tab
+    );
+  }
+
   return (
     <div
       className="feature-popup path-segment-popup"
@@ -65,26 +200,191 @@ export default function PathSegmentPopup({
           onPointerCancel
         }
       >
-        <div className="feature-popup-name">
-          {segment.name?.trim() ||
-            'Unnamed Path'}
-        </div>
+        {editingName ? (
+          <input
+            className="feature-popup-name-input"
+            type="text"
+            value={nameDraft}
+            onChange={(event) => {
+              setNameDraft(
+                event.target.value
+              );
+            }}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+            onBlur={saveName}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                saveName();
+              }
 
-        {segment.subtitle?.trim() && (
-          <div className="feature-popup-subtitle">
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelNameEdit();
+              }
+            }}
+            autoFocus
+          />
+        ) : (
+          <button
+            type="button"
+            className="feature-popup-name"
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            onClick={() => {
+              setNameDraft(
+                segment.name ?? ''
+              );
+
+              setEditingName(true);
+            }}
+          >
+            {segment.name?.trim() ||
+              'Unnamed Path'}
+          </button>
+        )}
+
+        {editingSubtitle ? (
+          <input
+            className="feature-popup-subtitle-input"
+            type="text"
+            value={subtitleDraft}
+            placeholder="Subtitle"
+            onChange={(event) => {
+              setSubtitleDraft(
+                event.target.value
+              );
+            }}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+            onBlur={saveSubtitle}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                saveSubtitle();
+              }
+
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelSubtitleEdit();
+              }
+            }}
+            autoFocus
+          />
+        ) : segment.subtitle?.trim() ? (
+          <button
+            type="button"
+            className="feature-popup-subtitle"
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            onClick={() => {
+              setSubtitleDraft(
+                segment.subtitle ?? ''
+              );
+
+              setEditingSubtitle(true);
+            }}
+          >
             {segment.subtitle}
+          </button>
+        ) : (
+          <div className="feature-popup-subtitle-empty">
+            <span />
+
+            <button
+              type="button"
+              className="feature-popup-subtitle-add"
+              title="Add subtitle"
+              aria-label="Add subtitle"
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={() => {
+                setSubtitleDraft('');
+                setEditingSubtitle(true);
+              }}
+            />
+
+            <span />
           </div>
         )}
       </div>
 
-      <div className="path-segment-popup-body">
-        {segment.brief ? (
-          <div className="path-segment-popup-brief">
-            Brief
-          </div>
-        ) : (
-          <div className="path-segment-popup-empty">
-            No brief
+      <div className="path-popup-extender">
+        <div className="path-popup-tabs">
+          <button
+            type="button"
+            className={[
+              'path-popup-tab',
+              activeTab === 'description'
+                ? 'active'
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            aria-pressed={
+              activeTab === 'description'
+            }
+            onClick={() =>
+              toggleTab('description')
+            }
+          >
+            Description
+          </button>
+
+          <button
+            type="button"
+            className={[
+              'path-popup-tab',
+              activeTab === 'ruleset'
+                ? 'active'
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            aria-pressed={
+              activeTab === 'ruleset'
+            }
+            onClick={() =>
+              toggleTab('ruleset')
+            }
+          >
+            Ruleset
+          </button>
+        </div>
+
+        {activeTab && (
+          <div className="path-popup-extension">
+            {activeTab ===
+            'description' ? (
+              <RichTextEditor
+                key={segment.id}
+                value={
+                  segment.brief
+                }
+                onChange={(description) => {
+                  onDescriptionChange?.(
+                    segment.id,
+                    description
+                  );
+                }}
+              />
+            ) : (
+              <div className="path-popup-ruleset-empty">
+                No Ruleset data available.
+              </div>
+            )}
           </div>
         )}
       </div>

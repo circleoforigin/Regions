@@ -487,6 +487,20 @@ useEffect(() => {
 }, [interactionMode]);
 
 useEffect(() => {
+  if (
+    !selectedPathSegment ||
+    !state.selectedFeatureId
+  ) {
+    return;
+  }
+
+  setSelectedPathSegment(null);
+}, [
+  selectedPathSegment,
+  state.selectedFeatureId,
+]);
+
+useEffect(() => {
   if (!selectedPathSegment) {
     return;
   }
@@ -2174,8 +2188,16 @@ if (interactionMode === 'distance') {
   if (pendingArrivalPlacement) return;
   if (state.editingMode === 'move-feature') return;
   setPieceContextMenu(null);
-  dispatch({ type: 'feature.clearSelection' });
-  dispatch({ type: 'contextMenu.close' });
+
+dispatch({
+  type: 'feature.clearSelection',
+});
+
+setSelectedPathSegment(null);
+
+dispatch({
+  type: 'contextMenu.close',
+});
 
   const viewport =
     viewportRef.current;
@@ -2461,6 +2483,8 @@ if (interactionMode === 'distance') {
     }
 
     dispatch({ type: 'feature.clearSelection' });
+    setSelectedPathSegment(null);
+
     dispatch({ type: 'contextMenu.close' });
     setPieceContextMenu(null);
     setSectionContextMenu(null);
@@ -3335,14 +3359,18 @@ function saveSectionProperties() {
       interactionMode === 'explore'
     }
     onExplorePathClick={(
-      segmentId,
-      position
-    ) => {
-      setSelectedPathSegment({
-        segmentId,
-        anchor: position,
-      });
-    }}
+  segmentId,
+  position
+) => {
+  dispatch({
+    type: 'feature.clearSelection',
+  });
+
+  setSelectedPathSegment({
+    segmentId,
+    anchor: position,
+  });
+}}
     onDistancePathClick={(
       segmentId,
       position,
@@ -3569,7 +3597,11 @@ function saveSectionProperties() {
         event.stopPropagation();
         if (suppressNextFeatureClickRef.current) { suppressNextFeatureClickRef.current = false; return; }
         if (pendingArrivalPlacement || sectionDraft || state.editingMode === 'move-feature') return;
-        dispatch({ type: 'feature.select', featureId: section.id });
+        setSelectedPathSegment(null);
+        dispatch({ 
+          type: 'feature.select', 
+          featureId: section.id,
+        });
       }}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -3940,6 +3972,7 @@ onClick={(event) => {
   ) {
     return;
   }
+  setSelectedPathSegment(null);
 
   dispatch({
     type: 'feature.select',
