@@ -891,8 +891,12 @@ const selectedFeatureSecondaryActions =
     useState(false);
   const [nameDraft, setNameDraft] =
     useState('');
-  const [descriptionExpandedFeatureId, setDescriptionExpandedFeatureId] =
-    useState<string | null>(null);
+  const [
+    activeFeaturePopupTab,
+    setActiveFeaturePopupTab,
+  ] = useState<
+    'description' | 'ruleset' | null
+  >(null);
 
   useEffect(() => {
     popupDragRef.current = null;
@@ -900,6 +904,7 @@ const selectedFeatureSecondaryActions =
     setNameDraft(
       selectedFeature?.name ?? ''
     );
+    setActiveFeaturePopupTab(null);
   }, [
     selectedFeature?.id,
     selectedFeature?.name,
@@ -4541,48 +4546,85 @@ onDescriptionChange={(
       </div>
     </div>
 
-    <div className="feature-popup-description">
-  <button
-    type="button"
-    className="feature-popup-description-tab"
-    aria-expanded={
-      descriptionExpandedFeatureId === selectedFeature.id
-    }
-    onClick={() => {
-      setDescriptionExpandedFeatureId((current) =>
-        current === selectedFeature.id
-          ? null
-          : selectedFeature.id
-      );
-    }}
-  >
-    Description
-    <span
-      className="feature-popup-description-arrow"
-      aria-hidden="true"
+   <div className="path-popup-extender">
+  <div className="path-popup-tabs">
+    <button
+      type="button"
+      className={`path-popup-tab${
+        activeFeaturePopupTab ===
+        'description'
+          ? ' active'
+          : ''
+      }`}
+      aria-expanded={
+        activeFeaturePopupTab ===
+        'description'
+      }
+      onClick={() => {
+        setActiveFeaturePopupTab(
+          (current) =>
+            current === 'description'
+              ? null
+              : 'description'
+        );
+      }}
     >
-      {descriptionExpandedFeatureId === selectedFeature.id
-        ? '▴'
-        : '▾'}
-    </span>
-  </button>
+      Description
+    </button>
 
-  {descriptionExpandedFeatureId === selectedFeature.id && (
-    <div className="feature-popup-description-extension">
-      <RichTextEditor
-        key={selectedFeature.id}
-        value={selectedFeature.description}
-        onChange={(description) => {
-          if (selectedArea) {
-            updateAreaIdentity(selectedArea.id, { description });
-          } else {
-            onDescriptionChange?.(
-              selectedFeature.id,
-              description
-            );
+    <button
+      type="button"
+      className={`path-popup-tab${
+        activeFeaturePopupTab ===
+        'ruleset'
+          ? ' active'
+          : ''
+      }`}
+      aria-expanded={
+        activeFeaturePopupTab ===
+        'ruleset'
+      }
+      onClick={() => {
+        setActiveFeaturePopupTab(
+          (current) =>
+            current === 'ruleset'
+              ? null
+              : 'ruleset'
+        );
+      }}
+    >
+      Ruleset
+    </button>
+  </div>
+
+  {activeFeaturePopupTab && (
+    <div className="path-popup-extension">
+      {activeFeaturePopupTab ===
+      'description' ? (
+        <RichTextEditor
+          key={selectedFeature.id}
+          value={
+            selectedFeature.description
           }
-        }}
-      />
+          onChange={(description) => {
+            if (selectedArea) {
+              updateAreaIdentity(
+                selectedArea.id,
+                { description }
+              );
+            } else {
+              onDescriptionChange?.(
+                selectedFeature.id,
+                description
+              );
+            }
+          }}
+        />
+      ) : (
+        <div className="path-popup-ruleset-empty">
+          No Ruleset data available.
+        </div>
+      )}
     </div>
   )}
 </div>

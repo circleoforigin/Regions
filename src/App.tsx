@@ -6573,8 +6573,8 @@ mapMediaSlotsEnabled={
                 label: 'View',
                 onInvoke: () => {
                   handleOpenJournalView(
-                    path, 
-                    'path'
+                    feature, 
+                    targetKind
                   );
                 },
               }, 
@@ -6642,6 +6642,16 @@ pathSecondaryActions={(
                     : 'Unable to open Journal Page.'
                 );
               });
+            },
+          },
+          {
+            id: 'journal-view-page',
+            label: 'View',
+            onInvoke: () => {
+              handleOpenJournalView(
+                path,
+                'path'
+              );
             },
           },
         ],
