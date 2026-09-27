@@ -6548,46 +6548,40 @@ mapMediaSlotsEnabled={
             {
               id: 'journal',
               label: 'Journal',
-              children: [{
-                id: 'journal-go-to-page',
-                label: 'Go to Page',
-                onInvoke: () => {
-                  if (!feature.journalPageId) {
-                    return;
-                  }
+              children: [
+                {
+                  id: 'journal-go-to-page',
+                  label: 'Go to Page',
+                  onInvoke: () => {
+                    if (!feature.journalPageId) {
+                      return;
+                    }
 
-                void goToJournalPage(
-                  feature.journalPageId
-                ).catch((error) => {
-                  setNavigationError(
-                    error instanceof Error
-                      ? error.message
-                      : 'Unable to open Journal Page.'
-                  );
-                });
+                  void goToJournalPage(
+                    feature.journalPageId
+                  ).catch((error) => {
+                    setNavigationError(
+                      error instanceof Error
+                        ? error.message
+                        : 'Unable to open Journal Page.'
+                    );
+                  });
+                },
               },
-            },
-            {
-  id: 'journal-view-page',
-  label: 'View',
-  onInvoke: () => {
-    handleOpenJournalView(path, 'path');
-  },
-},
-          {
-  id: 'journal-view-page',
-  label: 'View',
-  onInvoke: () => {
-    handleOpenJournalView(
-      feature,
-      targetKind
-    );
-  },
-},
-        ],
-      },
-    ];
-  }
+              {
+                id: 'journal-view-page',
+                label: 'View',
+                onInvoke: () => {
+                  handleOpenJournalView(
+                    path, 
+                    'path'
+                  );
+                },
+              }, 
+            ],
+          },
+        ];
+    }
 
  return [
   {
