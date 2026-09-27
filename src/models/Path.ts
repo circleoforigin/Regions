@@ -48,7 +48,8 @@ export interface PathSegment {
    */
   name?: string;
   subtitle?: string;
-  brief?: RichTextDocument | string;
+  description?: RichTextDocument | string;
+  journalPageId?: string;
 
   start: PathTerminalReference;
   end: PathTerminalReference;

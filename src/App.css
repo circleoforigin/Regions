@@ -3238,3 +3238,7 @@ box-shadow:
   font-size: 12px;
   font-style: italic;
 }
+
+.path-popup-controls {
+  margin-top: -10px;
+}

@@ -48,7 +48,12 @@ import type {
 } from '../models/Map';
 
 import type {
-  PathNetwork,
+  PathSegment,
+} from '../models/Path';
+
+import {
+  savePathSegment,
+  type PathNetwork,
 } from '../paths/PathNetwork';
 
 import {
@@ -234,7 +239,9 @@ secondaryActions?: (
   feature: Feature,
   targetKind: 'feature' | 'area'
 ) => FeaturePopupAction[];
-
+pathSecondaryActions?: (
+  segment: PathSegment
+) => FeaturePopupAction[];
 onDeleteFeature?: (
   feature: Feature
 ) => void;
@@ -359,6 +366,7 @@ function MapViewport({
   onFocusPieceComplete,
   onDeleteFeature,
   secondaryActions,
+  pathSecondaryActions,
   onNewFeatureRequest,
   onPromotePathTerminal,
   onNewLocationRequest,
@@ -435,6 +443,55 @@ function MapViewport({
           selectedPathSegment.segmentId
       )
     : undefined;
+
+    async function updatePathSegment(
+  segmentId: string,
+  patch: Partial<
+    Pick<
+      PathSegment,
+      | 'name'
+      | 'subtitle'
+      | 'description'
+      | 'journalPageId'
+      | 'rulesetData'
+    >
+  >
+): Promise<void> {
+  const current =
+    pathNetwork.segments.find(
+      (segment) =>
+        segment.id === segmentId
+    );
+
+  if (!current) {
+    return;
+  }
+
+  const updated: PathSegment = {
+    ...current,
+    ...patch,
+    updatedAt: new Date(),
+  };
+
+  await onPathMapChange(
+    (map) =>
+      savePathSegment(
+        map,
+        updated
+      )
+  );
+
+  onPathNetworkChange({
+    ...pathNetwork,
+    segments:
+      pathNetwork.segments.map(
+        (segment) =>
+          segment.id === segmentId
+            ? updated
+            : segment
+      ),
+  });
+}
 
   const [
     pathPopupOffset,
@@ -4081,7 +4138,54 @@ onClick={(event) => {
 
         <PathSegmentPopup
           segment={selectedPath}
+          actions={
+            pathSecondaryActions?.(
+              selectedPath
+            ) ?? []
+          }
           position={popupPosition}
+          onNameChange={(
+  segmentId,
+  name
+) => {
+  const trimmedName =
+    name.trim();
+
+  if (!trimmedName) {
+    return;
+  }
+
+  void updatePathSegment(
+    segmentId,
+    {
+      name: trimmedName,
+    }
+  );
+}}
+onSubtitleChange={(
+  segmentId,
+  subtitle
+) => {
+  void updatePathSegment(
+    segmentId,
+    {
+      subtitle:
+        subtitle.trim() ||
+        undefined,
+    }
+  );
+}}
+onDescriptionChange={(
+  segmentId,
+  description
+) => {
+  void updatePathSegment(
+    segmentId,
+    {
+      description,
+    }
+  );
+}}
           onPointerDown={
             handlePathPopupPointerDown
           }

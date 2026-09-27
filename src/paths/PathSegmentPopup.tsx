@@ -15,6 +15,10 @@ import type {
   RichTextDocument,
 } from '../models/RichText';
 
+import type {
+  FeaturePopupAction,
+} from '../components/MapViewport';
+
 type PathPopupTab =
   | 'description'
   | 'ruleset'
@@ -22,7 +26,7 @@ type PathPopupTab =
 
 interface PathSegmentPopupProps {
   segment: PathSegment;
-
+  actions?: FeaturePopupAction[];
   position: {
     x: number;
     y: number;
@@ -60,6 +64,7 @@ interface PathSegmentPopupProps {
 
 export default function PathSegmentPopup({
   segment,
+  actions = [],
   position,
   onNameChange,
   onSubtitleChange,
@@ -94,6 +99,16 @@ export default function PathSegmentPopup({
     setActiveTab,
   ] = useState<PathPopupTab>(null);
 
+    const [
+    actionsExpanded,
+    setActionsExpanded,
+  ] = useState(false);
+
+  const [
+    expandedActionId,
+    setExpandedActionId,
+  ] = useState<string | null>(null);
+
   useEffect(() => {
     setEditingName(false);
     setNameDraft(
@@ -106,6 +121,9 @@ export default function PathSegmentPopup({
     );
 
     setActiveTab(null);
+
+    setActionsExpanded(false);
+    setExpandedActionId(null);
   }, [segment.id]);
 
   function saveName() {
@@ -318,7 +336,128 @@ export default function PathSegmentPopup({
 
             <span />
           </div>
-        )}
+                )}
+      </div>
+
+      <div className="feature-popup-controls path-popup-controls">
+        <div />
+
+        <div className="feature-popup-control">
+          <button
+            type="button"
+            className="feature-popup-control-toggle"
+            aria-expanded={actionsExpanded}
+            onClick={() => {
+              setActionsExpanded(
+                (current) => !current
+              );
+
+              setExpandedActionId(null);
+            }}
+          >
+            Actions{' '}
+            <span aria-hidden="true">
+              ▾
+            </span>
+          </button>
+
+          {actionsExpanded && (
+            <div className="feature-popup-control-menu actions-menu">
+              {actions.map((action) => {
+                const hasChildren =
+                  Boolean(
+                    action.children?.length
+                  );
+
+                const submenuExpanded =
+                  expandedActionId ===
+                  action.id;
+
+                return (
+                  <div
+                    key={action.id}
+                    className="feature-popup-action-group"
+                  >
+                    <button
+                      type="button"
+                      disabled={
+                        action.disabled
+                      }
+                      onClick={() => {
+                        if (hasChildren) {
+                          setExpandedActionId(
+                            submenuExpanded
+                              ? null
+                              : action.id
+                          );
+
+                          return;
+                        }
+
+                        action.onInvoke?.();
+
+                        setActionsExpanded(
+                          false
+                        );
+                      }}
+                    >
+                      {action.label}
+
+                      {hasChildren && (
+                        <span
+                          className="feature-popup-action-arrow"
+                          aria-hidden="true"
+                        >
+                          ›
+                        </span>
+                      )}
+                    </button>
+
+                    {hasChildren &&
+                      submenuExpanded && (
+                        <div className="feature-popup-action-submenu">
+                          {action.children!.map(
+                            (child) => (
+                              <button
+                                key={
+                                  child.id
+                                }
+                                type="button"
+                                disabled={
+                                  child.disabled
+                                }
+                                onClick={() => {
+                                  child.onInvoke?.();
+
+                                  setExpandedActionId(
+                                    null
+                                  );
+
+                                  setActionsExpanded(
+                                    false
+                                  );
+                                }}
+                              >
+                                {
+                                  child.label
+                                }
+                              </button>
+                            )
+                          )}
+                        </div>
+                      )}
+                  </div>
+                );
+              })}
+
+              {actions.length === 0 && (
+                <span className="feature-popup-no-actions">
+                  No actions available.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="path-popup-extender">
@@ -370,9 +509,7 @@ export default function PathSegmentPopup({
             'description' ? (
               <RichTextEditor
                 key={segment.id}
-                value={
-                  segment.brief
-                }
+                value={segment.description}
                 onChange={(description) => {
                   onDescriptionChange?.(
                     segment.id,
