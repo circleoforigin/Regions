@@ -61,6 +61,7 @@ import FeatureTypesDialog from './components/FeatureTypesDialog';
 import type { Project } from './models/Project';
 import type { Map as RegionMap } from './models/Map';
 import type { Feature } from './models/Feature';
+import type { PathSegment } from './models/Path';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import type { Piece, PieceShape } from './models/Piece';
@@ -98,6 +99,7 @@ import { featureRepository } from './features/FeatureRepository';
 import {
   loadPathNetwork,
   promotePathTerminalToFeature,
+  savePathSegment,
   type PathNetwork,
 } from './paths/PathNetwork';
 import { resolveArea } from './sections/AreaContext';
@@ -131,6 +133,15 @@ interface IncomingLocationReference {
   mapId: string;
   feature: Feature;
 }
+
+type JournalTargetKind =
+  | 'feature'
+  | 'area'
+  | 'path';
+
+type JournalTarget =
+  | Feature
+  | PathSegment;
 
 interface MapDeletionAnalysis {
   map: RegionMap;
@@ -431,6 +442,11 @@ const pendingProjectActionRef =
   const [pendingFocusFeatureId, setPendingFocusFeatureId] =
     useState<string | null>(null);
 
+  const [
+    selectedPathId,
+    setSelectedPathId,
+  ] = useState<string | null>(null);
+
   const [navigationError, setNavigationError] =
     useState<string | null>(null);
 
@@ -439,7 +455,7 @@ const [
   setJournalViewOwner,
 ] = useState<{
   id: string;
-  kind: 'feature' | 'area';
+  kind: 'feature' | 'area' | 'path';
 } | null>(null);
 
 const [
@@ -457,10 +473,14 @@ useEffect(() => {
     return;
   }
 
-  if (
-    state.selectedFeatureId ===
-    journalViewOwner.id
-  ) {
+  const ownerStillSelected =
+    journalViewOwner.kind === 'path'
+      ? selectedPathId ===
+        journalViewOwner.id
+      : state.selectedFeatureId ===
+        journalViewOwner.id;
+
+  if (ownerStillSelected) {
     return;
   }
 
@@ -469,12 +489,13 @@ useEffect(() => {
   setJournalViewPageIndex(0);
 }, [
   journalViewOwner,
+  selectedPathId,
   state.selectedFeatureId,
 ]);
 
 function handleOpenJournalView(
-  feature: Feature,
-  targetKind: 'feature' | 'area'
+  feature: JournalTarget,
+  targetKind: JournalTargetKind
 ) {
   if (!feature.journalPageId) {
     return;
@@ -499,8 +520,8 @@ function handleCloseJournalView() {
 }
 
 async function handleConnectJournalPageRequest(
-  feature: Feature,
-  targetKind: 'feature' | 'area'
+  feature: JournalTarget,
+  targetKind: JournalTargetKind
 ) {
   if (feature.journalPageId)
   {
@@ -510,7 +531,9 @@ async function handleConnectJournalPageRequest(
   setJournalConnectFeature(feature);
   setJournalConnectTargetKind(targetKind);
   setJournalPageCandidates([]);
-  setJournalPageSearch(feature.name);
+  setJournalPageSearch(
+    feature.name ?? ''
+  );
   setSelectedJournalPageId(null);
   setJournalConnectError(null);
   setJournalConnectLoading(true);
@@ -551,33 +574,66 @@ function handleConnectJournalPage() {
   }
 
   if (
-    journalConnectTargetKind ===
-    'area'
-  ) {
-    setActiveSections((current) =>
-      current.map((section) =>
-        section.id ===
-        journalConnectFeature.id
-          ? {
-              ...section,
-              journalPageId:
-                selectedJournalPage.pageId,
-              updatedAt:
-                new Date(),
-            }
-          : section
+  journalConnectTargetKind ===
+  'area'
+) {
+  setActiveSections((current) =>
+    current.map((section) =>
+      section.id ===
+      journalConnectFeature.id
+        ? {
+            ...section,
+            journalPageId:
+              selectedJournalPage.pageId,
+            updatedAt:
+              new Date(),
+          }
+        : section
+    )
+  );
+} else if (
+  journalConnectTargetKind ===
+  'path'
+) {
+  const updatedPath: PathSegment = {
+    ...journalConnectFeature as PathSegment,
+    journalPageId:
+      selectedJournalPage.pageId,
+    updatedAt:
+      new Date(),
+  };
+
+  void handlePathMapChange(
+    (map) =>
+      savePathSegment(
+        map,
+        updatedPath
       )
-    );
-  } else {
-    updateFeatureEverywhere(
-      journalConnectFeature.id,
-      (feature) => ({
-        ...feature,
-        journalPageId:
-          selectedJournalPage.pageId,
-      })
-    );
-  }
+  );
+
+  setActivePathNetwork(
+    (current) => ({
+      ...current,
+      segments:
+        current.segments.map(
+          (segment) =>
+            segment.id ===
+            updatedPath.id
+              ? updatedPath
+              : segment
+        ),
+    })
+  );
+} else {
+  updateFeatureEverywhere(
+    journalConnectFeature.id,
+    (feature) => ({
+      ...feature,
+      journalPageId:
+        selectedJournalPage.pageId,
+    })
+  );
+}
 
   markProjectDirty();
   closeConnectJournalPageDialog();
@@ -586,14 +642,14 @@ function handleConnectJournalPage() {
 const [
   journalPageFeature,
   setJournalPageFeature,
-] = useState<Feature | null>(null);
+] = useState<JournalTarget | null>(null);
 
 const [
   journalPageTargetKind,
   setJournalPageTargetKind,
-] = useState<
-  'feature' | 'area'
->('feature');
+] = useState<JournalTargetKind>(
+  'feature'
+);
 
 const [
   journalSections,
@@ -623,14 +679,14 @@ const [
 const [
   journalConnectFeature,
   setJournalConnectFeature,
-] = useState<Feature | null>(null);
+] = useState<JournalTarget | null>(null);
 
 const [
   journalConnectTargetKind,
   setJournalConnectTargetKind,
-] = useState<
-  'feature' | 'area'
->('feature');
+] = useState<JournalTargetKind>(
+  'feature'
+);
 
 const [
   journalPageCandidates,
@@ -3852,8 +3908,8 @@ function handleSubtitleChange(featureId: string, subtitle: string) {
 }
 
 async function handleCreateJournalPageRequest(
-  feature: Feature,
-  targetKind: 'feature' | 'area'
+  feature: JournalTarget,
+  targetKind: JournalTargetKind
 ) {
   setJournalDialogLoading(true);
   setJournalDialogError(null);
@@ -3903,13 +3959,17 @@ async function handleCreateJournalPage() {
   try {
     const page = await createJournalPage({
       sectionId: journalSectionId,
-      title: journalPageFeature.name,
+      title:
+        journalPageFeature.name ?? '',
       subtitle:
         journalPageFeature.subtitle ?? '',
       brief: journalBrief.trim(),
     });
 
-    if (journalPageTargetKind === 'area') {
+    if (
+  journalPageTargetKind ===
+  'area'
+) {
   setActiveSections((current) =>
     current.map((section) =>
       section.id ===
@@ -3923,6 +3983,39 @@ async function handleCreateJournalPage() {
           }
         : section
     )
+  );
+} else if (
+  journalPageTargetKind ===
+  'path'
+) {
+  const updatedPath: PathSegment = {
+    ...journalPageFeature as PathSegment,
+    journalPageId:
+      page.pageId,
+    updatedAt:
+      new Date(),
+  };
+
+  await handlePathMapChange(
+    (map) =>
+      savePathSegment(
+        map,
+        updatedPath
+      )
+  );
+
+  setActivePathNetwork(
+    (current) => ({
+      ...current,
+      segments:
+        current.segments.map(
+          (segment) =>
+            segment.id ===
+            updatedPath.id
+              ? updatedPath
+              : segment
+        ),
+    })
   );
 } else {
   updateFeatureEverywhere(
@@ -6155,7 +6248,7 @@ mapMediaSlotsEnabled={
         Title
         <input
           type="text"
-          value={journalPageFeature.name}
+          value={journalPageFeature.name ?? ''}
           readOnly
         />
       </label>
@@ -6379,54 +6472,33 @@ mapMediaSlotsEnabled={
         parentMapOptions={parentMapOptions}
         onParentMapChange={handleMapParentChange}
         onMakeWorldRoot={() => {
-          mapViewportRef.current?.cancelInteractions();
-          setMapToMakeRoot(activeMap);
+        mapViewportRef.current?.cancelInteractions();
+            setMapToMakeRoot(activeMap);
         }}
-        imageRegistration={
-          activeMap.imageRegistration
-        }
-        calibrationActive={
-  showScaleCalibrationDialog
-}
-
-calibrationFirstPoint={
-  scaleCalibrationFirstPoint
-}
-
-calibrationSecondPoint={
-  scaleCalibrationSecondPoint
-}
-
-onCalibrationPoint={
-  handleScaleCalibrationPoint
-}
-
-onCalibrationPointMove={(
-  pointIndex,
-  point
-) => {
-  if (pointIndex === 0) {
-    setScaleCalibrationFirstPoint(
-      point
-    );
-  } else {
-    setScaleCalibrationSecondPoint(
-      point
-    );
-  }
-}}
+        imageRegistration={activeMap.imageRegistration}
+        calibrationActive={showScaleCalibrationDialog}
+        calibrationFirstPoint={scaleCalibrationFirstPoint}
+        calibrationSecondPoint={scaleCalibrationSecondPoint}
+        onCalibrationPoint={handleScaleCalibrationPoint}
+        onCalibrationPointMove={(
+          pointIndex,
+          point
+        ) => {
+          if (pointIndex === 0) {
+            setScaleCalibrationFirstPoint(
+              point
+            );
+          } else {
+            setScaleCalibrationSecondPoint(
+              point
+            );
+          }
+        }}
         features={activeFeatures}
-        pathNetwork={
-          activePathNetwork
-        }
-
-        onPathNetworkChange={
-          setActivePathNetwork
-        }
-
-        onPathMapChange={
-          handlePathMapChange
-        }
+        pathNetwork={activePathNetwork}
+        onPathNetworkChange={setActivePathNetwork}
+        onSelectedPathChange={setSelectedPathId}
+        onPathMapChange={handlePathMapChange}
         pieces={activeProject.pieces.filter((piece) => {
           return piece.mapId === activeMap.id &&
             !isPieceGrouped(piece.id, activeProject.pieces) &&
@@ -6467,33 +6539,39 @@ onCalibrationPointMove={(
           feature,
           targetKind
         ) => {
-  if (!journalAvailable) {
-    return [];
-  }
+          if (!journalAvailable) {
+            return [];
+          }
 
-  if (feature.journalPageId) {
-    return [
-      {
-        id: 'journal',
-        label: 'Journal',
-        children: [
-          {
-  id: 'journal-go-to-page',
-  label: 'Go to Page',
+          if (feature.journalPageId) {
+            return [
+            {
+              id: 'journal',
+              label: 'Journal',
+              children: [{
+                id: 'journal-go-to-page',
+                label: 'Go to Page',
+                onInvoke: () => {
+                  if (!feature.journalPageId) {
+                    return;
+                  }
+
+                void goToJournalPage(
+                  feature.journalPageId
+                ).catch((error) => {
+                  setNavigationError(
+                    error instanceof Error
+                      ? error.message
+                      : 'Unable to open Journal Page.'
+                  );
+                });
+              },
+            },
+            {
+  id: 'journal-view-page',
+  label: 'View',
   onInvoke: () => {
-    if (!feature.journalPageId) {
-      return;
-    }
-
-    void goToJournalPage(
-      feature.journalPageId
-    ).catch((error) => {
-      setNavigationError(
-        error instanceof Error
-          ? error.message
-          : 'Unable to open Journal Page.'
-      );
-    });
+    handleOpenJournalView(path, 'path');
   },
 },
           {
@@ -6539,6 +6617,72 @@ onCalibrationPointMove={(
     ],
   },
 ];
+}}
+pathSecondaryActions={(
+  path
+) => {
+  if (!journalAvailable) {
+    return [];
+  }
+
+  if (path.journalPageId) {
+    return [
+      {
+        id: 'journal',
+        label: 'Journal',
+        children: [
+          {
+            id: 'journal-go-to-page',
+            label: 'Go to Page',
+            onInvoke: () => {
+              if (!path.journalPageId) {
+                return;
+              }
+
+              void goToJournalPage(
+                path.journalPageId
+              ).catch((error) => {
+                setNavigationError(
+                  error instanceof Error
+                    ? error.message
+                    : 'Unable to open Journal Page.'
+                );
+              });
+            },
+          },
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      id: 'journal',
+      label: 'Journal',
+      children: [
+        {
+          id: 'journal-create-page',
+          label: 'Create Page...',
+          onInvoke: () => {
+            void handleCreateJournalPageRequest(
+              path,
+              'path'
+            );
+          },
+        },
+        {
+          id: 'journal-connect-page',
+          label: 'Connect to Page...',
+          onInvoke: () => {
+            void handleConnectJournalPageRequest(
+              path,
+              'path'
+            );
+          },
+        },
+      ],
+    },
+  ];
 }}
         onDeleteFeature={handleDeleteFeature}
         onNewFeatureRequest={handleNewFeatureRequest}

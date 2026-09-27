@@ -242,6 +242,9 @@ secondaryActions?: (
 pathSecondaryActions?: (
   segment: PathSegment
 ) => FeaturePopupAction[];
+onSelectedPathChange?: (
+  segmentId: string | null
+) => void;
 onDeleteFeature?: (
   feature: Feature
 ) => void;
@@ -367,6 +370,7 @@ function MapViewport({
   onDeleteFeature,
   secondaryActions,
   pathSecondaryActions,
+  onSelectedPathChange,
   onNewFeatureRequest,
   onPromotePathTerminal,
   onNewLocationRequest,
@@ -436,32 +440,41 @@ function MapViewport({
   } | null>(null);
 
   const selectedPath =
-  selectedPathSegment
-    ? pathNetwork.segments.find(
+    selectedPathSegment
+      ? pathNetwork.segments.find(
         (segment) =>
           segment.id ===
           selectedPathSegment.segmentId
       )
     : undefined;
 
-    async function updatePathSegment(
-  segmentId: string,
-  patch: Partial<
-    Pick<
-      PathSegment,
-      | 'name'
-      | 'subtitle'
-      | 'description'
-      | 'journalPageId'
-      | 'rulesetData'
-    >
-  >
-): Promise<void> {
-  const current =
-    pathNetwork.segments.find(
-      (segment) =>
-        segment.id === segmentId
+  useEffect(() => {
+    onSelectedPathChange?.(
+      selectedPath?.id ?? null
     );
+  }, [
+    selectedPath?.id,
+    onSelectedPathChange,
+  ]);
+
+  async function updatePathSegment(
+    segmentId: string,
+    patch: Partial<
+      Pick<
+        PathSegment,
+        | 'name'
+        | 'subtitle'
+        | 'description'
+        | 'journalPageId'
+        | 'rulesetData'
+      >
+    >
+  ): Promise<void> {
+    const current =
+      pathNetwork.segments.find(
+        (segment) =>
+          segment.id === segmentId
+      );
 
   if (!current) {
     return;
