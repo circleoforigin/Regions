@@ -91,9 +91,6 @@ export function splitPathSegment(
   const sharedProperties = {
     mapId: original.mapId,
     name: original.name,
-    kindId: original.kindId,
-    subtypeId: original.subtypeId,
-    qualityId: original.qualityId,
     layerId: original.layerId,
   };
 

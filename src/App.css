@@ -3062,6 +3062,16 @@ box-shadow:
   opacity: 0.8;
 }
 
+.path-segment-explore-target {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.path-segment-explore-target:hover {
+  stroke: #ffffff;
+  stroke-width: 5;
+}
+
 .path-terminal-node {
   fill: #39ff14;
   stroke: #111111;

@@ -3,6 +3,14 @@ import type {
   SpatialPoint,
 } from '../spatial/SpatialAnchor';
 
+import type {
+  RulesetExtensionData,
+} from './RulesetExtensionData';
+
+import type {
+  RichTextDocument,
+} from './RichText';
+
 export interface StandalonePathTerminal
   extends SpatialAnchor {
   id: string;
@@ -29,13 +37,18 @@ export interface PathSegment {
   id: string;
   mapId: string;
 
-  /*
-   * Descriptive only. Names are not
-   * identities and do not need to be
-   * unique. Multiple connected segments
-   * may all be "King's Highway".
+   /*
+   * Descriptive data is optional.
+   * Creating/drawing a Path does not
+   * require the user to provide it.
+   *
+   * Names are not identities and do not
+   * need to be unique. Multiple connected
+   * segments may all be "King's Highway".
    */
   name?: string;
+  subtitle?: string;
+  brief?: RichTextDocument | string;
 
   start: PathTerminalReference;
   end: PathTerminalReference;
@@ -47,15 +60,12 @@ export interface PathSegment {
    */
   shapePoints: PathShapePoint[];
 
-  /*
-   * Semantic vocabulary is supplied by
-   * the active Ruleset. Regions stores
-   * the assigned facts without
-   * interpreting them.
+    /*
+   * Optional data defined by the active
+   * Ruleset. Regions persists this data
+   * but does not interpret its meaning.
    */
-  kindId?: string;
-  subtypeId?: string;
-  qualityId?: string;
+  rulesetData?: RulesetExtensionData;
 
   /*
    * Presentation/organization is kept
