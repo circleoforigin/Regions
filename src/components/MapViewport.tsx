@@ -2851,7 +2851,6 @@ const mapBoundary =
   sections.find(
     (section) =>
       section.kind === 'boundary' &&
-      section.locked &&
       section.edgeIds.length >= 3
   );
 
@@ -3395,7 +3394,49 @@ function handleSectionNodePointerDown(
   node: SectionNode
 ) {
   event.stopPropagation();
-  if (event.button !== 0) return;
+
+  if (event.button !== 0) {
+    return;
+  }
+
+  if (
+    movingSectionNode &&
+    movingSectionNode.pointerId === undefined
+  ) {
+    const point =
+      screenToMap(
+        event.clientX,
+        event.clientY
+      );
+
+    if (
+      !point ||
+      !isPointInsideMap(point)
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    onUpdateSectionData?.(
+      sections,
+      sectionNodes.map(
+        (candidate) =>
+          candidate.id ===
+          movingSectionNode.nodeId
+            ? {
+                ...candidate,
+                position: point,
+              }
+            : candidate
+      ),
+      sectionEdges
+    );
+
+    setMovingSectionNode(null);
+
+    return;
+  }
   if (event.shiftKey) {
     event.preventDefault();
     deleteSectionNode(node.id);

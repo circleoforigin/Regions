@@ -52,7 +52,7 @@ interface MenuBarProps {
   pieces: Piece[];
   focusedPieceId?: string;
   onFocusPiece: (pieceId: string | null) => void;
-
+  onGoToTrackedPiece: (pieceId: string) => void;
   zoomValue?: number;
   zoomMin?: number;
   zoomMax?: number;
@@ -92,7 +92,7 @@ function MenuBar({
   pieces,
   focusedPieceId,
   onFocusPiece,
-
+  onGoToTrackedPiece,
   zoomValue,
   zoomMin,
   zoomMax,
@@ -598,7 +598,7 @@ function MenuBar({
                   className="dropdown-item"
                   onClick={() => {
                     setPieceMenuOpen(false);
-                    onFocusPiece(piece.id);
+                    onGoToTrackedPiece(piece.id);
                   }}
                 >
                   {piece.id === focusedPieceId ? '✓ ' : ''}

@@ -1604,7 +1604,7 @@ function handleNewProject() {
   );
 }
 
-  async function createProject(
+async function createProject(
   name: string
 ): Promise<Project> {
   const trimmedName = name.trim();
@@ -1624,47 +1624,28 @@ function handleNewProject() {
 
   const project: Project = {
     id: crypto.randomUUID(),
-
     name: trimmedName,
-
     mapIds: [rootMap.id],
-
     rootMapId: rootMap.id,
-
     activeMapId: rootMap.id,
-
     featureTypes: [],
-
     pieces: [],
-
     globalMediaSlots: [],
-
     createdAt: now,
-
     updatedAt: now,
   };
-
   await mapRepository.saveMap(rootMap);
-
-  await projectRepository.saveProject(
-    project
-  );
-
+  await projectRepository.saveProject(project);
   setActiveProject(project);
-  setActiveMap(rootMap);
-  setActiveFeatures([]);
+  const destination = await loadMapState(rootMap);
+  await activateMap(destination);
   setPendingMaps([]);
   setPendingFeatures([]);
   setDeletedSectionIds(new Set());
   setDeletedSectionNodeIds(new Set());
   setDeletedSectionEdgeIds(new Set());
   resetInteractionMode();
-  setZoomControl(null);
-
-  await loadMapImage(rootMap);
-
   resetProjectDirty();
-
   return project;
 }
 
@@ -1839,6 +1820,32 @@ function getMapArrivalCenter(map: RegionMap): Feature['position'] {
   };
 }
 
+async function loadMapState(
+  map: RegionMap
+) {
+  const normalizedMap =
+    normalizeMap(map);
+
+  const [
+    features,
+    pathNetwork,
+  ] = await Promise.all([
+    loadEffectiveMapFeatures(
+      normalizedMap
+    ),
+
+    loadPathNetwork(
+      normalizedMap
+    ),
+  ]);
+
+  return {
+    map: normalizedMap,
+    features,
+    pathNetwork,
+  };
+}
+
 async function loadEffectiveMapWithFeatures(
   mapId: string
 ) {
@@ -1858,27 +1865,7 @@ async function loadEffectiveMapWithFeatures(
     );
   }
 
-  const normalizedMap =
-    normalizeMap(effectiveMap);
-
-  const [
-    features,
-    pathNetwork,
-  ] = await Promise.all([
-    loadEffectiveMapFeatures(
-      effectiveMap
-    ),
-
-    loadPathNetwork(
-      normalizedMap
-    ),
-  ]);
-
-  return {
-    map: normalizedMap,
-    features,
-    pathNetwork,
-  };
+  return loadMapState(effectiveMap);
 }
 
 type LoadedMapState = Awaited<
@@ -3495,7 +3482,7 @@ function handleMapParentChange(parentMapId: string) {
   markProjectDirty();
 }
 
-function handleConfirmMakeWorldRoot() {
+async function handleConfirmMakeWorldRoot() {
   if (activeMap?.areaBoundaryLink) {
     setNavigationError('Unlink this Location from its parent Area before making it the root Map.');
     return;
@@ -3522,8 +3509,12 @@ function handleConfirmMakeWorldRoot() {
     parentLocationId: undefined,
     updatedAt: now,
   };
-  setActiveProject({ ...activeProject, rootMapId: newRoot.id });
-  setActiveMap(newRoot);
+  setActiveProject({
+  ...activeProject,
+  rootMapId: newRoot.id
+});
+  const destination = await loadMapState(newRoot);
+  await activateMap(destination);
   setPendingMaps((current) => [
     ...current.filter((map) => {
       return map.id !== updatedOldRoot.id && map.id !== newRoot.id;
@@ -3570,58 +3561,22 @@ async function handleSelectProject(project: Project) {
   });
 
   if (project.activeMapId) {
-    try {
-      const map =
-        await mapRepository.loadMap(
-          project.activeMapId
-        );
-
-      const normalizedMap = map ? normalizeMap(map) : null;
-
-      setActiveMap(normalizedMap);
-      clearActiveMapImage();
-
-      if (normalizedMap) {
-        const featuresPromise =
-          featureRepository.loadFeatures(
-            normalizedMap.featureIds
-          );
-
-        const pathNetworkPromise =
-          loadPathNetwork(
-            normalizedMap
-          );
-
-        const imagePromise =
-          loadMapImage(
-            normalizedMap
-          );
-
-        const [
-          features,
-          pathNetwork,
-        ] = await Promise.all([
-          featuresPromise,
-          pathNetworkPromise,
-        ]);
-
-        setActiveFeatures(
-          features
-        );
-
-        setActivePathNetwork(
-          pathNetwork
-        );
-
-        await imagePromise;
-      }
-    } catch (error) {
-      console.error(
-        'Unable to load active map:',
-        error
+  try {
+    const destination =
+      await loadMapWithFeatures(
+        project.activeMapId
       );
-    }
+
+    await activateMap(
+      destination
+    );
+  } catch (error) {
+    console.error(
+      'Unable to load active map:',
+      error
+    );
   }
+}
 
   resetProjectDirty();
 
@@ -5143,49 +5098,34 @@ async function handleAssignMapFile(
           file
         );
 
-    const now =
-      new Date();
+    const now = new Date();
 
     let updatedMap: RegionMap;
 
     if (activeMap) {
       updatedMap = {
         ...activeMap,
-
-        imageFileId:
-          imageAsset.id,
-
-        updatedAt:
-          now,
+        imageFileId: imageAsset.id,
+        updatedAt: now,
       };
     } else {
       updatedMap = {
-        id:
-          crypto.randomUUID(),
-
+        id: crypto.randomUUID(),
         name:
           file.name.replace(
             /\.[^/.]+$/,
             ''
           ),
-
-        imageFileId:
-  imageAsset.id,
-
-imageRegistration: {
-  scale: 1,
-  offsetX: 0,
-  offsetY: 0,
-},
-
-featureIds: [],
-
-        createdAt:
-          now,
-
-        updatedAt:
-          now,
-      };
+        imageFileId: imageAsset.id,
+        imageRegistration: {
+          scale: 1,
+          offsetX: 0,
+          offsetY: 0,
+        }, 
+        featureIds: [],
+          createdAt: now,
+          updatedAt: now,
+        };
     }
 
     const isNewMap =
@@ -5207,28 +5147,13 @@ featureIds: [],
       rootMapId:
         activeProject.rootMapId ??
         updatedMap.id,
-
-      activeMapId:
-        updatedMap.id,
-
-      updatedAt:
-        now,
+      activeMapId: updatedMap.id,
+      updatedAt: now,
     };
 
-        setActiveMap(updatedMap);
-
-    if (!activeMap) {
-      setActiveFeatures([]);
-
-      setActivePathNetwork({
-        terminals: [],
-        segments: [],
-      });
-    }
-
-    await loadMapImage(updatedMap);
+    const destination = await loadMapState(updatedMap);
+    await activateMap(destination);
     setActiveProject(updatedProject);
-
     markProjectDirty();
   } catch (error) {
     console.error(
@@ -5405,28 +5330,24 @@ mapMediaSlotsEnabled={
   addPieceEnabled={Boolean(activeProject && activeMap && activeMapImageUrl)}
   pieces={activeProject?.pieces ?? []}
   focusedPieceId={activeProject?.focusedPieceId}
-  onFocusPiece={(pieceId) => void handleFocusPiece(pieceId)}
-  zoomValue={
-    zoomControl?.value
+  onFocusPiece={(pieceId) =>
+    void handleFocusPiece(
+      pieceId
+    )
   }
-  zoomMin={
-    zoomControl?.min
+  onGoToTrackedPiece={(pieceId) =>
+    void goToPiece(
+      pieceId,
+      false
+    )
   }
-  zoomMax={
-    zoomControl?.max
-  }
-  zoomStep={
-    zoomControl?.step
-  }
-  zoomDisabled={
-    zoomControl?.disabled
-  }
-  onZoomChange={
-    zoomControl?.setZoom
-  }
-  onFitMap={
-    zoomControl?.fitMap
-  }
+  zoomValue={zoomControl?.value}
+  zoomMin={zoomControl?.min}
+  zoomMax={zoomControl?.max}
+  zoomStep={zoomControl?.step}
+  zoomDisabled={zoomControl?.disabled}
+  onZoomChange={zoomControl?.setZoom}
+  onFitMap={zoomControl?.fitMap}
 />
 
 {showScaleCalibrationDialog &&
