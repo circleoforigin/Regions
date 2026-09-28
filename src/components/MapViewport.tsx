@@ -2292,48 +2292,54 @@ function finishRouteAuthoring() {
     return;
   }
 
-  const nodes: PieceWaypathAnchor[] =
-    distanceMeasurement.anchors
-      .slice(1)
-      .flatMap((anchor) => {
-        switch (anchor.kind) {
-          case 'temporary':
-            return [{
-              kind: 'point' as const,
-              position: anchor.position,
-              usePathFromPrevious:
-                anchor.usePathFromPrevious,
-            }];
+  const nodes: PieceWaypathAnchor[] = [];
 
-          case 'feature':
-            return [{
-              kind: 'feature' as const,
-              featureId: anchor.featureId,
-              usePathFromPrevious:
-                anchor.usePathFromPrevious,
-            }];
-
-          case 'path':
-            return [{
-              kind: 'path' as const,
-              segmentId: anchor.segmentId,
-              position: anchor.position,
-              usePathFromPrevious:
-                anchor.usePathFromPrevious,
-            }];
-
-          case 'terminal':
-            return [{
-              kind: 'terminal' as const,
-              terminalId: anchor.terminalId,
-              usePathFromPrevious:
-                anchor.usePathFromPrevious,
-            }];
-
-          case 'piece':
-            return [];
-        }
+for (
+  const anchor of
+    distanceMeasurement.anchors.slice(1)
+) {
+  switch (anchor.kind) {
+    case 'temporary':
+      nodes.push({
+        kind: 'point',
+        position: anchor.position,
+        usePathFromPrevious:
+          anchor.usePathFromPrevious,
       });
+      break;
+
+    case 'feature':
+      nodes.push({
+        kind: 'feature',
+        featureId: anchor.featureId,
+        usePathFromPrevious:
+          anchor.usePathFromPrevious,
+      });
+      break;
+
+    case 'path':
+      nodes.push({
+        kind: 'path',
+        segmentId: anchor.segmentId,
+        position: anchor.position,
+        usePathFromPrevious:
+          anchor.usePathFromPrevious,
+      });
+      break;
+
+    case 'terminal':
+      nodes.push({
+        kind: 'terminal',
+        terminalId: anchor.terminalId,
+        usePathFromPrevious:
+          anchor.usePathFromPrevious,
+      });
+      break;
+
+    case 'piece':
+      break;
+  }
+}
 
   if (nodes.length > 0) {
     onSetPieceRoute?.(
