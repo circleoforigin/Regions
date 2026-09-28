@@ -63,17 +63,17 @@ const HELP: Partial<
 
 interface ModeHelpProps {
   mode: InteractionMode;
-  waypointActive?: boolean;
+  routeActive?: boolean;
 }
 
 export default function ModeHelp({
   mode,
-  waypointActive = false,
+  routeActive = false,
 }: ModeHelpProps) {
-  const waypointRows: HelpRow[] = [
+  const routeRows: HelpRow[] = [
     {
       input: 'Left Click',
-      action: 'Add Waypath Node',
+      action: 'Add Route Node',
     },
     {
       input: 'Left Click Path',
@@ -89,17 +89,17 @@ export default function ModeHelp({
     },
     {
       input: 'Right Click Elsewhere',
-      action: 'Cancel Waypoint',
+      action: 'Cancel Route',
     },
     {
       input: 'Shift + Left Click',
-      action: 'Set Waypoint',
+      action: 'Set Route',
     },
   ];
 
   const rows =
-    waypointActive
-      ? waypointRows
+    routeActive
+      ? routeRows
       : HELP[mode];
 
   if (!rows || rows.length === 0) {
@@ -109,8 +109,8 @@ export default function ModeHelp({
   return (
     <div className="mode-help">
       <div className="mode-help-title">
-        {waypointActive
-            ? 'WAYPOINT'
+        {routeActive
+            ? 'ROUTE'
             : mode.toUpperCase()}
       </div>
 

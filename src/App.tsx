@@ -65,7 +65,7 @@ import type { Feature } from './models/Feature';
 import type { PathSegment } from './models/Path';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
-import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
+import type { Piece, PieceShape, PiecePathDock, PieceWaypath } from './models/Piece';
 import {
   findContainingParty,
   getPartyMembers,
@@ -2785,6 +2785,56 @@ function updatePiecePosition(
     void handleMapEntered(activeMap, project, undefined, 'piece', pieceId, { area, previousArea });
   }
 }
+
+function setPieceRoute(
+  pieceId: string,
+  waypath: PieceWaypath
+) {
+  if (!activeProject) {
+    return;
+  }
+
+  const project = {
+    ...activeProject,
+    pieces: activeProject.pieces.map(
+      (piece) =>
+        piece.id === pieceId
+          ? {
+              ...piece,
+              waypath,
+            }
+          : piece
+    ),
+  };
+
+  setActiveProject(project);
+  markProjectDirty();
+}
+
+function clearPieceRoute(
+  pieceId: string
+) {
+  if (!activeProject) {
+    return;
+  }
+
+  const project = {
+    ...activeProject,
+    pieces: activeProject.pieces.map(
+      (piece) =>
+        piece.id === pieceId
+          ? {
+              ...piece,
+              waypath: undefined,
+            }
+          : piece
+    ),
+  };
+
+  setActiveProject(project);
+  markProjectDirty();
+}
+
 async function transferPieceThroughArea(piece: Piece, mapId: string, position: Feature['position']) {
   if (!activeProject || !activeMap) return;
   const sourceName = activeMap.name;
@@ -6894,6 +6944,18 @@ onEditPiece={handleEditPiece}
         onRemovePartyMember={handleRemovePartyMember}
         onDisbandParty={handleDisbandParty}
         onPieceTrackedChange={handlePieceTrackedChange}
+        onSetPieceRoute={(
+          piece,
+          waypath
+        ) => {
+          setPieceRoute(
+            piece.id,
+            waypath
+          );
+        }}
+        onClearPieceRoute={(piece) => {
+          clearPieceRoute(piece.id);
+        }}
         onFocusPiece={(pieceId) => void handleFocusPiece(pieceId)}
         onViewportCenterChange={setViewportCenter}
         focusPiecePosition={focusPiecePosition}

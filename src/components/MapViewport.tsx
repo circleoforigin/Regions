@@ -10,7 +10,11 @@ import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceA
 import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
 import ModeHelp from '../interaction/ModeHelp';
-import type { PiecePathDock } from '../models/Piece';
+import type {
+  PiecePathDock,
+  PieceWaypath,
+  PieceWaypathAnchor,
+} from '../models/Piece';
 import { findFirstNavigationBoundaryCrossing } from '../navigation/NavigationBoundary';
 import type { RulesetExtensionData } from '../models/RulesetExtensionData';
 import RulesetInteractionPanel from '../rules/RulesetInteractionPanel';
@@ -256,7 +260,8 @@ onRemovePartyMember?: (partyId: string, memberId: string) => void;
 onDisbandParty?: (partyId: string) => void;
 onPieceTrackedChange?: (pieceId: string, tracked: boolean) => void;
 onSetPieceRoute?: (
-  piece: Piece
+  piece: Piece,
+  waypath: PieceWaypath
 ) => void;
 onClearPieceRoute?: (
   piece: Piece
@@ -2270,6 +2275,78 @@ function startSectionFromEdge(edgeId: string) {
   setSectionContextMenu(null);
 }
 
+function finishRouteAuthoring() {
+  if (routePieceId === null) {
+    return;
+  }
+
+  const piece = pieces.find(
+    (candidate) =>
+      candidate.id === routePieceId
+  );
+
+  if (!piece) {
+    distanceMeasurement.clear();
+    setRoutePieceId(null);
+    setDistancePointer(null);
+    return;
+  }
+
+  const nodes: PieceWaypathAnchor[] =
+    distanceMeasurement.anchors
+      .slice(1)
+      .flatMap((anchor) => {
+        switch (anchor.kind) {
+          case 'temporary':
+            return [{
+              kind: 'point' as const,
+              position: anchor.position,
+              usePathFromPrevious:
+                anchor.usePathFromPrevious,
+            }];
+
+          case 'feature':
+            return [{
+              kind: 'feature' as const,
+              featureId: anchor.featureId,
+              usePathFromPrevious:
+                anchor.usePathFromPrevious,
+            }];
+
+          case 'path':
+            return [{
+              kind: 'path' as const,
+              segmentId: anchor.segmentId,
+              position: anchor.position,
+              usePathFromPrevious:
+                anchor.usePathFromPrevious,
+            }];
+
+          case 'terminal':
+            return [{
+              kind: 'terminal' as const,
+              terminalId: anchor.terminalId,
+              usePathFromPrevious:
+                anchor.usePathFromPrevious,
+            }];
+
+          case 'piece':
+            return [];
+        }
+      });
+
+  if (nodes.length > 0) {
+    onSetPieceRoute?.(
+      piece,
+      { nodes }
+    );
+  }
+
+  distanceMeasurement.clear();
+  setRoutePieceId(null);
+  setDistancePointer(null);
+}
+
 function handleContextMenu(
   event:
     React.MouseEvent<HTMLDivElement>
@@ -2303,13 +2380,21 @@ if (interactionMode === 'path') {
   return;
 }
 
-if (distanceInteractionActive) {
+if (routePieceId !== null) {
+  finishRouteAuthoring();
+
+  setPieceContextMenu(null);
+  setSectionContextMenu(null);
+
+  dispatch({
+    type: 'contextMenu.close',
+  });
+
+  return;
+}
+
+if (interactionMode === 'distance') {
   distanceMeasurement.clear();
-
-  if (routePieceId !== null) {
-    setRoutePieceId(null);
-  }
-
   setDistancePointer(null);
   setPieceContextMenu(null);
   setSectionContextMenu(null);
@@ -3574,7 +3659,7 @@ function saveSectionProperties() {
       
       <ModeHelp
         mode={interactionMode}
-        waypointActive={routePieceId !== null}
+        routeActive={routePieceId !== null}
       />
       
       <img
@@ -5264,7 +5349,7 @@ onDescriptionChange={(
       setPieceContextMenu(null);
     }}
   >
-    Clear Waypoint
+    Clear Route
   </button>
 ) : (
   <button
@@ -5283,7 +5368,7 @@ onDescriptionChange={(
     setPieceContextMenu(null);
   }}
 >
-  Set Waypoint
+  Set Route
 </button>
 )}
 
