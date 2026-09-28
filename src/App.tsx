@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { resolvePathDockPosition } from './paths/PathGeometry';
 import {
   createJournalPage,
   getJournalPages,
@@ -102,6 +103,9 @@ import {
   savePathSegment,
   type PathNetwork,
 } from './paths/PathNetwork';
+import {
+  resolvePathSegments,
+} from './paths/PathMapState';
 import { resolveArea } from './sections/AreaContext';
 import { sectionRepository } from './sections/SectionRepository';
 import { sectionEdgeRepository } from './sections/SectionEdgeRepository';
@@ -233,6 +237,91 @@ function App() {
   const activeProjectId = activeProject?.id ?? null;
   const activeMapId = activeMap?.id ?? null;
   
+  function handlePathNetworkChange(
+  network: PathNetwork
+) {
+  setActivePathNetwork(network);
+
+  if (!activeProject || !activeMap) {
+    return;
+  }
+
+  const resolvedSegments =
+    resolvePathSegments(
+      network.segments,
+      network.terminals,
+      activeFeatures
+    );
+
+  const resolvedById =
+    new Map(
+      resolvedSegments.map(
+        (segment) => [
+          segment.segment.id,
+          segment,
+        ]
+      )
+    );
+
+  let piecesChanged = false;
+
+  const pieces =
+    activeProject.pieces.map(
+      (piece) => {
+        if (
+          piece.mapId !== activeMap.id ||
+          !piece.pathDock
+        ) {
+          return piece;
+        }
+
+        const segment =
+          resolvedById.get(
+            piece.pathDock.segmentId
+          );
+
+        if (!segment) {
+          return piece;
+        }
+
+        const position =
+          resolvePathDockPosition(
+            piece.pathDock,
+            segment
+          );
+
+        if (!position) {
+          return piece;
+        }
+
+        if (
+          position.x === piece.position.x &&
+          position.y === piece.position.y
+        ) {
+          return piece;
+        }
+
+        piecesChanged = true;
+
+        return {
+          ...piece,
+          position,
+        };
+      }
+    );
+
+  if (!piecesChanged) {
+    return;
+  }
+
+  setActiveProject({
+    ...activeProject,
+    pieces,
+  });
+
+  markProjectDirty();
+}
+
   async function handlePathMapChange(
     updater: (
       map: RegionMap
@@ -6606,7 +6695,7 @@ mapMediaSlotsEnabled={
         }}
         features={activeFeatures}
         pathNetwork={activePathNetwork}
-        onPathNetworkChange={setActivePathNetwork}
+        onPathNetworkChange={handlePathNetworkChange}
         onSelectedPathChange={setSelectedPathId}
         onPathMapChange={handlePathMapChange}
         pieces={activeProject.pieces.filter((piece) => {

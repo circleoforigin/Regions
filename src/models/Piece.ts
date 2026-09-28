@@ -26,6 +26,33 @@ export interface PiecePathDock {
   fraction: number;
 }
 
+export interface PieceWaypoint {
+  anchors: PieceWaypointAnchor[];
+}
+
+export type PieceWaypointAnchor =
+  | {
+      kind: 'path';
+      segmentId: string;
+      position: SpatialPoint;
+      usePathFromPrevious?: boolean;
+    }
+  | {
+      kind: 'terminal';
+      terminalId: string;
+      usePathFromPrevious?: boolean;
+    }
+  | {
+      kind: 'feature';
+      featureId: string;
+      usePathFromPrevious?: boolean;
+    }
+  | {
+      kind: 'point';
+      position: SpatialPoint;
+      usePathFromPrevious?: boolean;
+    };
+
 export interface Piece extends SpatialAnchor {
   id: string;
   kind: PieceKind;
@@ -33,6 +60,7 @@ export interface Piece extends SpatialAnchor {
   mapId: string;
   position: SpatialPoint;
   pathDock?: PiecePathDock;
+  waypoint?: PieceWaypoint;
   appearance: PieceAppearance;
   tracked?: boolean;
   memberPieceIds?: string[];

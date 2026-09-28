@@ -11,7 +11,7 @@ import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
 import ModeHelp from '../interaction/ModeHelp';
 import type { PiecePathDock } from '../models/Piece';
-
+import { findFirstNavigationBoundaryCrossing } from '../navigation/NavigationBoundary';
 import type { RulesetExtensionData } from '../models/RulesetExtensionData';
 import RulesetInteractionPanel from '../rules/RulesetInteractionPanel';
 import { useRulesetInteraction } from '../rules/useRulesetInteraction';
@@ -245,7 +245,13 @@ onDeletePiece?: (piece: Piece) => void;
 onRemovePartyMember?: (partyId: string, memberId: string) => void;
 onDisbandParty?: (partyId: string) => void;
 onPieceTrackedChange?: (pieceId: string, tracked: boolean) => void;
-  onFocusPiece?: (pieceId: string) => void;
+onSetPieceWaypoint?: (
+  piece: Piece
+) => void;
+onClearPieceWaypoint?: (
+  piece: Piece
+) => void;
+onFocusPiece?: (pieceId: string) => void;
 onViewportCenterChange?: (position: Point) => void;
 focusPiecePosition?: Point | null;
 focusPieceRequestId?: number;
@@ -378,6 +384,8 @@ function MapViewport({
   onRemovePartyMember,
   onDisbandParty,
   onPieceTrackedChange,
+  onSetPieceWaypoint,
+  onClearPieceWaypoint,
   onFocusPiece,
   onViewportCenterChange,
   focusPiecePosition,
@@ -443,6 +451,12 @@ function MapViewport({
         onPathMapChange,
     });
   const distanceMeasurement = useDistanceMeasurement();
+  const [
+    waypointPieceId,
+    setWaypointPieceId,
+  ] = useState<string | null>(
+    null
+  );
   const [
     distancePointer,
     setDistancePointer,
@@ -702,12 +716,12 @@ const resolvedDistanceAnchors =
     target: HTMLButtonElement;
     startPointer: Point;
     startPosition: Point;
+    lastPosition: Point;
     grabOffset: Point;
     moved: boolean;
   } | null>(null);
 
-  const calibrationDragRef =
-  useRef<{
+  const calibrationDragRef = useRef<{
     pointIndex: 0 | 1;
     pointerId: number;
     target: SVGCircleElement;
@@ -2791,6 +2805,7 @@ if (interactionMode === 'distance') {
       target: event.currentTarget,
       startPointer: { x: event.clientX, y: event.clientY },
       startPosition: piece.position,
+      lastPosition: piece.position,
       grabOffset: {
         x: piece.position.x - (pointerMap?.x ?? piece.position.x),
         y: piece.position.y - (pointerMap?.y ?? piece.position.y),
@@ -2817,10 +2832,48 @@ if (interactionMode === 'distance') {
       y: pointerMap.y + drag.grabOffset.y,
     };
     drag.moved = drag.moved || Math.hypot(
-      event.clientX - drag.startPointer.x,
-      event.clientY - drag.startPointer.y
-    ) > 2;
-    const preview = { pieceId: drag.pieceId, position };
+  event.clientX - drag.startPointer.x,
+  event.clientY - drag.startPointer.y
+) > 2;
+
+const boundaryCrossing =
+  findFirstNavigationBoundaryCrossing(
+    drag.lastPosition,
+    position,
+    sections,
+    sectionEdges,
+    sectionNodes
+  );
+
+if (boundaryCrossing) {
+  const boundaryPosition =
+    boundaryCrossing.position;
+
+  pieceDragRef.current = null;
+  piecePreviewRef.current = null;
+  setPiecePreview(null);
+
+  releasePointerCaptureSafely(
+    event.currentTarget,
+    event.pointerId
+  );
+
+  stopEdgeScrolling();
+
+  onPieceDrop?.(
+    drag.pieceId,
+    boundaryPosition
+  );
+
+  return;
+}
+
+drag.lastPosition = position;
+
+const preview = {
+  pieceId: drag.pieceId,
+  position,
+};
     piecePreviewRef.current = preview;
     setPiecePreview(preview);
   }
@@ -2842,7 +2895,9 @@ if (interactionMode === 'distance') {
     if (!drag.moved) return;
 
     const previewScreen = mapToScreen(preview.x, preview.y);
-    const targetPiece = pieces.find((candidate) => {
+
+const targetPiece =
+  pieces.find((candidate) => {
       if (candidate.id === drag.pieceId) return false;
       const target = mapToScreen(candidate.position.x, candidate.position.y);
       return Math.hypot(
@@ -2878,11 +2933,10 @@ if (!targetPiece && !location) {
   for (
     const segment of resolvedPathSegments
   ) {
-    const projection =
-      projectPointOntoPathDock(
-        segment,
-        preview
-      );
+    const projection = projectPointOntoPathDock(
+      segment,
+      preview
+    );
 
     const projectedScreen =
       mapToScreen(
@@ -5056,15 +5110,49 @@ onDescriptionChange={(
         Set Focus
       </button>
       <button
-        type="button"
-        onClick={() => {
-          onEditPiece?.(piece);
-          setPieceContextMenu(null);
-        }}
-      >
-        Edit...
-      </button>
-      <div className="map-context-separator" />
+  type="button"
+  onClick={() => {
+    onEditPiece?.(piece);
+    setPieceContextMenu(null);
+  }}
+>
+  Edit...
+</button>
+
+{piece.waypoint ? (
+  <button
+    type="button"
+    onClick={() => {
+      onClearPieceWaypoint?.(
+        piece
+      );
+      setPieceContextMenu(null);
+    }}
+  >
+    Clear Waypoint
+  </button>
+) : (
+  <button
+  type="button"
+  onClick={() => {
+    setWaypointPieceId(
+      piece.id
+    );
+
+    distanceMeasurement.clear();
+
+    distanceMeasurement.addPiece(
+      piece.id
+    );
+
+    setPieceContextMenu(null);
+  }}
+>
+  Set Waypoint
+</button>
+)}
+
+<div className="map-context-separator" />
       {piece.kind === 'group' && (
         <>
           <div
