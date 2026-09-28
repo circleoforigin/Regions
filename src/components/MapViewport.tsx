@@ -46,6 +46,7 @@ import {
   getSectionNodeIds,
   closestPointOnSegment,
   pointToSegmentDistance,
+  findFirstPolygonBoundaryIntersection,
 } from '../sections/SectionGeometry';
 import { findAreaReturnPath, validateAreaSegment } from '../sections/AreaDrawing';
 import { useProximityDismiss } from '../hooks/useProximityDismiss';
@@ -245,6 +246,10 @@ onPieceAreaBoundaryEnterRequest?: (
   area: Section,
   position: Point
 ) => void;
+onPieceBoundaryExitRequest?: (
+  pieceId: string,
+  position: Point
+) => void;
 onEditPiece?: (piece: Piece) => void;
 onDeletePiece?: (piece: Piece) => void;
 onRemovePartyMember?: (partyId: string, memberId: string) => void;
@@ -385,6 +390,7 @@ function MapViewport({
   onFeatureMove,
   onPieceDrop,
   onPieceAreaBoundaryEnterRequest,
+  onPieceBoundaryExitRequest,
   onEditPiece,
   onDeletePiece,
   onRemovePartyMember,
@@ -2841,7 +2847,72 @@ if (interactionMode === 'distance') {
   event.clientX - drag.startPointer.x,
   event.clientY - drag.startPointer.y
 ) > 2;
+const mapBoundary =
+  sections.find(
+    (section) =>
+      section.kind === 'boundary' &&
+      section.locked &&
+      section.edgeIds.length >= 3
+  );
 
+if (
+  mapBoundary &&
+  parentMapId
+) {
+  const polygon =
+    getSectionPolygon(
+      mapBoundary,
+      sectionEdges,
+      sectionNodes
+    );
+
+  const wasInside =
+    isPointInPolygon(
+      drag.lastPosition,
+      polygon
+    );
+
+  const isInside =
+    isPointInPolygon(
+      position,
+      polygon
+    );
+
+  if (
+    wasInside &&
+    !isInside
+  ) {
+    const crossing =
+      findFirstPolygonBoundaryIntersection(
+        drag.lastPosition,
+        position,
+        polygon
+      );
+
+    if (crossing) {
+      const boundaryPosition =
+        crossing.position;
+
+      pieceDragRef.current = null;
+      piecePreviewRef.current = null;
+      setPiecePreview(null);
+
+      releasePointerCaptureSafely(
+        event.currentTarget,
+        event.pointerId
+      );
+
+      stopEdgeScrolling();
+
+      onPieceBoundaryExitRequest?.(
+        drag.pieceId,
+        boundaryPosition
+      );
+
+      return;
+    }
+  }
+}
 const boundaryCrossing =
   findFirstNavigationBoundaryCrossing(
     drag.lastPosition,

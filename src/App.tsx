@@ -323,30 +323,41 @@ function App() {
 }
 
   async function handlePathMapChange(
-    updater: (
-      map: RegionMap
-    ) => Promise<RegionMap>
-  ): Promise<void> {
-    if (!activeMap) {
-      return;
-    }
-
-    const updatedMap =
-      await updater(activeMap);
-
-    setActiveMap(updatedMap);
-
-    setPendingMaps((current) => [
-      ...current.filter(
-        (map) =>
-          map.id !== updatedMap.id
-      ),
-
-      updatedMap,
-    ]);
-
-    markProjectDirty();
+  updater: (
+    map: RegionMap
+  ) => Promise<RegionMap>
+): Promise<void> {
+  if (!activeMap) {
+    return;
   }
+
+  const updatedMap =
+    await updater(activeMap);
+
+  /*
+   * Path persistence updates the Map's
+   * pathTerminalIds/pathSegmentIds.
+   * Persist that ownership immediately
+   * so navigation can never reload an
+   * older Map manifest.
+   */
+  await mapRepository.saveMap(
+    updatedMap
+  );
+
+  setActiveMap(updatedMap);
+
+  setPendingMaps((current) => [
+    ...current.filter(
+      (map) =>
+        map.id !== updatedMap.id
+    ),
+
+    updatedMap,
+  ]);
+
+  markProjectDirty();
+}
   const assignMapInputRef =
     useRef<HTMLInputElement | null>(
       null
@@ -1791,13 +1802,34 @@ function normalizeMap(map: RegionMap): RegionMap {
 
 async function loadMapWithFeatures(mapId: string) {
   const map = await mapRepository.loadMap(mapId);
-  if (!map) throw new Error(`Map "${mapId}" was not found.`);
 
-  const normalizedMap = normalizeMap(map);
-  const features = await featureRepository.loadFeatures(
-    normalizedMap.featureIds
-  );
-  return { map: normalizedMap, features };
+  if (!map) {
+    throw new Error(
+      `Map "${mapId}" was not found.`
+    );
+  }
+
+  const normalizedMap =
+    normalizeMap(map);
+
+  const [
+    features,
+    pathNetwork,
+  ] = await Promise.all([
+    featureRepository.loadFeatures(
+      normalizedMap.featureIds
+    ),
+
+    loadPathNetwork(
+      normalizedMap
+    ),
+  ]);
+
+  return {
+    map: normalizedMap,
+    features,
+    pathNetwork,
+  };
 }
 
 function getMapArrivalCenter(map: RegionMap): Feature['position'] {
@@ -1807,15 +1839,45 @@ function getMapArrivalCenter(map: RegionMap): Feature['position'] {
   };
 }
 
-async function loadEffectiveMapWithFeatures(mapId: string) {
-  const effectiveMap = activeMap?.id === mapId
-    ? activeMap
-    : pendingMaps.find((map) => map.id === mapId) ??
-      projectMaps.find((map) => map.id === mapId);
-  if (!effectiveMap) return loadMapWithFeatures(mapId);
+async function loadEffectiveMapWithFeatures(
+  mapId: string
+) {
+  const effectiveMap =
+    activeMap?.id === mapId
+      ? activeMap
+      : pendingMaps.find(
+          (map) => map.id === mapId
+        ) ??
+        projectMaps.find(
+          (map) => map.id === mapId
+        );
+
+  if (!effectiveMap) {
+    return loadMapWithFeatures(
+      mapId
+    );
+  }
+
+  const normalizedMap =
+    normalizeMap(effectiveMap);
+
+  const [
+    features,
+    pathNetwork,
+  ] = await Promise.all([
+    loadEffectiveMapFeatures(
+      effectiveMap
+    ),
+
+    loadPathNetwork(
+      normalizedMap
+    ),
+  ]);
+
   return {
-    map: normalizeMap(effectiveMap),
-    features: await loadEffectiveMapFeatures(effectiveMap),
+    map: normalizedMap,
+    features,
+    pathNetwork,
   };
 }
 
@@ -1856,6 +1918,82 @@ async function resolveParentLocation(childMap: RegionMap) {
   };
 }
 
+async function handlePieceBoundaryExitRequest(
+  pieceId: string,
+  position: Feature['position']
+) {
+  if (
+    !activeProject ||
+    !activeMap ||
+    !activeMap.parentMapId
+  ) {
+    return;
+  }
+
+  const piece =
+    activeProject.pieces.find(
+      (candidate) =>
+        candidate.id === pieceId
+    );
+
+  if (!piece) {
+    return;
+  }
+
+  /*
+   * The Piece physically reached the
+   * Boundary, so preserve that exact
+   * position even if the user chooses
+   * not to leave.
+   */
+  updatePiecePosition(
+    pieceId,
+    position
+  );
+
+  const leave =
+    window.confirm(
+      `Leave ${activeMap.name}?`
+    );
+
+  if (!leave) {
+    return;
+  }
+
+  const parent =
+    await resolveParentLocation(
+      activeMap
+    );
+
+  if (!parent) {
+    setNavigationError(
+      'This Map has no valid parent Location for Boundary exit.'
+    );
+
+    return;
+  }
+
+  const parentPosition =
+  activeMap.areaBoundaryLink
+    ? transformBoundaryPoint(
+        position,
+        activeMap.areaBoundaryLink.alignment,
+        true
+      )
+    : parent.parentLocation.position;
+
+await commitPieceParentExit(
+  {
+    ...piece,
+    position: parentPosition,
+  },
+  activeMap,
+  parent,
+  piece.id ===
+    activeProject.focusedPieceId
+);
+}
+
 async function commitPieceParentExit(
   piece: Piece,
   childMap: RegionMap,
@@ -1866,7 +2004,7 @@ async function commitPieceParentExit(
   const movedPiece = {
     ...piece,
     mapId: parent.parentMap.id,
-    position: parent.parentLocation.position,
+    position: piece.position,
   };
   const updatedProject = {
     ...activeProject,
@@ -1894,7 +2032,7 @@ async function commitPieceParentExit(
   setActiveFeatures(parent.parentFeatures);
   setPendingFocusFeatureId(parent.parentLocation.id);
   await loadMapImage(parent.parentMap);
-  setFocusPiecePosition(parent.parentLocation.position);
+  setFocusPiecePosition(movedPiece.position);
   setFocusPieceRequestId((current) => current + 1);
 }
 
@@ -2648,6 +2786,7 @@ async function transferPieceThroughArea(piece: Piece, mapId: string, position: F
   if (focused) {
     setActiveMap(destination.map);
     setActiveFeatures(destination.features);
+    setActivePathNetwork(destination.pathNetwork);
     setPendingFocusFeatureId(null);
     await loadMapImage(destination.map);
     setFocusPiecePosition(position);
@@ -2776,36 +2915,7 @@ async function handlePieceDrop(
       setNavigationError(error instanceof Error ? error.message : 'Unable to travel through the Area.');
       return;
     }
-    const boundary = activeSections.find((section) => {
-      return section.kind === 'boundary' && section.edgeIds.length >= 3;
-    });
-    const polygon = boundary
-      ? getSectionPolygon(
-          boundary,
-          activeSectionEdges,
-          activeSectionNodes
-        )
-      : [];
-    const crossesBoundary = polygon.length >= 3 &&
-      isPointInPolygon(piece.position, polygon) &&
-      !isPointInPolygon(position, polygon);
-    if (crossesBoundary && activeMap.parentMapId) {
-      try {
-        const parent = await resolveParentLocation(activeMap);
-        if (!parent) {
-          setNavigationError(
-            'This Map has no valid parent Location for Boundary exit.'
-          );
-          return;
-        }
-        const focused = piece.id === activeProject.focusedPieceId;
-        await commitPieceParentExit(piece, activeMap, parent, focused);
-      } catch (error) {
-        console.error('Unable to exit Boundary:', error);
-        setNavigationError('Unable to exit this Map Boundary.');
-      }
-      return;
-    }
+    
     updatePiecePosition(
       pieceId,
       position,
@@ -6810,6 +6920,15 @@ onPieceAreaBoundaryEnterRequest={(
   void handlePieceAreaBoundaryEnterRequest(
     pieceId,
     area,
+    position
+  );
+}}
+onPieceBoundaryExitRequest={(
+  pieceId,
+  position
+) => {
+  void handlePieceBoundaryExitRequest(
+    pieceId,
     position
   );
 }}
