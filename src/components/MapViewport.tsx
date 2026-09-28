@@ -72,6 +72,10 @@ import {
 } from '../paths/PathMapState';
 
 import {
+  projectPointOntoPathDock,
+} from '../paths/PathGeometry';
+
+import {
   getDistanceSegmentsWithPaths,
 } from '../interaction/distance/DistancePathRouting';
 
@@ -2846,15 +2850,85 @@ if (interactionMode === 'distance') {
         previewScreen.y - target.y
       ) <= FEATURE_MARKER_MIN_DISTANCE;
     });
-    const location = !targetPiece ? visibleFeatures.find((feature) => {
-      if (!isNavigableFeature(feature)) return false;
-      const target = mapToScreen(feature.position.x, feature.position.y);
+    const location = !targetPiece
+  ? visibleFeatures.find((feature) => {
+      if (!isNavigableFeature(feature)) {
+        return false;
+      }
+
+      const target =
+        mapToScreen(
+          feature.position.x,
+          feature.position.y
+        );
+
       return Math.hypot(
         previewScreen.x - target.x,
         previewScreen.y - target.y
       ) <= FEATURE_MARKER_MIN_DISTANCE;
-    }) : undefined;
-    onPieceDrop?.(drag.pieceId, preview, location, targetPiece);
+    })
+  : undefined;
+
+let snappedPosition = preview;
+let pathDock: PiecePathDock | undefined;
+
+if (!targetPiece && !location) {
+  let closestDistance = Infinity;
+
+  for (
+    const segment of resolvedPathSegments
+  ) {
+    const projection =
+      projectPointOntoPathDock(
+        segment,
+        preview
+      );
+
+    const projectedScreen =
+      mapToScreen(
+        projection.position.x,
+        projection.position.y
+      );
+
+    const distance =
+      Math.hypot(
+        previewScreen.x -
+          projectedScreen.x,
+        previewScreen.y -
+          projectedScreen.y
+      );
+
+    if (
+      distance <=
+        FEATURE_MARKER_MIN_DISTANCE &&
+      distance < closestDistance
+    ) {
+      closestDistance = distance;
+
+      snappedPosition =
+        projection.position;
+
+      pathDock = {
+        segmentId:
+          segment.segment.id,
+
+        legIndex:
+          projection.legIndex,
+
+        fraction:
+          projection.fraction,
+      };
+    }
+  }
+}
+
+onPieceDrop?.(
+  drag.pieceId,
+  snappedPosition,
+  location,
+  targetPiece,
+  pathDock
+);
   }
 
   function cancelPieceDrag() {
@@ -2863,6 +2937,62 @@ if (interactionMode === 'distance') {
     setPiecePreview(null);
     stopEdgeScrolling();
   }
+
+  const piecePathTargetId =
+  piecePreview
+    ? resolvedPathSegments.reduce<{
+        segmentId: string;
+        distance: number;
+      } | null>(
+        (closest, segment) => {
+          const projection =
+            projectPointOntoPathDock(
+              segment,
+              piecePreview.position
+            );
+
+          const previewScreen =
+            mapToScreen(
+              piecePreview.position.x,
+              piecePreview.position.y
+            );
+
+          const projectedScreen =
+            mapToScreen(
+              projection.position.x,
+              projection.position.y
+            );
+
+          const distance = Math.hypot(
+            previewScreen.x -
+              projectedScreen.x,
+            previewScreen.y -
+              projectedScreen.y
+          );
+
+          if (
+            distance >
+            FEATURE_MARKER_MIN_DISTANCE
+          ) {
+            return closest;
+          }
+
+          if (
+            !closest ||
+            distance < closest.distance
+          ) {
+            return {
+              segmentId:
+                segment.segment.id,
+              distance,
+            };
+          }
+
+          return closest;
+        },
+        null
+      )?.segmentId
+    : undefined;
 
   const partyDropTargetId = piecePreview
     ? pieces.find((candidate) => {
@@ -3438,9 +3568,12 @@ function saveSectionProperties() {
 
 {layerVisibility.paths && (
   <PathOverlay
-    editing={
-      interactionMode === 'path'
+    targetedSegmentId={
+      piecePathTargetId
     }
+  editing={
+    interactionMode === 'path'
+  }
     terminalPromotionEnabled={
       interactionMode === 'path' ||
       interactionMode === 'build'

@@ -3135,6 +3135,11 @@ box-shadow:
   pointer-events: none;
 }
 
+.path-segment-piece-target {
+  stroke: #ffffff;
+  stroke-width: 5;
+}
+
 .path-segment-distance-target {
   pointer-events: stroke;
   cursor: pointer;

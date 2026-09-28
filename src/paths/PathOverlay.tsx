@@ -157,6 +157,7 @@ interface PathOverlayProps {
   terminalPromotionEnabled: boolean;
   distanceTargeting: boolean;
   exploreTargeting: boolean;
+  targetedSegmentId?: string;
   onDistancePathClick: (
     segmentId: string,
     position: SpatialPoint,
@@ -226,6 +227,7 @@ export default function PathOverlay({
   terminalPromotionEnabled,
   distanceTargeting,
   exploreTargeting,
+  targetedSegmentId,
   onDistancePathClick,
   onExplorePathClick,
   onDistanceTerminalClick,
@@ -316,15 +318,20 @@ export default function PathOverlay({
           <polyline
             key={item.segment.id}
             className={[
-                'path-segment',
-                editing
-                    ? 'path-segment-editable'
-                    : distanceTargeting
-                        ? 'path-segment-distance-target'
-                        : exploreTargeting
-                            ? 'path-segment-explore-target'
-                            : 'path-segment-display',
-            ].join(' ')}
+  'path-segment',
+  editing
+    ? 'path-segment-editable'
+    : distanceTargeting
+      ? 'path-segment-distance-target'
+      : exploreTargeting
+        ? 'path-segment-explore-target'
+        : 'path-segment-display',
+
+  targetedSegmentId ===
+  item.segment.id
+    ? 'path-segment-piece-target'
+    : '',
+].join(' ')}
             points={
               points
                 .map(

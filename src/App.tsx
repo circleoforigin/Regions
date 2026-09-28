@@ -64,7 +64,7 @@ import type { Feature } from './models/Feature';
 import type { PathSegment } from './models/Path';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
-import type { Piece, PieceShape } from './models/Piece';
+import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
 import {
   findContainingParty,
   getPartyMembers,
@@ -2515,7 +2515,11 @@ async function saveSettings() {
   }
 }
 
-function updatePiecePosition(pieceId: string, position: Feature['position']) {
+function updatePiecePosition(
+  pieceId: string,
+  position: Feature['position'],
+  pathDock?: PiecePathDock
+) {
   if (!activeProject || !activeMap) return;
   const piece = activeProject.pieces.find((item) => item.id === pieceId);
   if (!piece) return;
@@ -2532,7 +2536,8 @@ function updatePiecePosition(pieceId: string, position: Feature['position']) {
       activeProject.pieces,
       pieceId,
       activeMap.id,
-      position
+      position,
+      pathDock
     ),
   };
   setActiveProject(project);
@@ -2566,7 +2571,8 @@ async function handlePieceDrop(
   pieceId: string,
   position: Feature['position'],
   location?: Feature,
-  targetPiece?: Piece
+  targetPiece?: Piece,
+  pathDock?: PiecePathDock
 ) {
   if (!activeProject || !activeMap) return;
   if (loadedSectionsMapId.current !== activeMap.id) {
@@ -2645,7 +2651,11 @@ async function handlePieceDrop(
       }
       return;
     }
-    updatePiecePosition(pieceId, position);
+    updatePiecePosition(
+      pieceId,
+      position,
+      pathDock
+    );
     return;
   }
 
@@ -6622,9 +6632,21 @@ mapMediaSlotsEnabled={
         onShowLabelChange={handleShowLabelChange}
         onFeatureTypeChange={handleFeatureTypeChange}
         onFeatureMove={handleFeatureMove}
-        onPieceDrop={(pieceId, position, location, targetPiece) => {
-          void handlePieceDrop(pieceId, position, location, targetPiece);
-        }}
+        onPieceDrop={(
+  pieceId,
+  position,
+  location,
+  targetPiece,
+  pathDock
+) => {
+  void handlePieceDrop(
+    pieceId,
+    position,
+    location,
+    targetPiece,
+    pathDock
+  );
+}}
         onEditPiece={handleEditPiece}
         onDeletePiece={(piece) => {
           mapViewportRef.current?.cancelInteractions();
