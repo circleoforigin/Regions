@@ -255,10 +255,10 @@ onDeletePiece?: (piece: Piece) => void;
 onRemovePartyMember?: (partyId: string, memberId: string) => void;
 onDisbandParty?: (partyId: string) => void;
 onPieceTrackedChange?: (pieceId: string, tracked: boolean) => void;
-onSetPieceWaypoint?: (
+onSetPieceRoute?: (
   piece: Piece
 ) => void;
-onClearPieceWaypoint?: (
+onClearPieceRoute?: (
   piece: Piece
 ) => void;
 onFocusPiece?: (pieceId: string) => void;
@@ -396,8 +396,8 @@ function MapViewport({
   onRemovePartyMember,
   onDisbandParty,
   onPieceTrackedChange,
-  onSetPieceWaypoint,
-  onClearPieceWaypoint,
+  onSetPieceRoute,
+  onClearPieceRoute,
   onFocusPiece,
   onViewportCenterChange,
   focusPiecePosition,
@@ -464,11 +464,14 @@ function MapViewport({
     });
   const distanceMeasurement = useDistanceMeasurement();
   const [
-    waypointPieceId,
-    setWaypointPieceId,
+    routePieceId,
+    setRoutePieceId,
   ] = useState<string | null>(
     null
   );
+  const distanceInteractionActive =
+    interactionMode === 'distance' ||
+    routePieceId !== null;
   const [
     distancePointer,
     setDistancePointer,
@@ -2300,13 +2303,23 @@ if (interactionMode === 'path') {
   return;
 }
 
-if (interactionMode === 'distance') {
-    distanceMeasurement.clear();
-    setPieceContextMenu(null);
-    setSectionContextMenu(null);
-    dispatch({ type: 'contextMenu.close' });
-    return;
+if (distanceInteractionActive) {
+  distanceMeasurement.clear();
+
+  if (routePieceId !== null) {
+    setRoutePieceId(null);
   }
+
+  setDistancePointer(null);
+  setPieceContextMenu(null);
+  setSectionContextMenu(null);
+
+  dispatch({
+    type: 'contextMenu.close',
+  });
+
+  return;
+}
 
   if (pendingArrivalPlacement) return;
   if (state.editingMode === 'move-feature') return;
@@ -2425,12 +2438,12 @@ dispatch({
     );
   }
 
-    function handlePointerDown(
+  function handlePointerDown(
     event:
       React.PointerEvent<HTMLDivElement>
   ) {
     if (
-      interactionMode === 'distance' &&
+      distanceInteractionActive &&
       event.button === 0
     ) {
       const target = event.target;
@@ -2683,7 +2696,7 @@ if (interactionMode === 'path') {
   }
 }
 
-if (interactionMode === 'distance') {
+if (distanceInteractionActive) {
   const viewport = viewportRef.current;
 
   if (viewport) {
@@ -2789,7 +2802,7 @@ if (interactionMode === 'distance') {
       return;
     }
 
-    if (interactionMode === 'distance') {
+    if (distanceInteractionActive) {
       event.preventDefault();
       event.stopPropagation();
 
@@ -3559,7 +3572,10 @@ function saveSectionProperties() {
       onContextMenu={handleContextMenu}
     >
       
-      <ModeHelp mode={interactionMode} />
+      <ModeHelp
+        mode={interactionMode}
+        waypointActive={routePieceId !== null}
+      />
       
       <img
   className="map-viewport-image"
@@ -3752,7 +3768,7 @@ function saveSectionProperties() {
       interactionMode === 'build'
     }
     distanceTargeting={
-      interactionMode === 'distance'
+      distanceInteractionActive
     }
     exploreTargeting={
       interactionMode === 'explore'
@@ -4107,7 +4123,7 @@ function saveSectionProperties() {
     );
 
   const distanceSelected =
-    interactionMode === 'distance' &&
+    distanceInteractionActive &&
     distanceMeasurement.anchors.some(
       (anchor) =>
         anchor.kind === 'piece' &&
@@ -4288,8 +4304,8 @@ function saveSectionProperties() {
     position.y
   );
   const moveIsValid = !isMoving || isMovePositionValid(position);
-    const distanceSelected =
-    interactionMode === 'distance' &&
+  const distanceSelected =
+    distanceInteractionActive &&
     distanceMeasurement.anchors.some(
       (anchor) =>
         anchor.kind === 'feature' &&
@@ -4355,13 +4371,13 @@ onClick={(event) => {
     return;
   }
 
-  if (interactionMode === 'distance')
-  {
+  if (distanceInteractionActive) {
+    event.preventDefault();
+    event.stopPropagation();
     distanceMeasurement.addFeature(
       feature.id,
       event.ctrlKey
     );
-
     return;
   }
 
@@ -4383,7 +4399,7 @@ onClick={(event) => {
           event.stopPropagation();
           setPieceContextMenu(null);
 
-          if (interactionMode === 'distance') {
+          if (distanceInteractionActive) {
             distanceMeasurement.removeFeature(
               feature.id
             );
@@ -5238,11 +5254,11 @@ onDescriptionChange={(
   Edit...
 </button>
 
-{piece.waypoint ? (
+{piece.waypath ? (
   <button
     type="button"
     onClick={() => {
-      onClearPieceWaypoint?.(
+      onClearPieceRoute?.(
         piece
       );
       setPieceContextMenu(null);
@@ -5254,7 +5270,7 @@ onDescriptionChange={(
   <button
   type="button"
   onClick={() => {
-    setWaypointPieceId(
+    setRoutePieceId(
       piece.id
     );
 

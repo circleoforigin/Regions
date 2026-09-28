@@ -26,11 +26,23 @@ export interface PiecePathDock {
   fraction: number;
 }
 
-export interface PieceWaypoint {
-  anchors: PieceWaypointAnchor[];
+export interface PieceWaypath {
+  /*
+   * Ordered route anchors.
+   *
+   * The first node is the current
+   * journey origin. As the Piece
+   * progresses, earlier nodes are
+   * discarded while the reached node
+   * remains as the new origin.
+   *
+   * When the Piece reaches the final
+   * node, the route is complete.
+   */
+  nodes: PieceWaypathAnchor[];
 }
 
-export type PieceWaypointAnchor =
+export type PieceWaypathAnchor =
   | {
       kind: 'path';
       segmentId: string;
@@ -60,7 +72,7 @@ export interface Piece extends SpatialAnchor {
   mapId: string;
   position: SpatialPoint;
   pathDock?: PiecePathDock;
-  waypoint?: PieceWaypoint;
+  waypath?: PieceWaypath;
   appearance: PieceAppearance;
   tracked?: boolean;
   memberPieceIds?: string[];
