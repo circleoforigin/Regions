@@ -2656,6 +2656,89 @@ async function transferPieceThroughArea(piece: Piece, mapId: string, position: F
   markProjectDirty();
   void handleMapEntered(destination.map, project, sourceName, 'piece', piece.id);
 }
+
+async function handlePieceAreaBoundaryEnterRequest(
+  pieceId: string,
+  area: Section,
+  position: Feature['position']
+) {
+  if (
+    !activeProject ||
+    !activeMap ||
+    !area.targetMapId
+  ) {
+    return;
+  }
+
+  const piece =
+    activeProject.pieces.find(
+      (candidate) =>
+        candidate.id === pieceId
+    );
+
+  if (!piece) {
+    return;
+  }
+
+  /*
+   * The Piece has physically reached the
+   * Area boundary, so persist that position
+   * regardless of whether the user enters.
+   */
+  updatePiecePosition(
+    pieceId,
+    position
+  );
+
+  const enter =
+    window.confirm(
+      `Enter ${area.name}?`
+    );
+
+  if (!enter) {
+    return;
+  }
+
+  try {
+    const destination =
+      await loadEffectiveMapWithFeatures(
+        area.targetMapId
+      );
+
+    const link =
+      destination.map.areaBoundaryLink;
+
+    if (
+      !link ||
+      link.areaId !== area.id ||
+      destination.map.parentMapId !==
+        activeMap.id
+    ) {
+      throw new Error(
+        'The Area Location link is incomplete.'
+      );
+    }
+
+    await transferPieceThroughArea(
+      {
+        ...piece,
+        position,
+      },
+      destination.map.id,
+      transformBoundaryPoint(
+        position,
+        link.alignment
+      )
+    );
+  } catch (error) {
+    setNavigationError(
+      error instanceof Error
+        ? error.message
+        : 'Unable to enter this Area.'
+    );
+  }
+}
+
 async function handlePieceDrop(
   pieceId: string,
   position: Feature['position'],
@@ -2688,24 +2771,7 @@ async function handlePieceDrop(
             transformBoundaryPoint(crossing.position, activeMap.areaBoundaryLink.alignment, true));
           return;
         }
-      }
-      const entrances = activeSections.filter((section) => section.kind === 'area' && section.targetMapId)
-        .flatMap((area) => {
-          const crossing = findBoundaryCrossing(piece.position, position,
-            getSectionPolygon(area, activeSectionEdges, activeSectionNodes), true);
-          return crossing ? [{ area, crossing }] : [];
-        }).sort((a, b) => a.crossing.fraction - b.crossing.fraction);
-      const entrance = entrances[0];
-      if (entrance?.area.targetMapId) {
-        const destination = await loadEffectiveMapWithFeatures(entrance.area.targetMapId);
-        const link = destination.map.areaBoundaryLink;
-        if (!link || link.areaId !== entrance.area.id || destination.map.parentMapId !== activeMap.id) {
-          throw new Error('The Area Location link is incomplete.');
-        }
-        await transferPieceThroughArea(piece, destination.map.id,
-          transformBoundaryPoint(entrance.crossing.position, link.alignment));
-        return;
-      }
+      }      
     } catch (error) {
       setNavigationError(error instanceof Error ? error.message : 'Unable to travel through the Area.');
       return;
@@ -6736,7 +6802,18 @@ mapMediaSlotsEnabled={
     pathDock
   );
 }}
-        onEditPiece={handleEditPiece}
+onPieceAreaBoundaryEnterRequest={(
+  pieceId,
+  area,
+  position
+) => {
+  void handlePieceAreaBoundaryEnterRequest(
+    pieceId,
+    area,
+    position
+  );
+}}
+onEditPiece={handleEditPiece}
         onDeletePiece={(piece) => {
           mapViewportRef.current?.cancelInteractions();
           setPieceToDelete(piece);

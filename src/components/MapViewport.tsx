@@ -240,6 +240,11 @@ onPieceDrop?: (
   targetPiece?: Piece,
   pathDock?: PiecePathDock
 ) => void;
+onPieceAreaBoundaryEnterRequest?: (
+  pieceId: string,
+  area: Section,
+  position: Point
+) => void;
 onEditPiece?: (piece: Piece) => void;
 onDeletePiece?: (piece: Piece) => void;
 onRemovePartyMember?: (partyId: string, memberId: string) => void;
@@ -379,6 +384,7 @@ function MapViewport({
   onFeatureTypeChange,
   onFeatureMove,
   onPieceDrop,
+  onPieceAreaBoundaryEnterRequest,
   onEditPiece,
   onDeletePiece,
   onRemovePartyMember,
@@ -2860,8 +2866,9 @@ if (boundaryCrossing) {
 
   stopEdgeScrolling();
 
-  onPieceDrop?.(
+  onPieceAreaBoundaryEnterRequest?.(
     drag.pieceId,
+    boundaryCrossing.area,
     boundaryPosition
   );
 
