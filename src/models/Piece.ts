@@ -2,6 +2,9 @@ import type {
   SpatialAnchor,
   SpatialPoint,
 } from '../spatial/SpatialAnchor';
+import type {
+  RulesetExtensionData,
+} from './RulesetExtensionData';
 export type PieceKind = 'piece' | 'group';
 
 export type PieceShape =
@@ -17,15 +20,28 @@ export interface PieceAppearance {
   borderColor: string;
 }
 
+export interface PiecePathDock {
+  segmentId: string;
+  legIndex: number;
+  fraction: number;
+}
+
 export interface Piece extends SpatialAnchor {
   id: string;
   kind: PieceKind;
   name: string;
   mapId: string;
   position: SpatialPoint;
+  pathDock?: PiecePathDock;
   appearance: PieceAppearance;
   tracked?: boolean;
   memberPieceIds?: string[];
+  /*
+  * Optional data defined by the active
+  * Ruleset. Regions persists this data
+  * but does not interpret its meaning.
+  */
+  rulesetData?: RulesetExtensionData;
 }
 
 export function isPieceTracked(piece: Piece): boolean {
@@ -62,12 +78,20 @@ export function movePartyAndMembers(
   pieces: Piece[],
   spatialPieceId: string,
   mapId: string,
-  position: Piece['position']
+  position: Piece['position'],
+  pathDock?: PiecePathDock
 ): Piece[] {
   const spatialPiece = pieces.find((piece) => piece.id === spatialPieceId);
   const memberIds = new Set(spatialPiece ? getPartyMemberIds(spatialPiece) : []);
   return pieces.map((piece) => {
-    if (piece.id === spatialPieceId) return { ...piece, mapId, position };
+    if (piece.id === spatialPieceId) {
+  return {
+    ...piece,
+    mapId,
+    position,
+    pathDock,
+  };
+}
     return memberIds.has(piece.id) ? { ...piece, mapId } : piece;
   });
 }

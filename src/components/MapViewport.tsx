@@ -10,6 +10,12 @@ import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceA
 import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
 import ModeHelp from '../interaction/ModeHelp';
+import type { PiecePathDock } from '../models/Piece';
+
+import type { RulesetExtensionData } from '../models/RulesetExtensionData';
+import RulesetInteractionPanel from '../rules/RulesetInteractionPanel';
+import { useRulesetInteraction } from '../rules/useRulesetInteraction';
+
 import {
   Fragment,
   forwardRef,
@@ -213,6 +219,10 @@ onDescriptionChange?: (
   featureId: string,
   description: RichTextDocument
 ) => void;
+onFeatureRulesetDataChange?: (
+  featureId: string,
+  rulesetData: RulesetExtensionData
+) => void;
 onShowLabelChange?: (featureId: string, showLabel: boolean) => void;
 onFeatureTypeChange?: (
   featureId: string,
@@ -223,7 +233,8 @@ onPieceDrop?: (
   pieceId: string,
   position: Point,
   location?: Feature,
-  targetPiece?: Piece
+  targetPiece?: Piece,
+  pathDock?: PiecePathDock
 ) => void;
 onEditPiece?: (piece: Piece) => void;
 onDeletePiece?: (piece: Piece) => void;
@@ -353,6 +364,7 @@ function MapViewport({
   onFeatureNameChange,
   onSubtitleChange,
   onDescriptionChange,
+  onFeatureRulesetDataChange,
   onShowLabelChange,
   onFeatureTypeChange,
   onFeatureMove,
@@ -400,6 +412,12 @@ function MapViewport({
   onMapMetadataChange,
 }: MapViewportProps, ref) {
   const { state, dispatch } = useRegionsState();
+  const {
+    interaction: featureRulesetInteraction,
+    loading: featureRulesetLoading,
+  } = useRulesetInteraction(
+    'Regions.Feature'
+  );
   const interactionPermissions =
     getInteractionModePermissions(interactionMode);
     const pathInteraction =
@@ -4620,11 +4638,35 @@ onDescriptionChange={(
             }
           }}
         />
-      ) : (
-        <div className="path-popup-ruleset-empty">
-          No Ruleset data available.
-        </div>
-      )}
+      ) : featureRulesetLoading ? (
+  <div className="path-popup-ruleset-empty">
+    Loading Ruleset data...
+  </div>
+) : featureRulesetInteraction ? (
+  <RulesetInteractionPanel
+    rulesetId={
+      featureRulesetInteraction
+        .rulesetId
+    }
+    interaction={
+      featureRulesetInteraction
+        .interaction
+    }
+    value={
+      selectedFeature.rulesetData
+    }
+    onChange={(rulesetData) => {
+      onFeatureRulesetDataChange?.(
+        selectedFeature.id,
+        rulesetData
+      );
+    }}
+  />
+) : (
+  <div className="path-popup-ruleset-empty">
+    No Ruleset data available.
+  </div>
+)}
     </div>
   )}
 </div>

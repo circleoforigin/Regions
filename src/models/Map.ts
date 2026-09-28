@@ -1,6 +1,9 @@
 import type {
   MediaSlotOverride,
 } from './MediaSlot';
+import type {
+  RulesetExtensionData,
+} from './RulesetExtensionData';
 
 export type MapDistanceUnit =
   | 'feet'
@@ -71,6 +74,13 @@ export interface Map {
 
   pathTerminalIds?: string[];
   pathSegmentIds?: string[];
+
+  /*
+  * Optional data defined by the active
+  * Ruleset. Regions persists this data
+  * but does not interpret its meaning.
+  */
+  rulesetData?: RulesetExtensionData;
 
   createdAt: Date;
   updatedAt: Date;

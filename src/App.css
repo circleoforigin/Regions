@@ -1937,24 +1937,99 @@ button.map-key-parent:hover {
   object-position: center;
 }
 
-.piece-editor-dialog label {
+.piece-editor-dialog {
+  width: 300px;
+  box-sizing: border-box;
+}
+
+.piece-editor-dialog h2 {
+  margin-bottom: 12px;
+}
+
+.piece-editor-tabs {
+  display: flex;
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.piece-editor-tabs button {
+  flex: 1;
+  height: 28px;
+  padding: 0 10px;
+
+  border: 1px solid #555b63;
+
+  background: #262626;
+  color: #d8dce2;
+
+  font: inherit;
+  font-size: 12px;
+
+  cursor: pointer;
+}
+
+.piece-editor-tabs button + button {
+  border-left: 0;
+}
+
+.piece-editor-tabs button:hover {
+  background: #343941;
+}
+
+.piece-editor-tabs button.active {
+  background: #3b414a;
+  color: #ffffff;
+}
+
+.piece-editor-page {
+  min-height: 180px;
+}
+
+.piece-editor-row {
   display: grid;
-  gap: 6px;
-  margin-top: 12px;
+  grid-template-columns:
+    82px minmax(0, 1fr);
+
+  align-items: center;
+  gap: 10px;
+
+  margin-top: 10px;
+
   color: #cccccc;
   font-size: 13px;
 }
 
-.piece-editor-dialog select {
+.piece-editor-row input,
+.piece-editor-row select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.piece-editor-row select {
   padding: 8px;
+
   border: 1px solid #454545;
   background: #181818;
   color: #eeeeee;
 }
 
-.piece-editor-dialog input[type='color'] {
-  height: 36px;
+.piece-editor-row input[type='color'] {
+  height: 34px;
   padding: 2px;
+}
+
+.piece-editor-ruleset-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 180px;
+
+  color: #888888;
+
+  font-size: 12px;
+  font-style: italic;
 }
 
 .menu-piece-control {
@@ -2961,6 +3036,20 @@ box-shadow:
   white-space: nowrap;
 }
 
+.distance-measurement-leg-label {
+  fill: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+
+  paint-order: stroke;
+  stroke: #111111;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+
+  pointer-events: none;
+  user-select: none;
+}
+
 .map-feature-marker.distance-selected .map-feature-dot {
   background: #ffffff;
   border-color: #39ff14;
@@ -3241,4 +3330,46 @@ box-shadow:
 
 .path-popup-controls {
   margin-top: -10px;
+}
+
+/* =========================
+   RULESET INTERACTION PANEL
+   ========================= */
+
+.ruleset-interaction-panel {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.ruleset-interaction-field {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+
+  color: #cccccc;
+  font-size: 12px;
+}
+
+.ruleset-interaction-field input[type='text'],
+.ruleset-interaction-field input[type='number'],
+.ruleset-interaction-field select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+
+  padding: 6px;
+
+  border: 1px solid #454545;
+  background: #181818;
+  color: #eeeeee;
+}
+
+.ruleset-interaction-field input[type='checkbox'] {
+  justify-self: start;
+}
+
+.ruleset-interaction-label {
+  min-width: 0;
 }

@@ -1,6 +1,7 @@
 import {
   convertMapDistance,
   formatPhysicalDistance,
+  getSegmentPhysicalDistance,
 } from './DistanceMeasurement';
 
 import type {
@@ -96,7 +97,7 @@ export default function DistanceMeasurementOverlay({
       className="distance-measurement-layer"
       aria-hidden="true"
     >
-            {segments.map((segment) => {
+    {segments.map((segment) => {
         const points =
           segment.points.map((point) =>
             mapToScreen(
@@ -105,7 +106,49 @@ export default function DistanceMeasurementOverlay({
             )
           );
 
-                const pointString =
+          const legDistance =
+  getSegmentPhysicalDistance(
+    segment,
+    distanceScale
+  );
+
+const legReadout =
+  legDistance &&
+  legDistance.value > 0
+    ? formatPhysicalDistance(
+        legDistance
+      )
+    : null;
+
+const midpointIndex =
+  Math.floor(
+    (points.length - 1) / 2
+  );
+
+const midpointStart =
+  points[midpointIndex];
+
+const midpointEnd =
+  points[
+    Math.min(
+      midpointIndex + 1,
+      points.length - 1
+    )
+  ];
+
+const labelPosition = {
+  x:
+    (midpointStart.x +
+      midpointEnd.x) /
+    2,
+
+  y:
+    (midpointStart.y +
+      midpointEnd.y) /
+    2,
+};
+
+        const pointString =
           points
             .map(
               (point) =>
@@ -114,34 +157,59 @@ export default function DistanceMeasurementOverlay({
             .join(' ');
 
         if (segment.kind === 'path') {
-          return (
-            <g
-              key={
-                `${segment.start.anchor.id}-${segment.end.anchor.id}`
-              }
-            >
-              <polyline
-                className="distance-measurement-path-outline"
-                points={pointString}
-              />
+  return (
+    <g
+      key={
+        `${segment.start.anchor.id}-${segment.end.anchor.id}`
+      }
+    >
+      <polyline
+        className="distance-measurement-path-outline"
+        points={pointString}
+      />
 
-              <polyline
-                className="distance-measurement-path"
-                points={pointString}
-              />
-            </g>
-          );
-        }
+      <polyline
+        className="distance-measurement-path"
+        points={pointString}
+      />
+
+      {legReadout && (
+        <text
+          className="distance-measurement-leg-label"
+          x={labelPosition.x}
+          y={labelPosition.y - 10}
+          textAnchor="middle"
+        >
+          {legReadout}
+        </text>
+      )}
+    </g>
+  );
+}
 
         return (
-          <polyline
-            key={
-              `${segment.start.anchor.id}-${segment.end.anchor.id}`
-            }
-            className="distance-measurement-line"
-            points={pointString}
-          />
-        );
+  <g
+    key={
+      `${segment.start.anchor.id}-${segment.end.anchor.id}`
+    }
+  >
+    <polyline
+      className="distance-measurement-line"
+      points={pointString}
+    />
+
+    {legReadout && (
+      <text
+        className="distance-measurement-leg-label"
+        x={labelPosition.x}
+        y={labelPosition.y - 10}
+        textAnchor="middle"
+      >
+        {legReadout}
+      </text>
+    )}
+  </g>
+);
       })}
 
       {visibleNodes.map((resolved) => {

@@ -139,6 +139,16 @@ export function convertMapDistance(
   };
 }
 
+export function getSegmentPhysicalDistance(
+  segment: DistanceSegment,
+  scale: DistanceScale | undefined
+): PhysicalDistance | null {
+  return convertMapDistance(
+    segment.mapDistance,
+    scale
+  );
+}
+
 export function getTotalPhysicalDistance(
   anchors: ResolvedDistanceAnchor[],
   scale: DistanceScale | undefined

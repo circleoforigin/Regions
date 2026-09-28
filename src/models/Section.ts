@@ -1,5 +1,8 @@
 import type { Feature } from './Feature';
 import type { MediaSlotOverride } from './MediaSlot';
+import type {
+  RulesetExtensionData,
+} from './RulesetExtensionData';
 export type SectionKind = 'area' | 'zone' | 'border' | 'boundary';
 
 export interface SectionPoint {
@@ -34,6 +37,12 @@ export interface Section {
   featureTypeId?: string;
   journalPageId?: string;
   mediaSlotOverrides?: MediaSlotOverride[];
+  /*
+  * Optional data defined by the active
+  * Ruleset. Regions persists this data
+  * but does not interpret its meaning.
+  */
+  rulesetData?: RulesetExtensionData;
   locked?: boolean;
   edgeIds: string[];
   createdAt: Date;

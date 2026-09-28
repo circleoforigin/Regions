@@ -723,6 +723,12 @@ const [
 
   const [editingPieceId, setEditingPieceId] =
     useState<string | null>(null);
+  const [
+    pieceEditorTab,
+    setPieceEditorTab,
+  ] = useState<'piece' | 'ruleset'>(
+    'piece'
+  );
 
   const [pieceNameDraft, setPieceNameDraft] = useState('');
   const [pieceShapeDraft, setPieceShapeDraft] =
@@ -2871,6 +2877,7 @@ async function focusPiece(pieceId: string, discardChanges: boolean) {
 function handleEditPiece(piece: Piece) {
   mapViewportRef.current?.cancelInteractions();
   setEditingPieceId(piece.id);
+  setPieceEditorTab('piece');
   setPieceNameDraft(piece.name);
   setPieceShapeDraft(piece.appearance.shape);
   setPieceFillDraft(piece.appearance.fillColor);
@@ -4043,6 +4050,26 @@ async function handleCreateJournalPage() {
   } finally {
     setJournalDialogLoading(false);
   }
+}
+
+function handleFeatureRulesetDataChange(
+  featureId: string,
+  rulesetData:
+    Feature['rulesetData']
+) {
+  if (!rulesetData) {
+    return;
+  }
+
+  updateFeatureEverywhere(
+    featureId,
+    (feature) => ({
+      ...feature,
+      rulesetData,
+    })
+  );
+
+  markProjectDirty();
 }
 
 function handleDescriptionChange(
@@ -5621,57 +5648,130 @@ mapMediaSlotsEnabled={
     <div className="dialog piece-editor-dialog">
       <h2>Edit Piece</h2>
 
-      <label>
-        Name
-        <input
-          type="text"
-          value={pieceNameDraft}
-          onChange={(event) => setPieceNameDraft(event.target.value)}
-          autoFocus
-        />
-      </label>
-
-      <label>
-        Shape
-        <select
-          value={pieceShapeDraft}
-          onChange={(event) => {
-            setPieceShapeDraft(event.target.value as PieceShape);
-          }}
-        >
-          <option value="circle">Circle</option>
-          <option value="square">Square</option>
-          <option value="diamond">Diamond</option>
-          <option value="triangle">Triangle</option>
-          <option value="hexagon">Hexagon</option>
-        </select>
-      </label>
-
-      <label>
-        Fill Color
-        <input
-          type="color"
-          value={pieceFillDraft}
-          onChange={(event) => setPieceFillDraft(event.target.value)}
-        />
-      </label>
-
-      <label>
-        Border Color
-        <input
-          type="color"
-          value={pieceBorderDraft}
-          onChange={(event) => setPieceBorderDraft(event.target.value)}
-        />
-      </label>
-
-      <div className="dialog-buttons">
-        <button type="button" onClick={() => setEditingPieceId(null)}>
-          Cancel
-        </button>
+      <div className="piece-editor-tabs">
         <button
           type="button"
-          disabled={!pieceNameDraft.trim()}
+          className={
+            pieceEditorTab === 'piece'
+              ? 'active'
+              : ''
+          }
+          onClick={() =>
+            setPieceEditorTab('piece')
+          }
+        >
+          Piece
+        </button>
+
+        <button
+          type="button"
+          className={
+            pieceEditorTab === 'ruleset'
+              ? 'active'
+              : ''
+          }
+          onClick={() =>
+            setPieceEditorTab('ruleset')
+          }
+        >
+          Ruleset
+        </button>
+      </div>
+
+      <div className="piece-editor-page">
+        {pieceEditorTab === 'piece' ? (
+          <>
+            <label className="piece-editor-row">
+              <span>Name</span>
+              <input
+                type="text"
+                value={pieceNameDraft}
+                onChange={(event) =>
+                  setPieceNameDraft(
+                    event.target.value
+                  )
+                }
+                autoFocus
+              />
+            </label>
+
+            <label className="piece-editor-row">
+              <span>Shape</span>
+              <select
+                value={pieceShapeDraft}
+                onChange={(event) => {
+                  setPieceShapeDraft(
+                    event.target
+                      .value as PieceShape
+                  );
+                }}
+              >
+                <option value="circle">
+                  Circle
+                </option>
+                <option value="square">
+                  Square
+                </option>
+                <option value="diamond">
+                  Diamond
+                </option>
+                <option value="triangle">
+                  Triangle
+                </option>
+                <option value="hexagon">
+                  Hexagon
+                </option>
+              </select>
+            </label>
+
+            <label className="piece-editor-row">
+              <span>Fill Color</span>
+              <input
+                type="color"
+                value={pieceFillDraft}
+                onChange={(event) =>
+                  setPieceFillDraft(
+                    event.target.value
+                  )
+                }
+              />
+            </label>
+
+            <label className="piece-editor-row">
+              <span>Border Color</span>
+              <input
+                type="color"
+                value={pieceBorderDraft}
+                onChange={(event) =>
+                  setPieceBorderDraft(
+                    event.target.value
+                  )
+                }
+              />
+            </label>
+          </>
+        ) : (
+          <div className="piece-editor-ruleset-empty">
+            No Ruleset data available.
+          </div>
+        )}
+      </div>
+
+      <div className="dialog-buttons">
+        <button
+          type="button"
+          onClick={() =>
+            setEditingPieceId(null)
+          }
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          disabled={
+            !pieceNameDraft.trim()
+          }
           onClick={handleSavePiece}
         >
           Save
@@ -6516,6 +6616,9 @@ mapMediaSlotsEnabled={
         onFeatureNameChange={handleFeatureNameChange}
         onSubtitleChange={handleSubtitleChange}
         onDescriptionChange={handleDescriptionChange}
+        onFeatureRulesetDataChange={
+          handleFeatureRulesetDataChange
+        }
         onShowLabelChange={handleShowLabelChange}
         onFeatureTypeChange={handleFeatureTypeChange}
         onFeatureMove={handleFeatureMove}

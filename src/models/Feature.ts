@@ -1,5 +1,8 @@
 import type { RichTextDocument } from './RichText';
 import type {
+  RulesetExtensionData,
+} from './RulesetExtensionData';
+import type {
   SpatialAnchor,
   SpatialPoint,
 } from '../spatial/SpatialAnchor';
@@ -30,5 +33,11 @@ export interface Feature extends SpatialAnchor {
 
   journalPageId?: string;
 
+  /*
+ * Optional data defined by the active
+ * Ruleset. Regions persists this data
+ * but does not interpret its meaning.
+ */
+  rulesetData?: RulesetExtensionData;
   connectionPlacementPending?: boolean;
 }

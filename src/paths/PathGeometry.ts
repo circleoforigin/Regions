@@ -8,6 +8,10 @@ import type {
 } from '../spatial/SpatialAnchor';
 
 import type {
+  PiecePathDock,
+} from '../models/Piece';
+
+import type {
   ResolvedPathSegment,
 } from './PathMapState';
 
@@ -66,6 +70,11 @@ export function distanceToLineSegment(
 export interface PathProjection {
   position: SpatialPoint;
   legIndex: number;
+}
+
+export interface PathDockProjection
+  extends PathProjection {
+  fraction: number;
 }
 
 export function projectPointOntoPath(
@@ -143,6 +152,136 @@ export function projectPointOntoPath(
   return {
     position: bestPosition,
     legIndex: bestLegIndex,
+  };
+}
+
+export function projectPointOntoPathDock(
+  resolved: ResolvedPathSegment,
+  position: SpatialPoint
+): PathDockProjection {
+  const points = [
+    resolved.start.position,
+
+    ...resolved.segment.shapePoints.map(
+      (point) => point.position
+    ),
+
+    resolved.end.position,
+  ];
+
+  let bestPosition = points[0];
+  let bestLegIndex = 0;
+  let bestFraction = 0;
+  let bestDistanceSquared = Infinity;
+
+  for (
+    let index = 0;
+    index < points.length - 1;
+    index += 1
+  ) {
+    const start = points[index];
+    const end = points[index + 1];
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+
+    const lengthSquared =
+      dx * dx + dy * dy;
+
+    const fraction =
+      lengthSquared === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(
+              1,
+              (
+                (position.x - start.x) * dx +
+                (position.y - start.y) * dy
+              ) / lengthSquared
+            )
+          );
+
+    const projected = {
+      x: start.x + dx * fraction,
+      y: start.y + dy * fraction,
+    };
+
+    const projectedDistanceSquared =
+      distanceSquared(
+        position,
+        projected
+      );
+
+    if (
+      projectedDistanceSquared <
+      bestDistanceSquared
+    ) {
+      bestDistanceSquared =
+        projectedDistanceSquared;
+
+      bestPosition = projected;
+      bestLegIndex = index;
+      bestFraction = fraction;
+    }
+  }
+
+  return {
+    position: bestPosition,
+    legIndex: bestLegIndex,
+    fraction: bestFraction,
+  };
+}
+
+export function resolvePathDockPosition(
+  dock: PiecePathDock,
+  resolved: ResolvedPathSegment
+): SpatialPoint | null {
+  if (
+    dock.segmentId !==
+    resolved.segment.id
+  ) {
+    return null;
+  }
+
+  const points = [
+    resolved.start.position,
+
+    ...resolved.segment.shapePoints.map(
+      (point) => point.position
+    ),
+
+    resolved.end.position,
+  ];
+
+  const start =
+    points[dock.legIndex];
+
+  const end =
+    points[dock.legIndex + 1];
+
+  if (!start || !end) {
+    return null;
+  }
+
+  const fraction = Math.max(
+    0,
+    Math.min(
+      1,
+      dock.fraction
+    )
+  );
+
+  return {
+    x:
+      start.x +
+      (end.x - start.x) *
+        fraction,
+
+    y:
+      start.y +
+      (end.y - start.y) *
+        fraction,
   };
 }
 
