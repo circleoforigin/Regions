@@ -1881,6 +1881,32 @@ async function loadEffectiveMapWithFeatures(
   };
 }
 
+type LoadedMapState = Awaited<
+  ReturnType<
+    typeof loadEffectiveMapWithFeatures
+  >
+>;
+
+async function activateMap(
+  destination: LoadedMapState
+): Promise<void> {
+  setActiveMap(
+    destination.map
+  );
+
+  setActiveFeatures(
+    destination.features
+  );
+
+  setActivePathNetwork(
+    destination.pathNetwork
+  );
+
+  await loadMapImage(
+    destination.map
+  );
+}
+
 function findParentLocation(childMap: RegionMap, features: Feature[]) {
   const byId = childMap.parentLocationId
     ? features.find((feature) => {
@@ -1914,6 +1940,7 @@ async function resolveParentLocation(childMap: RegionMap) {
   return {
     parentMap: parent.map,
     parentFeatures: parent.features,
+    parentPathNetwork: parent.pathNetwork,
     parentLocation,
   };
 }
@@ -2030,6 +2057,7 @@ async function commitPieceParentExit(
   if (!follow) return;
   setActiveMap(parent.parentMap);
   setActiveFeatures(parent.parentFeatures);
+  setActivePathNetwork(parent.parentPathNetwork);
   setPendingFocusFeatureId(parent.parentLocation.id);
   await loadMapImage(parent.parentMap);
   setFocusPiecePosition(movedPiece.position);
@@ -2229,12 +2257,13 @@ async function navigateToFeatureTarget(
       ...project,
       activeMapId: destination.map.id,
     });
-    setActiveMap(destination.map);
-    setActiveFeatures(destination.features);
-    setPendingFocusFeatureId(targetFeature?.connectionPlacementPending
-      ? null
-      : targetFeature?.id ?? null);
-    await loadMapImage(destination.map);
+    await activateMap(destination);
+
+    setPendingFocusFeatureId(
+      targetFeature?.connectionPlacementPending
+        ? null
+        : targetFeature?.id ?? null
+    );
     if (targetFeature?.connectionPlacementPending) {
       setFocusPiecePosition(getMapArrivalCenter(destination.map));
       setFocusPieceRequestId((current) => current + 1);
@@ -2413,17 +2442,16 @@ async function goDirectlyToMap(
     activeProject.id,
     activeMap.id
   );
-
   project = source.project;
   sourceMapName = source.map.name;
 }
-
     const destination = await loadMapWithFeatures(mapId);
-    setActiveProject({ ...project, activeMapId: destination.map.id });
-    setActiveMap(destination.map);
-    setActiveFeatures(destination.features);
+    setActiveProject({
+      ...project,
+      activeMapId: destination.map.id,
+    });
+    await activateMap(destination);
     setPendingFocusFeatureId(null);
-    await loadMapImage(destination.map);
     handleMapEntered(destination.map, project, sourceMapName, 'go-to-map');
     closeGoToMapDialog();
   } catch (error) {
@@ -2524,11 +2552,12 @@ async function goToPiece(pieceId: string, discardChanges: boolean) {
     if (!piece) throw new Error('The selected Piece was not found.');
     if (activeMap?.id !== piece.mapId) {
       const destination = await loadMapWithFeatures(piece.mapId);
-      setActiveProject({ ...project, activeMapId: piece.mapId });
-      setActiveMap(destination.map);
-      setActiveFeatures(destination.features);
+      setActiveProject({
+        ...project,
+        activeMapId: piece.mapId,
+      });
+      await activateMap(destination);
       setPendingFocusFeatureId(null);
-      await loadMapImage(destination.map);
     }
     setFocusPiecePosition(piece.position);
     setFocusPieceRequestId((current) => current + 1);
