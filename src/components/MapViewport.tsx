@@ -6,6 +6,7 @@ import { isValidAlignment, transformBoundaryPoint } from '../sections/BoundaryTr
 import { getInteractionModePermissions } from '../interaction/InteractionModePermissions';
 import DistanceMeasurementOverlay from '../interaction/distance/DistanceMeasurementOverlay';
 import { useDistanceMeasurement } from '../interaction/distance/useDistanceMeasurement';
+import type { DistanceAnchor } from '../interaction/distance/DistanceMeasurement';
 import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceAnchors';
 import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
@@ -663,6 +664,78 @@ useEffect(() => {
   selectedPathSegment?.segmentId,
 ]);
 
+const selectedRoutePiece =
+  selectedPieceId
+    ? pieces.find(
+        (piece) =>
+          piece.id === selectedPieceId
+      )
+    : undefined;
+
+const selectedRouteAnchors: DistanceAnchor[] =
+  selectedRoutePiece?.waypath
+    ? [
+        {
+          id: `route-piece-${selectedRoutePiece.id}`,
+          kind: 'piece',
+          pieceId: selectedRoutePiece.id,
+        },
+        ...selectedRoutePiece.waypath.nodes.map(
+          (
+            node,
+            index
+          ): DistanceAnchor => {
+            const id =
+              `route-${selectedRoutePiece.id}-${index}`;
+
+            switch (node.kind) {
+              case 'point':
+                return {
+                  id,
+                  kind: 'temporary',
+                  pointId: id,
+                  position: node.position,
+                  usePathFromPrevious:
+                    node.usePathFromPrevious,
+                };
+
+              case 'feature':
+                return {
+                  id,
+                  kind: 'feature',
+                  featureId:
+                    node.featureId,
+                  usePathFromPrevious:
+                    node.usePathFromPrevious,
+                };
+
+              case 'path':
+                return {
+                  id,
+                  kind: 'path',
+                  segmentId:
+                    node.segmentId,
+                  position:
+                    node.position,
+                  usePathFromPrevious:
+                    node.usePathFromPrevious,
+                };
+
+              case 'terminal':
+                return {
+                  id,
+                  kind: 'terminal',
+                  terminalId:
+                    node.terminalId,
+                  usePathFromPrevious:
+                    node.usePathFromPrevious,
+                };
+            }
+          }
+        ),
+      ]
+    : [];
+
 const resolvedDistanceAnchors =
   resolveDistanceAnchors(
     distanceMeasurement.anchors,
@@ -670,6 +743,14 @@ const resolvedDistanceAnchors =
     pieces,
     pathNetwork.terminals
   );
+
+  const resolvedSelectedRouteAnchors =
+    resolveDistanceAnchors(
+      selectedRouteAnchors,
+      features,
+      pieces,
+      pathNetwork.terminals
+    );
 
   const resolvedPathSegments =
     resolvePathSegments(
@@ -683,6 +764,13 @@ const resolvedDistanceAnchors =
       resolvedDistanceAnchors,
       resolvedPathSegments
     );
+
+  const selectedRouteSegments =
+    getDistanceSegmentsWithPaths(
+      resolvedSelectedRouteAnchors,
+      resolvedPathSegments
+    );
+
   const { scale, panX, panY } = state.viewport;
   const pan = { x: panX, y: panY };
   const contextMenu = state.contextMenu;
@@ -2425,9 +2513,8 @@ if (interactionMode === 'distance') {
 dispatch({
   type: 'feature.clearSelection',
 });
-
+setSelectedPieceId(null);
 setSelectedPathSegment(null);
-
 dispatch({
   type: 'contextMenu.close',
 });
@@ -3849,6 +3936,23 @@ function saveSectionProperties() {
   </div>
 )}
 
+{selectedRoutePiece?.waypath &&
+  routePieceId === null && (
+    <DistanceMeasurementOverlay
+      anchors={
+        resolvedSelectedRouteAnchors
+      }
+      segments={
+        selectedRouteSegments
+      }
+      distanceScale={
+        imageRegistration?.distanceScale
+      }
+      pointerPosition={null}
+      mapToScreen={mapToScreen}
+    />
+  )}
+
 <DistanceMeasurementOverlay
   anchors={resolvedDistanceAnchors}
   segments={distanceSegments}
@@ -4122,6 +4226,7 @@ function saveSectionProperties() {
         if (suppressNextFeatureClickRef.current) { suppressNextFeatureClickRef.current = false; return; }
         if (pendingArrivalPlacement || sectionDraft || state.editingMode === 'move-feature') return;
         setSelectedPathSegment(null);
+        setSelectedPieceId(null);
         dispatch({ 
           type: 'feature.select', 
           featureId: section.id,

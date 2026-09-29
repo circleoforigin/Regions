@@ -25,11 +25,11 @@ interface DistanceMeasurementOverlayProps {
     y: number
   ) => Point;
 
-  onRemoveAnchor: (
+  onRemoveAnchor?: (
     anchorId: string
   ) => void;
 
-  onSelectTemporaryAnchor: (
+  onSelectTemporaryAnchor?: (
     pointId: string,
     position: Point
 ) => void;
@@ -234,7 +234,7 @@ const labelPosition = {
 
                     if (resolved.anchor.kind === 'temporary') 
                     {
-                        onSelectTemporaryAnchor(
+                        onSelectTemporaryAnchor?.(
                             resolved.anchor.pointId,
                             resolved.position
                         );
@@ -244,7 +244,9 @@ const labelPosition = {
                     event.preventDefault();
                     event.stopPropagation();
 
-                onRemoveAnchor(resolved.anchor.id);
+                onRemoveAnchor?.(
+                    resolved.anchor.id
+                );
                 }}
             />
           </g>
