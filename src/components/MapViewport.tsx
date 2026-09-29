@@ -2397,11 +2397,35 @@ function finishRouteAuthoring() {
   }
 
   const nodes: PieceWaypathAnchor[] = [];
+const routeAnchors =
+  distanceSegments.length > 0
+    ? [
+        distanceSegments[0].start,
+        ...distanceSegments.map(
+          (segment) =>
+            segment.end
+        ),
+      ]
+    : resolvedDistanceAnchors;
+
+if (distanceSegments.length > 0) {
+  routeAnchors.push(distanceSegments[0].start);
+
+  for (
+    const segment of
+      distanceSegments
+  ) {
+    routeAnchors.push(segment.end);
+  }
+} else {
+  routeAnchors.push(...resolvedDistanceAnchors);
+}
 
 for (
-  const anchor of
-    distanceMeasurement.anchors
+  const resolved of
+    routeAnchors
 ) {
+  const anchor = resolved.anchor;
   switch (anchor.kind) {
     case 'temporary':
       nodes.push({

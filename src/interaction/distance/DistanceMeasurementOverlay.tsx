@@ -92,10 +92,24 @@ export default function DistanceMeasurementOverlay({
 );
 
 const breakpointNodes =
-  segments.flatMap(
-    (segment) =>
-      segment.breakpoints ?? []
-  );
+  segments
+    .slice(0, -1)
+    .map((segment) => ({
+      position:
+        segment.end.position,
+    }))
+    .filter(
+      (breakpoint) =>
+        !anchors.some(
+          (anchor) =>
+            Math.hypot(
+              anchor.position.x -
+                breakpoint.position.x,
+              anchor.position.y -
+                breakpoint.position.y
+            ) < 0.000001
+        )
+    );
 
   return (
   <>

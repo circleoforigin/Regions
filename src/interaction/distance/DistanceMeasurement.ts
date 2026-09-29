@@ -49,6 +49,7 @@ export interface ResolvedDistanceAnchor {
 
 export interface DistanceSegmentBreakpoint {
   position: SpatialPoint;
+  segmentId?: string;
 }
 
 export interface DistanceSegment {

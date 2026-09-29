@@ -26,10 +26,16 @@ export type PathRouteEndpoint =
       position: SpatialPoint;
     };
 
+export interface PathRouteLeg {
+  segmentId: string;
+  points: SpatialPoint[];
+}
+
 export interface PathRoute {
   distance: number;
   points: SpatialPoint[];
   segmentIds: string[];
+  legs: PathRouteLeg[];
 }
 
 interface GraphEdge {
@@ -498,7 +504,21 @@ export function findPathRoute(
   const segmentIds:
     string[] = [];
 
+  const legs:
+    PathRouteLeg[] = [];
+
   for (const edge of routeEdges) {
+    if (
+  edge.segmentId &&
+  edge.points.length >= 2
+) {
+  legs.push({
+    segmentId:
+      edge.segmentId,
+    points:
+      edge.points,
+  });
+}
     if (
       edge.segmentId &&
       segmentIds.at(-1) !==
@@ -531,5 +551,6 @@ export function findPathRoute(
     distance,
     points,
     segmentIds,
-  };
+    legs,
+    };
 }
