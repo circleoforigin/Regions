@@ -679,13 +679,7 @@ const selectedRoutePiece =
 
 const selectedRouteAnchors: DistanceAnchor[] =
   selectedRoutePiece?.waypath
-    ? [
-        {
-          id: `route-piece-${selectedRoutePiece.id}`,
-          kind: 'piece',
-          pieceId: selectedRoutePiece.id,
-        },
-        ...selectedRoutePiece.waypath.nodes.map(
+    ? selectedRoutePiece.waypath.nodes.map(
           (
             node,
             index
@@ -737,8 +731,7 @@ const selectedRouteAnchors: DistanceAnchor[] =
                 };
             }
           }
-        ),
-      ]
+        )
     : [];
 
 const resolvedDistanceAnchors =
@@ -3252,9 +3245,130 @@ const preview = {
     event.stopPropagation();
     const preview = piecePreviewRef.current?.pieceId === drag.pieceId
       ? piecePreviewRef.current.position
-      : drag.startPosition;
+      : drag.startPosition;const acquiredNode =
+  pieceNodeTarget?.kind === 'route'
+    ? (() => {
+        const draggedPiece =
+          pieces.find(
+            (piece) =>
+              piece.id === drag.pieceId
+          );
 
-    const acquiredNode = pieceNodeTarget;
+        if (!draggedPiece?.waypath) {
+          return pieceNodeTarget;
+        }
+
+        const previewScreen =
+          mapToScreen(
+            preview.x,
+            preview.y
+          );
+
+        const routeAnchors =
+          resolveDistanceAnchors(
+            draggedPiece.waypath.nodes.map(
+              (
+                node,
+                index
+              ): DistanceAnchor => {
+                const id =
+                  `route-${drag.pieceId}-${index}`;
+
+                switch (node.kind) {
+                  case 'point':
+                    return {
+                      id,
+                      kind: 'temporary',
+                      pointId: id,
+                      position:
+                        node.position,
+                    };
+
+                  case 'feature':
+                    return {
+                      id,
+                      kind: 'feature',
+                      featureId:
+                        node.featureId,
+                    };
+
+                  case 'path':
+                    return {
+                      id,
+                      kind: 'path',
+                      segmentId:
+                        node.segmentId,
+                      position:
+                        node.position,
+                    };
+
+                  case 'terminal':
+                    return {
+                      id,
+                      kind: 'terminal',
+                      terminalId:
+                        node.terminalId,
+                    };
+                }
+              }
+            ),
+            features,
+            pieces,
+            pathNetwork.terminals
+          );
+
+        const closest =
+          routeAnchors.reduce<{
+            kind: 'route';
+            id: string;
+            position: Point;
+            distance: number;
+          } | null>(
+            (currentClosest, anchor) => {
+              const targetScreen =
+                mapToScreen(
+                  anchor.position.x,
+                  anchor.position.y
+                );
+
+              const distance =
+                Math.hypot(
+                  previewScreen.x -
+                    targetScreen.x,
+                  previewScreen.y -
+                    targetScreen.y
+                );
+
+              if (
+                distance >
+                NODE_SNAP_DISTANCE
+              ) {
+                return currentClosest;
+              }
+
+              if (
+                currentClosest &&
+                currentClosest.distance <=
+                  distance
+              ) {
+                return currentClosest;
+              }
+
+              return {
+                kind: 'route',
+                id: anchor.anchor.id,
+                position:
+                  anchor.position,
+                distance,
+              };
+            },
+            null
+          );
+
+        return closest ??
+          pieceNodeTarget;
+      })()
+    : pieceNodeTarget;
 
     pieceDragRef.current = null;
     piecePreviewRef.current = null;
@@ -3291,8 +3405,7 @@ const routeAnchors =
             node,
             index
           ): DistanceAnchor => {
-            const id =
-              `route-drop-${drag.pieceId}-${index}`;
+            const id = `route-${drag.pieceId}-${index}`;
 
             switch (node.kind) {
               case 'point':
@@ -3342,10 +3455,8 @@ const targetRouteNodeIndex =
   acquiredNode?.kind === 'route'
     ? routeAnchors.findIndex(
         (anchor) =>
-          anchor.anchor.id.replace(
-            'route-drop-',
-            'route-'
-          ) === acquiredNode.id
+          anchor.anchor.id ===
+          acquiredNode.id
       )
     : -1;
 
@@ -3852,27 +3963,8 @@ const pieceTerminalNodeTarget =
           }
         : null;
 
-const activePiecePreview =
-  piecePreview?.pieceId ===
-  selectedRoutePiece?.id
-    ? piecePreview
-    : null;
-
 const displayedRouteAnchors =
-  activePiecePreview &&
-  resolvedSelectedRouteAnchors.length > 0
-    ? resolvedSelectedRouteAnchors.map(
-        (anchor, index) =>
-          index === 0
-            ? {
-                ...anchor,
-                position:
-                  pieceRouteNodeTarget?.position ??
-                  activePiecePreview.position,
-              }
-            : anchor
-      )
-    : resolvedSelectedRouteAnchors;
+  resolvedSelectedRouteAnchors;
 
 const displayedRouteSegments =
   getDistanceSegmentsWithPaths(
