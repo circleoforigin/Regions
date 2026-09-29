@@ -96,6 +96,7 @@ import PathSegmentPopup
 
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
+const NODE_SNAP_DISTANCE = 8;
 const NAVIGATION_ZOOM_RATIO = 0.5;
 const EDGE_SCROLL_ZONE_PX = 60;
 const EDGE_SCROLL_DELAY_MS = 250;
@@ -3604,6 +3605,126 @@ onPieceDrop?.(
       )?.segmentId
     : undefined;
 
+    const pieceRouteNodeTarget =
+  piecePreview
+    ? (() => {
+        const draggedPiece =
+          pieces.find(
+            (piece) =>
+              piece.id ===
+              piecePreview.pieceId
+          );
+
+        if (!draggedPiece?.waypath) {
+          return null;
+        }
+
+        const routeAnchors =
+          resolveDistanceAnchors(
+            draggedPiece.waypath.nodes.map(
+              (
+                node,
+                index
+              ): DistanceAnchor => {
+                const id =
+  `route-${draggedPiece.id}-${index}`;
+
+                switch (node.kind) {
+                  case 'point':
+                    return {
+                      id,
+                      kind: 'temporary',
+                      pointId: id,
+                      position: node.position,
+                    };
+
+                  case 'feature':
+                    return {
+                      id,
+                      kind: 'feature',
+                      featureId:
+                        node.featureId,
+                    };
+
+                  case 'path':
+                    return {
+                      id,
+                      kind: 'path',
+                      segmentId:
+                        node.segmentId,
+                      position:
+                        node.position,
+                    };
+
+                  case 'terminal':
+                    return {
+                      id,
+                      kind: 'terminal',
+                      terminalId:
+                        node.terminalId,
+                    };
+                }
+              }
+            ),
+            features,
+            pieces,
+            pathNetwork.terminals
+          );
+
+        const previewScreen =
+          mapToScreen(
+            piecePreview.position.x,
+            piecePreview.position.y
+          );
+
+        let closest:
+  | {
+      anchorId: string;
+      position: Point;
+      distance: number;
+    }
+  | null = null;
+
+        routeAnchors.forEach(
+          (anchor, index) => {
+            const targetScreen =
+              mapToScreen(
+                anchor.position.x,
+                anchor.position.y
+              );
+
+            const distance =
+              Math.hypot(
+                previewScreen.x -
+                  targetScreen.x,
+                previewScreen.y -
+                  targetScreen.y
+              );
+
+            if (
+              distance <=
+                NODE_SNAP_DISTANCE &&
+              (
+                !closest ||
+                distance <
+                  closest.distance
+              )
+            ) {
+              closest = {
+  anchorId:
+    anchor.anchor.id,
+  position:
+    anchor.position,
+  distance,
+};
+            }
+          }
+        );
+
+        return closest;
+      })()
+    : null;
+
   const partyDropTargetId = piecePreview
     ? pieces.find((candidate) => {
         if (candidate.id === piecePreview.pieceId) return false;
@@ -4003,11 +4124,12 @@ function saveSectionProperties() {
     <div
       ref={viewportRef}
       className={[
-        'map-viewport',
-        dragging ? 'dragging' : '',
-        state.editingMode === 'move-feature' ? 'moving-feature' : '',
-        sectionMode ? 'section-drawing' : '',
-      ].filter(Boolean).join(' ')}
+  'map-viewport',
+  dragging ? 'dragging' : '',
+  piecePreview ? 'piece-dragging' : '',
+  state.editingMode === 'move-feature' ? 'moving-feature' : '',
+  sectionMode ? 'section-drawing' : '',
+].filter(Boolean).join(' ')}
       onWheel={
         handleWheel
       }
@@ -4210,18 +4332,15 @@ function saveSectionProperties() {
 {selectedRoutePiece?.waypath &&
   routePieceId === null && (
     <DistanceMeasurementOverlay
-      anchors={
-        resolvedSelectedRouteAnchors
-      }
-      segments={
-        selectedRouteSegments
-      }
-      distanceScale={
-        imageRegistration?.distanceScale
-      }
-      pointerPosition={null}
-      mapToScreen={mapToScreen}
-    />
+  anchors={resolvedSelectedRouteAnchors}
+  segments={selectedRouteSegments}
+  distanceScale={imageRegistration?.distanceScale}
+  targetedAnchorId={
+    pieceRouteNodeTarget?.anchorId
+  }
+  pointerPosition={null}
+  mapToScreen={mapToScreen}
+/>
   )}
 
 <DistanceMeasurementOverlay

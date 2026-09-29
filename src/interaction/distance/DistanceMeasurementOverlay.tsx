@@ -20,6 +20,7 @@ interface DistanceMeasurementOverlayProps {
   segments: DistanceSegment[];
   distanceScale?: DistanceScale;
   pointerPosition: Point | null;
+  targetedAnchorId?: string;
   mapToScreen: (
     x: number,
     y: number
@@ -40,6 +41,7 @@ export default function DistanceMeasurementOverlay({
   segments,
   distanceScale,
   pointerPosition,
+  targetedAnchorId,
   mapToScreen,
   onRemoveAnchor,
   onSelectTemporaryAnchor,
@@ -172,15 +174,23 @@ const breakpointNodes =
 
       {visibleNodes.map((resolved) => {
         
-        return (
-          <g key={resolved.anchor.id}>
-            <circle
-              className="distance-measurement-node"
-              cx={resolved.screen.x}
-              cy={resolved.screen.y}
-              r={5}
-            />
-
+  return (
+    <g key={resolved.anchor.id}>
+      <circle
+        className={[
+          'distance-measurement-node',
+          resolved.anchor.id === targetedAnchorId
+            ? 'targeted'
+            : '',
+        ].filter(Boolean).join(' ')}
+        cx={resolved.screen.x}
+        cy={resolved.screen.y}
+        r={
+          resolved.anchor.id === targetedAnchorId
+            ? 6
+            : 5
+        }
+      />
             {(
                 onRemoveAnchor || 
                 onSelectTemporaryAnchor

@@ -1048,6 +1048,11 @@
   cursor: grabbing;
 }
 
+.map-viewport.piece-dragging,
+.map-viewport.piece-dragging * {
+  cursor: none !important;
+}
+
 .map-piece-mount-point {
   position: absolute;
   z-index: 10;
@@ -3022,6 +3027,10 @@ box-shadow:
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
+}
+
+.distance-measurement-node.targeted {
+  r: 6px;
 }
 
 .distance-measurement-node-hitbox {
