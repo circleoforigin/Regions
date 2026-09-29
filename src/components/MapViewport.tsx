@@ -3254,7 +3254,7 @@ const preview = {
       ? piecePreviewRef.current.position
       : drag.startPosition;
 
-    const acquiredRouteNode = pieceRouteNodeTarget;
+    const acquiredNode = pieceNodeTarget;
 
     pieceDragRef.current = null;
     piecePreviewRef.current = null;
@@ -3273,28 +3273,29 @@ const targetPiece =
         previewScreen.y - target.y
       ) <= FEATURE_MARKER_MIN_DISTANCE;
     });
-    const location = !targetPiece
-  ? visibleFeatures.find((feature) => {
-      if (!isNavigableFeature(feature)) {
-        return false;
-      }
 
-      const target =
-        mapToScreen(
-          feature.position.x,
-          feature.position.y
-        );
+const targetFeature =
+  !targetPiece &&
+  acquiredNode?.kind === 'feature'
+    ? visibleFeatures.find(
+        (feature) =>
+          feature.id === acquiredNode.id
+      )
+    : undefined;
 
-      return Math.hypot(
-        previewScreen.x - target.x,
-        previewScreen.y - target.y
-      ) <=
-        NODE_SNAP_DISTANCE;
-    })
-  : undefined;
+const location =
+  targetFeature &&
+  isNavigableFeature(targetFeature)
+    ? targetFeature
+    : undefined;
 
 let snappedPosition = preview;
 let pathDock: PiecePathDock | undefined;
+
+if (targetFeature) {
+  snappedPosition =
+    targetFeature.position;
+}
 
 const draggedPiece =
   pieces.find(
@@ -3358,15 +3359,13 @@ const routeAnchors =
 
 const targetRouteNodeIndex =
   !targetPiece &&
-  !location &&
-  acquiredRouteNode
+  acquiredNode?.kind === 'route'
     ? routeAnchors.findIndex(
         (anchor) =>
           anchor.anchor.id.replace(
             'route-drop-',
             'route-'
-          ) ===
-          acquiredRouteNode.anchorId
+          ) === acquiredNode.id
       )
     : -1;
 
@@ -3409,21 +3408,12 @@ if (targetRouteAnchor)
 }
 
 const targetTerminal =
-  !targetPiece && !location && !targetRouteAnchor
+  !targetPiece &&
+  !targetRouteAnchor &&
+  acquiredNode?.kind === 'terminal'
     ? pathNetwork.terminals.find(
-        (terminal) => {
-          const target =
-            mapToScreen(
-              terminal.position.x,
-              terminal.position.y
-            );
-
-          return Math.hypot(
-            previewScreen.x - target.x,
-            previewScreen.y - target.y
-          ) <=
-            FEATURE_MARKER_MIN_DISTANCE;
-        }
+        (terminal) =>
+          terminal.id === acquiredNode.id
       )
     : undefined;
 
@@ -3470,9 +3460,7 @@ if (targetTerminal) {
 
 if (
   !targetPiece &&
-  !location &&
-  !targetRouteAnchor &&
-  !targetTerminal
+  !acquiredNode
 ) {
   let closestDistance = Infinity;
 
@@ -3735,9 +3723,47 @@ const pieceFeatureNodeTarget =
             mapToScreen(
               piecePreview.position.x,
               piecePreview.position.y
+            );            
+
+          const targetScreen =
+            mapToScreen(
+              feature.position.x,
+              feature.position.y
             );
 
-            const pieceTerminalNodeTarget =
+          const distance =
+            Math.hypot(
+              previewScreen.x -
+                targetScreen.x,
+              previewScreen.y -
+                targetScreen.y
+            );
+
+          if (
+            distance >
+            NODE_SNAP_DISTANCE
+          ) {
+            return closest;
+          }
+
+          if (
+            closest &&
+            closest.distance <= distance
+          ) {
+            return closest;
+          }
+
+          return {
+            featureId: feature.id,
+            position: feature.position,
+            distance,
+          };
+        },
+        null
+      )
+    : null;
+
+const pieceTerminalNodeTarget =
   piecePreview
     ? pathNetwork.terminals.reduce<{
         terminalId: string;
@@ -3789,45 +3815,37 @@ const pieceFeatureNodeTarget =
       )
     : null;
 
-          const targetScreen =
-            mapToScreen(
-              feature.position.x,
-              feature.position.y
-            );
-
-          const distance =
-            Math.hypot(
-              previewScreen.x -
-                targetScreen.x,
-              previewScreen.y -
-                targetScreen.y
-            );
-
-          if (
-            distance >
-            NODE_SNAP_DISTANCE
-          ) {
-            return closest;
+    const pieceNodeTarget =
+  pieceRouteNodeTarget
+    ? {
+        kind: 'route' as const,
+        id: pieceRouteNodeTarget.anchorId,
+        position:
+          pieceRouteNodeTarget.position,
+        distance:
+          pieceRouteNodeTarget.distance,
+      }
+    : pieceFeatureNodeTarget
+      ? {
+          kind: 'feature' as const,
+          id: pieceFeatureNodeTarget.featureId,
+          position:
+            pieceFeatureNodeTarget.position,
+          distance:
+            pieceFeatureNodeTarget.distance,
+        }
+      : pieceTerminalNodeTarget
+        ? {
+            kind: 'terminal' as const,
+            id: pieceTerminalNodeTarget.terminalId,
+            position:
+              pieceTerminalNodeTarget.position,
+            distance:
+              pieceTerminalNodeTarget.distance,
           }
+        : null;
 
-          if (
-            closest &&
-            closest.distance <= distance
-          ) {
-            return closest;
-          }
-
-          return {
-            featureId: feature.id,
-            position: feature.position,
-            distance,
-          };
-        },
-        null
-      )
-    : null;
-
-    const activePiecePreview =
+const activePiecePreview =
   piecePreview?.pieceId ===
   selectedRoutePiece?.id
     ? piecePreview
@@ -4468,7 +4486,11 @@ function saveSectionProperties() {
       anchors={displayedRouteAnchors}
       segments={displayedRouteSegments}
       distanceScale={imageRegistration?.distanceScale}
-      targetedAnchorId={pieceRouteNodeTarget?.anchorId}
+      targetedAnchorId={
+        pieceNodeTarget?.kind === 'route'
+          ? pieceNodeTarget.id
+          : undefined
+      }
       pointerPosition={null}
       mapToScreen={mapToScreen}
     />
@@ -4487,7 +4509,11 @@ function saveSectionProperties() {
 {layerVisibility.paths && (
   <PathOverlay
     targetedSegmentId={piecePathTargetId}
-    targetedTerminalId={pieceTerminalNodeTarget?.terminalId}
+    targetedTerminalId={
+      pieceNodeTarget?.kind === 'terminal'
+        ? pieceNodeTarget.id
+        : undefined
+    }
     editing={interactionMode === 'path'}
     terminalPromotionEnabled={
       interactionMode === 'path' ||
@@ -4857,11 +4883,10 @@ function saveSectionProperties() {
 
 {pieces.map((piece) => {
   const position =
-    piecePreview?.pieceId === piece.id
-      ? pieceRouteNodeTarget
-        ? pieceRouteNodeTarget.position
-        : piecePreview.position
-      : piece.position;
+  piecePreview?.pieceId === piece.id
+    ? pieceNodeTarget?.position ??
+      piecePreview.position
+    : piece.position;
 
   const screenPosition =
     mapToScreen(
@@ -5079,9 +5104,10 @@ function saveSectionProperties() {
     state.selectedFeatureId === feature.id ? 'selected' : '',
     distanceSelected ? 'distance-selected' : '',
     pathTerminal ? 'path-terminal' : '',
-    pieceFeatureNodeTarget?.featureId === feature.id
-      ? 'piece-node-targeted'
-      : '',
+    pieceNodeTarget?.kind === 'feature' &&
+      pieceNodeTarget.id === feature.id
+        ? 'piece-node-targeted'
+        : '',
     isMoving ? 'moving' : '',
     moveIsValid ? '' : 'invalid',
   ].filter(Boolean).join(' ');
