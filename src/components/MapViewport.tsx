@@ -3212,7 +3212,71 @@ const targetPiece =
 let snappedPosition = preview;
 let pathDock: PiecePathDock | undefined;
 
-if (!targetPiece && !location) {
+const targetTerminal =
+  !targetPiece && !location
+    ? pathNetwork.terminals.find(
+        (terminal) => {
+          const target =
+            mapToScreen(
+              terminal.position.x,
+              terminal.position.y
+            );
+
+          return Math.hypot(
+            previewScreen.x - target.x,
+            previewScreen.y - target.y
+          ) <=
+            FEATURE_MARKER_MIN_DISTANCE;
+        }
+      )
+    : undefined;
+
+if (targetTerminal) {
+  const connectedSegment =
+    resolvedPathSegments.find(
+      (segment) =>
+        (
+          segment.segment.start.kind ===
+            'standalone' &&
+          segment.segment.start.terminalId ===
+            targetTerminal.id
+        ) ||
+        (
+          segment.segment.end.kind ===
+            'standalone' &&
+          segment.segment.end.terminalId ===
+            targetTerminal.id
+        )
+    );
+
+  if (connectedSegment) {
+    const projection =
+      projectPointOntoPathDock(
+        connectedSegment,
+        targetTerminal.position
+      );
+
+    snappedPosition =
+      targetTerminal.position;
+
+    pathDock = {
+      segmentId:
+        connectedSegment.segment.id,
+
+      legIndex:
+        projection.legIndex,
+
+      fraction:
+        projection.fraction,
+    };
+  }
+}
+
+if (
+  !targetPiece &&
+  !location &&
+  !targetTerminal
+) {
   let closestDistance = Infinity;
 
   for (
