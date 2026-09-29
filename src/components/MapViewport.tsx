@@ -3677,51 +3677,57 @@ onPieceDrop?.(
             piecePreview.position.y
           );
 
-        let closest:
-  | {
-      anchorId: string;
-      position: Point;
-      distance: number;
-    }
-  | null = null;
-
-        routeAnchors.forEach(
-          (anchor, index) => {
-            const targetScreen =
-              mapToScreen(
-                anchor.position.x,
-                anchor.position.y
-              );
-
-            const distance =
-              Math.hypot(
-                previewScreen.x -
-                  targetScreen.x,
-                previewScreen.y -
-                  targetScreen.y
-              );
-
-            if (
-              distance <=
-                NODE_SNAP_DISTANCE &&
-              (
-                !closest ||
-                distance <
-                  closest.distance
-              )
-            ) {
-              closest = {
-  anchorId:
-    anchor.anchor.id,
-  position:
-    anchor.position,
-  distance,
-};
-            }
-          }
+        const closest =
+  routeAnchors.reduce<{
+    anchorId: string;
+    position: Point;
+    distance: number;
+  } | null>(
+    (
+      currentClosest,
+      anchor
+    ) => {
+      const targetScreen =
+        mapToScreen(
+          anchor.position.x,
+          anchor.position.y
         );
 
-        return closest;
+      const distance =
+        Math.hypot(
+          previewScreen.x -
+            targetScreen.x,
+          previewScreen.y -
+            targetScreen.y
+        );
+
+      if (
+        distance >
+        NODE_SNAP_DISTANCE
+      ) {
+        return currentClosest;
+      }
+
+      if (
+        currentClosest &&
+        currentClosest.distance <=
+          distance
+      ) {
+        return currentClosest;
+      }
+
+      return {
+        anchorId:
+          anchor.anchor.id,
+        position:
+          anchor.position,
+        distance,
+      };
+    },
+    null
+  );
+
+return closest;
       })()
     : null;
 
@@ -4736,9 +4742,12 @@ function saveSectionProperties() {
 })}
 
 {pieces.map((piece) => {
-  const position = piecePreview?.pieceId === piece.id
-    ? piecePreview.position
-    : piece.position;
+  const position =
+    piecePreview?.pieceId === piece.id
+      ? pieceRouteNodeTarget
+        ? pieceRouteNodeTarget.position
+        : piecePreview.position
+      : piece.position;
 
   const screenPosition =
     mapToScreen(

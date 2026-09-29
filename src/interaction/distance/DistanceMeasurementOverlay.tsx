@@ -187,7 +187,7 @@ const breakpointNodes =
         cy={resolved.screen.y}
         r={
           resolved.anchor.id === targetedAnchorId
-            ? 6
+            ? 8
             : 5
         }
       />
