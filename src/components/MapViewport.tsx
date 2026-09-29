@@ -474,6 +474,12 @@ function MapViewport({
   ] = useState<string | null>(
     null
   );
+  const [
+    selectedPieceId,
+    setSelectedPieceId,
+  ] = useState<string | null>(
+    null
+  );
   const distanceInteractionActive =
     interactionMode === 'distance' ||
     routePieceId !== null;
@@ -2904,10 +2910,21 @@ if (distanceInteractionActive) {
       return;
     }
 
-    if (
-      !interactionPermissions.canManipulatePieces
-    ) {
+    if (!interactionPermissions.canManipulatePieces)
+    {
       return;
+    }
+    if (interactionMode === 'explore')
+    {
+      setSelectedPieceId(
+        piece.id
+      );
+
+      dispatch({
+        type: 'feature.clearSelection',
+      });
+
+      setSelectedPathSegment(null);
     }
     event.preventDefault();
     event.stopPropagation();
@@ -3865,18 +3882,19 @@ function saveSectionProperties() {
       interactionMode === 'explore'
     }
     onExplorePathClick={(
-  segmentId,
-  position
-) => {
-  dispatch({
-    type: 'feature.clearSelection',
-  });
+      segmentId,
+      position
+    ) => {
+    setSelectedPieceId(null);
+    dispatch({
+      type: 'feature.clearSelection',
+    });
 
-  setSelectedPathSegment({
-    segmentId,
-    anchor: position,
-  });
-}}
+    setSelectedPathSegment({
+      segmentId,
+      anchor: position,
+    });
+  }}
     onDistancePathClick={(
       segmentId,
       position,
@@ -4472,14 +4490,12 @@ onClick={(event) => {
     return;
   }
 
-  if (
-    interactionMode !==
-      'explore'
-  ) {
+  if (interactionMode !== 'explore')
+  {
     return;
   }
   setSelectedPathSegment(null);
-
+  setSelectedPieceId(null);
   dispatch({
     type: 'feature.select',
     featureId: feature.id,
