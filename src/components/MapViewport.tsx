@@ -3377,38 +3377,31 @@ const targetRouteAnchor =
       ]
     : undefined;
 
-if (targetRouteAnchor) {
-  snappedPosition =
-    targetRouteAnchor.position;
+if (targetRouteAnchor)
+{
+  snappedPosition = targetRouteAnchor.position;
 
-  if (
-    targetRouteAnchor.anchor.kind ===
-      'path'
-  ) {
+  if (targetRouteAnchor.anchor.kind === 'path')
+  {
     const routeSegmentId = targetRouteAnchor.anchor.segmentId;
 
-const routePathSegment =
-  resolvedPathSegments.find(
-    (segment) =>
-      segment.segment.id ===
-      routeSegmentId
-  );
+    const routePathSegment =
+      resolvedPathSegments.find(
+        (segment) =>
+          segment.segment.id === routeSegmentId
+      );
 
-    if (routePathSegment) {
+    if (routePathSegment)
+    {
       const projection =
-  projectPointOntoPathDock(
-    routePathSegment,
-    targetRouteAnchor.position
-  );
-
-snappedPosition =
-  projection.position;
-
-pathDock = {
+        projectPointOntoPathDock(
+          routePathSegment,
+          targetRouteAnchor.position
+        );
+        
+      pathDock = {
         segmentId: routePathSegment.segment.id,
-
         legIndex: projection.legIndex,
-
         fraction: projection.fraction,
       };
     }
