@@ -7,6 +7,7 @@ import type {
 
 import {
   findFirstPolygonBoundaryIntersection,
+  findPolygonBoundaryIntersections,
   getSectionPolygon,
 } from '../sections/SectionGeometry';
 
@@ -14,6 +15,76 @@ export interface NavigationBoundaryCrossing {
   area: Section;
   position: SectionPoint;
   fraction: number;
+}
+
+export interface NavigationAreaCrossing {
+  area: Section;
+  position: SectionPoint;
+  fraction: number;
+}
+
+export function findNavigationAreaCrossings(
+  start: SectionPoint,
+  end: SectionPoint,
+  sections: Section[],
+  edges: SectionEdge[],
+  nodes: SectionNode[]
+): NavigationAreaCrossing[] {
+  const crossings:
+    NavigationAreaCrossing[] = [];
+
+  for (const section of sections) {
+    if (
+      section.kind !== 'area' ||
+      !section.targetMapId
+    ) {
+      continue;
+    }
+
+    const polygon =
+      getSectionPolygon(
+        section,
+        edges,
+        nodes
+      );
+
+    const intersections =
+      findPolygonBoundaryIntersections(
+        start,
+        end,
+        polygon
+      );
+
+    for (const intersection of intersections) {
+      const duplicate =
+        crossings.some(
+          (crossing) =>
+            crossing.area.id ===
+              section.id &&
+            Math.abs(
+              crossing.fraction -
+                intersection.fraction
+            ) < 0.000001
+        );
+
+      if (duplicate) {
+        continue;
+      }
+
+      crossings.push({
+        area: section,
+        position:
+          intersection.position,
+        fraction:
+          intersection.fraction,
+      });
+    }
+  }
+
+  return crossings.sort(
+    (a, b) =>
+      a.fraction - b.fraction
+  );
 }
 
 export function findFirstNavigationBoundaryCrossing(

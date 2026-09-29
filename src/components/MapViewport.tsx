@@ -16,7 +16,10 @@ import type {
   PieceWaypath,
   PieceWaypathAnchor,
 } from '../models/Piece';
-import { findFirstNavigationBoundaryCrossing } from '../navigation/NavigationBoundary';
+import {
+  findFirstNavigationBoundaryCrossing,
+  findNavigationAreaCrossings,
+} from '../navigation/NavigationBoundary';
 import type { RulesetExtensionData } from '../models/RulesetExtensionData';
 import RulesetInteractionPanel from '../rules/RulesetInteractionPanel';
 import { useRulesetInteraction } from '../rules/useRulesetInteraction';
@@ -2623,6 +2626,40 @@ dispatch({
     );
   }
 
+  function addDistanceAreaCrossings(
+  destination: Point
+) {
+  const resolved =
+    resolveDistanceAnchors(
+      distanceMeasurement.anchors,
+      features,
+      pieces,
+      pathNetwork.terminals
+    );
+
+  const previous =
+    resolved.at(-1);
+
+  if (!previous) {
+    return;
+  }
+
+  const crossings =
+    findNavigationAreaCrossings(
+      previous.position,
+      destination,
+      sections,
+      sectionEdges,
+      sectionNodes
+    );
+
+  for (const crossing of crossings) {
+    distanceMeasurement.addPoint(
+      crossing.position
+    );
+  }
+}
+
   function handlePointerDown(
     event:
       React.PointerEvent<HTMLDivElement>
@@ -2644,12 +2681,19 @@ dispatch({
         );
 
         if (
-          point &&
-          isPointInsideMap(point)
-        ) {
-          event.preventDefault();
-          distanceMeasurement.addPoint(point);
-        }
+  point &&
+  isPointInsideMap(point)
+) {
+  event.preventDefault();
+
+  addDistanceAreaCrossings(
+    point
+  );
+
+  distanceMeasurement.addPoint(
+    point
+  );
+}
 
         return;
       }

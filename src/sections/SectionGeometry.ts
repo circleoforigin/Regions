@@ -35,6 +35,100 @@ export interface SectionBoundaryIntersection {
   fraction: number;
 }
 
+export function findPolygonBoundaryIntersections(
+  start: SectionPoint,
+  end: SectionPoint,
+  polygon: SectionPoint[]
+): SectionBoundaryIntersection[] {
+  if (polygon.length < 3) {
+    return [];
+  }
+
+  const routeDx =
+    end.x - start.x;
+
+  const routeDy =
+    end.y - start.y;
+
+  const intersections:
+    SectionBoundaryIntersection[] = [];
+
+  polygon.forEach(
+    (edgeStart, edgeIndex) => {
+      const edgeEnd =
+        polygon[
+          (edgeIndex + 1) %
+            polygon.length
+        ];
+
+      const edgeDx =
+        edgeEnd.x - edgeStart.x;
+
+      const edgeDy =
+        edgeEnd.y - edgeStart.y;
+
+      const denominator =
+        routeDx * edgeDy -
+        routeDy * edgeDx;
+
+      if (
+        Math.abs(denominator) <
+        0.000001
+      ) {
+        return;
+      }
+
+      const offsetX =
+        edgeStart.x - start.x;
+
+      const offsetY =
+        edgeStart.y - start.y;
+
+      const routeFraction =
+        (
+          offsetX * edgeDy -
+          offsetY * edgeDx
+        ) / denominator;
+
+      const edgeFraction =
+        (
+          offsetX * routeDy -
+          offsetY * routeDx
+        ) / denominator;
+
+      if (
+        routeFraction < 0 ||
+        routeFraction > 1 ||
+        edgeFraction < 0 ||
+        edgeFraction > 1
+      ) {
+        return;
+      }
+
+      intersections.push({
+        position: {
+          x:
+            start.x +
+            routeDx *
+              routeFraction,
+          y:
+            start.y +
+            routeDy *
+              routeFraction,
+        },
+        edgeIndex,
+        fraction:
+          routeFraction,
+      });
+    }
+  );
+
+  return intersections.sort(
+    (a, b) =>
+      a.fraction - b.fraction
+  );
+}
+
 export function findFirstPolygonBoundaryIntersection(
   start: SectionPoint,
   end: SectionPoint,
