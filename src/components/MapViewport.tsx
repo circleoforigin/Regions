@@ -78,7 +78,7 @@ import {
 } from '../paths/PathMapState';
 
 import {
-  projectPointOntoPathDock,
+  projectPointOntoPathDock, resolvePathDockPosition
 } from '../paths/PathGeometry';
 
 import {
@@ -2391,7 +2391,7 @@ function finishRouteAuthoring() {
 
 for (
   const anchor of
-    distanceMeasurement.anchors.slice(1)
+    distanceMeasurement.anchors
 ) {
   switch (anchor.kind) {
     case 'temporary':
@@ -5642,18 +5642,51 @@ onDescriptionChange={(
   <button
   type="button"
   onClick={() => {
-    setRoutePieceId(
-      piece.id
+  setRoutePieceId(
+    piece.id
+  );
+
+  distanceMeasurement.clear();
+
+  if (piece.pathDock) {
+    const segment =
+      resolvedPathSegments.find(
+        (candidate) =>
+          candidate.segment.id ===
+          piece.pathDock?.segmentId
+      );
+
+    if (segment) {
+      const position =
+        resolvePathDockPosition(
+          piece.pathDock,
+          segment
+        );
+
+      if (position) {
+        distanceMeasurement.addPath(
+          segment.segment.id,
+          position,
+          false
+        );
+      } else {
+        distanceMeasurement.addPoint(
+          piece.position
+        );
+      }
+    } else {
+      distanceMeasurement.addPoint(
+        piece.position
+      );
+    }
+  } else {
+    distanceMeasurement.addPoint(
+      piece.position
     );
+  }
 
-    distanceMeasurement.clear();
-
-    distanceMeasurement.addPiece(
-      piece.id
-    );
-
-    setPieceContextMenu(null);
-  }}
+  setPieceContextMenu(null);
+}}
 >
   Set Route
 </button>

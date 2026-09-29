@@ -2976,12 +2976,103 @@ async function handlePieceDrop(
       return;
     }
     
-    updatePiecePosition(
+    if (
+  routeNodeIndex !== undefined &&
+  piece.waypath
+) {
+  const reachedFinalNode =
+    routeNodeIndex ===
+    piece.waypath.nodes.length - 1;
+
+  const nextWaypath =
+    reachedFinalNode
+      ? undefined
+      : {
+          nodes:
+            piece.waypath.nodes.slice(
+              routeNodeIndex
+            ),
+        };
+
+  const key =
+    `${activeProject.id}:${pieceId}:${activeMap.id}`;
+
+  const previousArea =
+    resolveArea(
+      activeMap.id,
+      piece.position,
+      activeSections,
+      activeSectionEdges,
+      activeSectionNodes,
+      pieceAreaContexts.current.get(key)
+    );
+
+  const area =
+    resolveArea(
+      activeMap.id,
+      position,
+      activeSections,
+      activeSectionEdges,
+      activeSectionNodes,
+      previousArea?.id
+    );
+
+  pieceAreaContexts.current.set(
+    key,
+    area?.id
+  );
+
+  const movedPieces =
+    movePartyAndMembers(
+      activeProject.pieces,
       pieceId,
+      activeMap.id,
       position,
       pathDock
     );
-    return;
+
+  const project = {
+    ...activeProject,
+    pieces: movedPieces.map(
+      (candidate) =>
+        candidate.id === pieceId
+          ? {
+              ...candidate,
+              waypath: nextWaypath,
+            }
+          : candidate
+    ),
+  };
+
+  setActiveProject(project);
+  markProjectDirty();
+
+  if (
+    previousArea?.id !== area?.id
+  ) {
+    void handleMapEntered(
+      activeMap,
+      project,
+      undefined,
+      'piece',
+      pieceId,
+      {
+        area,
+        previousArea,
+      }
+    );
+  }
+
+  return;
+}
+
+updatePiecePosition(
+  pieceId,
+  position,
+  pathDock
+);
+
+return;
   }
 
   try {

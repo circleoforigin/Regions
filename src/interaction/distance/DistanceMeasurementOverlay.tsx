@@ -223,6 +223,10 @@ const labelPosition = {
               r={5}
             />
 
+            {(
+                onRemoveAnchor || 
+                onSelectTemporaryAnchor
+            ) && (
             <circle
                 className="distance-measurement-node-hitbox"
                 cx={resolved.screen.x}
@@ -249,6 +253,7 @@ const labelPosition = {
                 );
                 }}
             />
+            )}
           </g>
         );
       })}
