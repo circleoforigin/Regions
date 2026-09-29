@@ -2955,91 +2955,12 @@ async function handlePieceDrop(
   if (targetPiece) {
     handlePartyDrop(piece.id, targetPiece.id);
     return;
-  }
+  }  
 
   if (
-  routeNodeIndex !== undefined &&
-  piece.waypath
-) {
-  const reachedFinalNode =
-    routeNodeIndex ===
-    piece.waypath.nodes.length - 1;
-
-  const nextWaypath =
-    reachedFinalNode
-      ? undefined
-      : {
-          nodes:
-            piece.waypath.nodes.slice(
-              routeNodeIndex
-            ),
-        };
-
-  const project = {
-    ...activeProject,
-    pieces: activeProject.pieces.map(
-      (candidate) =>
-        candidate.id === pieceId
-          ? {
-              ...candidate,
-              waypath: nextWaypath,
-            }
-          : candidate
-    ),
-  };
-
-  setActiveProject(project);
-  markProjectDirty();
-}
-
-  const navigable = location?.type === 'location' ||
-    location?.type === 'connection';
-    if (
-  navigable &&
-  location?.targetMapId
-) {
-  /*
-   * The Piece has physically reached the
-   * Location or Connection, so preserve
-   * that position regardless of whether
-   * the user chooses to enter.
-   */
-  updatePiecePosition(
-    pieceId,
-    position,
-    pathDock
-  );
-
-  const enter =
-    window.confirm(
-      `Enter ${location.name}?`
-    );
-
-  if (!enter) {
-    return;
-  }
-}
-  if (!navigable || !location?.targetMapId) {
-    try {
-      if (activeMap.areaBoundaryLink && activeMap.parentMapId) {
-        const locked = activeSections.find((section) => section.locked);
-        const polygon = locked ? getSectionPolygon(locked, activeSectionEdges, activeSectionNodes) : [];
-        const crossing = findBoundaryCrossing(piece.position, position, polygon, false);
-        if (crossing) {
-          await transferPieceThroughArea(piece, activeMap.parentMapId,
-            transformBoundaryPoint(crossing.position, activeMap.areaBoundaryLink.alignment, true));
-          return;
-        }
-      }      
-    } catch (error) {
-      setNavigationError(error instanceof Error ? error.message : 'Unable to travel through the Area.');
-      return;
-    }
-    
-    if (
-  routeNodeIndex !== undefined &&
-  piece.waypath
-) {
+      routeNodeIndex !== undefined &&
+      piece.waypath
+    ) {
   const reachedFinalNode =
     routeNodeIndex ===
     piece.waypath.nodes.length - 1;
@@ -3108,23 +3029,67 @@ async function handlePieceDrop(
   markProjectDirty();
 
   if (
-    previousArea?.id !== area?.id
-  ) {
-    void handleMapEntered(
-      activeMap,
-      project,
-      undefined,
-      'piece',
-      pieceId,
-      {
-        area,
-        previousArea,
-      }
-    );
-  }
-
-  return;
+  previousArea?.id !== area?.id
+) {
+  void handleMapEntered(
+    activeMap,
+    project,
+    undefined,
+    'piece',
+    pieceId,
+    {
+      area,
+      previousArea,
+    }
+  );
 }
+}
+
+  const navigable = location?.type === 'location' ||
+    location?.type === 'connection';
+  const reachedRouteNode =
+    routeNodeIndex !== undefined && piece.waypath;
+  if (
+    navigable &&
+    location?.targetMapId
+  ) {
+  /*
+   * The Piece has physically reached the
+   * Location or Connection, so preserve
+   * that position regardless of whether
+   * the user chooses to enter.
+   */
+  updatePiecePosition(
+    pieceId,
+    position,
+    pathDock
+  );
+
+  const enter =
+    window.confirm(
+      `Enter ${location.name}?`
+    );
+
+  if (!enter) {
+    return;
+  }
+}
+  if (!navigable || !location?.targetMapId) {
+    try {
+      if (activeMap.areaBoundaryLink && activeMap.parentMapId) {
+        const locked = activeSections.find((section) => section.locked);
+        const polygon = locked ? getSectionPolygon(locked, activeSectionEdges, activeSectionNodes) : [];
+        const crossing = findBoundaryCrossing(piece.position, position, polygon, false);
+        if (crossing) {
+          await transferPieceThroughArea(piece, activeMap.parentMapId,
+            transformBoundaryPoint(crossing.position, activeMap.areaBoundaryLink.alignment, true));
+          return;
+        }
+      }      
+    } catch (error) {
+      setNavigationError(error instanceof Error ? error.message : 'Unable to travel through the Area.');
+      return;
+    }   
 
 updatePiecePosition(
   pieceId,
