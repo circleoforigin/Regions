@@ -16,6 +16,16 @@ import type {
   ResolvedDistanceAnchor,
 } from './DistanceMeasurement';
 
+import type {
+  Section,
+  SectionEdge,
+  SectionNode,
+} from '../../models/Section';
+
+import {
+  findNavigationAreaPolylineCrossings,
+} from '../../navigation/NavigationBoundary';
+
 function featureTerminalReference(
   featureId: string,
   segments: ResolvedPathSegment[]
@@ -83,7 +93,10 @@ function getRouteEndpoint(
 
 export function getDistanceSegmentsWithPaths(
   anchors: ResolvedDistanceAnchor[],
-  pathSegments: ResolvedPathSegment[]
+  pathSegments: ResolvedPathSegment[],
+  sections: Section[] = [],
+  sectionEdges: SectionEdge[] = [],
+  sectionNodes: SectionNode[] = []
 ): DistanceSegment[] {
   const result: DistanceSegment[] = [];
 
@@ -119,17 +132,32 @@ export function getDistanceSegmentsWithPaths(
           );
 
         if (route) {
-          result.push({
-            start,
-            end,
-            mapDistance:
-              route.distance,
-            kind: 'path',
-            points: route.points,
-          });
+  const crossings =
+    findNavigationAreaPolylineCrossings(
+      route.points,
+      sections,
+      sectionEdges,
+      sectionNodes
+    );
 
-          continue;
-        }
+  result.push({
+    start,
+    end,
+    mapDistance:
+      route.distance,
+    kind: 'path',
+    points: route.points,
+    breakpoints:
+      crossings.map(
+        (crossing) => ({
+          position:
+            crossing.position,
+        })
+      ),
+  });
+
+  continue;
+}
       }
     }
 

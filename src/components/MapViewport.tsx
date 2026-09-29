@@ -766,13 +766,19 @@ const resolvedDistanceAnchors =
   const distanceSegments =
     getDistanceSegmentsWithPaths(
       resolvedDistanceAnchors,
-      resolvedPathSegments
+      resolvedPathSegments,
+      sections,
+      sectionEdges,
+      sectionNodes
     );
 
   const selectedRouteSegments =
     getDistanceSegmentsWithPaths(
       resolvedSelectedRouteAnchors,
-      resolvedPathSegments
+      resolvedPathSegments,
+      sections,
+      sectionEdges,
+      sectionNodes
     );
 
   const { scale, panX, panY } = state.viewport;
@@ -4204,25 +4210,45 @@ function saveSectionProperties() {
     });
   }}
     onDistancePathClick={(
-      segmentId,
-      position,
-      usePath
-    ) => {
-      distanceMeasurement.addPath(
-        segmentId,
-        position,
-        usePath
-      );
-    }}
+  segmentId,
+  position,
+  usePath
+) => {
+  if (!usePath) {
+    addDistanceAreaCrossings(
+      position
+    );
+  }
+
+  distanceMeasurement.addPath(
+    segmentId,
+    position,
+    usePath
+  );
+}}
     onDistanceTerminalClick={(
-      terminalId,
-      usePath
-    ) => {
-      distanceMeasurement.addTerminal(
-        terminalId,
-        usePath
+  terminalId,
+  usePath
+) => {
+  if (!usePath) {
+    const terminal =
+      pathNetwork.terminals.find(
+        (candidate) =>
+          candidate.id === terminalId
       );
-    }}
+
+    if (terminal) {
+      addDistanceAreaCrossings(
+        terminal.position
+      );
+    }
+  }
+
+  distanceMeasurement.addTerminal(
+    terminalId,
+    usePath
+  );
+}}
     terminals={
       pathNetwork.terminals
     }
@@ -4790,14 +4816,22 @@ onClick={(event) => {
   }
 
   if (distanceInteractionActive) {
-    event.preventDefault();
-    event.stopPropagation();
-    distanceMeasurement.addFeature(
-      feature.id,
-      event.ctrlKey
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (!event.ctrlKey) {
+    addDistanceAreaCrossings(
+      feature.position
     );
-    return;
   }
+
+  distanceMeasurement.addFeature(
+    feature.id,
+    event.ctrlKey
+  );
+
+  return;
+}
 
   if (interactionMode !== 'explore')
   {

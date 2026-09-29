@@ -35,8 +35,7 @@ export function findNavigationAreaCrossings(
 
   for (const section of sections) {
     if (
-      section.kind !== 'area' ||
-      !section.targetMapId
+      section.kind !== 'area'
     ) {
       continue;
     }
@@ -84,6 +83,80 @@ export function findNavigationAreaCrossings(
   return crossings.sort(
     (a, b) =>
       a.fraction - b.fraction
+  );
+}
+
+export interface NavigationAreaPolylineCrossing {
+  area: Section;
+  position: SectionPoint;
+  segmentIndex: number;
+  fraction: number;
+}
+
+export function findNavigationAreaPolylineCrossings(
+  points: SectionPoint[],
+  sections: Section[],
+  edges: SectionEdge[],
+  nodes: SectionNode[]
+): NavigationAreaPolylineCrossing[] {
+  const crossings:
+    NavigationAreaPolylineCrossing[] = [];
+
+  for (
+    let segmentIndex = 0;
+    segmentIndex < points.length - 1;
+    segmentIndex += 1
+  ) {
+    const start =
+      points[segmentIndex];
+
+    const end =
+      points[segmentIndex + 1];
+
+    const segmentCrossings =
+      findNavigationAreaCrossings(
+        start,
+        end,
+        sections,
+        edges,
+        nodes
+      );
+
+    for (const crossing of segmentCrossings) {
+      const duplicate =
+        crossings.some(
+          (existing) =>
+            existing.area.id ===
+              crossing.area.id &&
+            Math.hypot(
+              existing.position.x -
+                crossing.position.x,
+              existing.position.y -
+                crossing.position.y
+            ) < 0.000001
+        );
+
+      if (duplicate) {
+        continue;
+      }
+
+      crossings.push({
+        area: crossing.area,
+        position:
+          crossing.position,
+        segmentIndex,
+        fraction:
+          crossing.fraction,
+      });
+    }
+  }
+
+  return crossings.sort(
+    (a, b) =>
+      a.segmentIndex -
+        b.segmentIndex ||
+      a.fraction -
+        b.fraction
   );
 }
 

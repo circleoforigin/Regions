@@ -91,6 +91,12 @@ export default function DistanceMeasurementOverlay({
   ).values()
 );
 
+const breakpointNodes =
+  segments.flatMap(
+    (segment) =>
+      segment.breakpoints ?? []
+  );
+
   return (
   <>
     <svg
@@ -104,49 +110,7 @@ export default function DistanceMeasurementOverlay({
               point.x,
               point.y
             )
-          );
-
-          const legDistance =
-  getSegmentPhysicalDistance(
-    segment,
-    distanceScale
-  );
-
-const legReadout =
-  legDistance &&
-  legDistance.value > 0
-    ? formatPhysicalDistance(
-        legDistance
-      )
-    : null;
-
-const midpointIndex =
-  Math.floor(
-    (points.length - 1) / 2
-  );
-
-const midpointStart =
-  points[midpointIndex];
-
-const midpointEnd =
-  points[
-    Math.min(
-      midpointIndex + 1,
-      points.length - 1
-    )
-  ];
-
-const labelPosition = {
-  x:
-    (midpointStart.x +
-      midpointEnd.x) /
-    2,
-
-  y:
-    (midpointStart.y +
-      midpointEnd.y) /
-    2,
-};
+          );         
 
         const pointString =
           points
@@ -173,16 +137,7 @@ const labelPosition = {
         points={pointString}
       />
 
-      {legReadout && (
-        <text
-          className="distance-measurement-leg-label"
-          x={labelPosition.x}
-          y={labelPosition.y - 10}
-          textAnchor="middle"
-        >
-          {legReadout}
-        </text>
-      )}
+      
     </g>
   );
 }
@@ -196,18 +151,7 @@ const labelPosition = {
     <polyline
       className="distance-measurement-line"
       points={pointString}
-    />
-
-    {legReadout && (
-      <text
-        className="distance-measurement-leg-label"
-        x={labelPosition.x}
-        y={labelPosition.y - 10}
-        textAnchor="middle"
-      >
-        {legReadout}
-      </text>
-    )}
+    />    
   </g>
 );
       })}
@@ -257,6 +201,98 @@ const labelPosition = {
           </g>
         );
       })}
+
+      {breakpointNodes.map(
+  (breakpoint, index) => {
+    const screen =
+      mapToScreen(
+        breakpoint.position.x,
+        breakpoint.position.y
+      );
+
+    return (
+      <circle
+        key={`breakpoint-${index}-${breakpoint.position.x}-${breakpoint.position.y}`}
+        className="distance-measurement-node"
+        cx={screen.x}
+        cy={screen.y}
+        r={5}
+      />
+    );
+  }
+)}
+
+{segments.map((segment) => {
+  const points =
+    segment.points.map(
+      (point) =>
+        mapToScreen(
+          point.x,
+          point.y
+        )
+    );
+
+  const legDistance =
+    getSegmentPhysicalDistance(
+      segment,
+      distanceScale
+    );
+
+  const legReadout =
+    legDistance &&
+    legDistance.value > 0
+      ? formatPhysicalDistance(
+          legDistance
+        )
+      : null;
+
+  if (
+    !legReadout ||
+    points.length === 0
+  ) {
+    return null;
+  }
+
+  const midpointIndex =
+    Math.floor(
+      (points.length - 1) / 2
+    );
+
+  const midpointStart =
+    points[midpointIndex];
+
+  const midpointEnd =
+    points[
+      Math.min(
+        midpointIndex + 1,
+        points.length - 1
+      )
+    ];
+
+  const labelPosition = {
+    x:
+      (midpointStart.x +
+        midpointEnd.x) /
+      2,
+
+    y:
+      (midpointStart.y +
+        midpointEnd.y) /
+      2,
+  };
+
+  return (
+    <text
+      key={`label-${segment.start.anchor.id}-${segment.end.anchor.id}`}
+      className="distance-measurement-leg-label"
+      x={labelPosition.x}
+      y={labelPosition.y - 10}
+      textAnchor="middle"
+    >
+      {legReadout}
+    </text>
+  );
+})}
         </svg>
 
     {readout && pointerPosition && (

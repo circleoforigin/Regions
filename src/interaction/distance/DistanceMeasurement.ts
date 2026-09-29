@@ -47,12 +47,17 @@ export interface ResolvedDistanceAnchor {
   position: SpatialPoint;
 }
 
+export interface DistanceSegmentBreakpoint {
+  position: SpatialPoint;
+}
+
 export interface DistanceSegment {
   start: ResolvedDistanceAnchor;
   end: ResolvedDistanceAnchor;
   mapDistance: number;
   kind: 'straight' | 'path';
   points: SpatialPoint[];
+  breakpoints?: DistanceSegmentBreakpoint[];
 }
 
 export function getMapDistance(
