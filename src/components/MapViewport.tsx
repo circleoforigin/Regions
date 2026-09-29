@@ -244,7 +244,8 @@ onPieceDrop?: (
   position: Point,
   location?: Feature,
   targetPiece?: Piece,
-  pathDock?: PiecePathDock
+  pathDock?: PiecePathDock,
+  routeNodeIndex?: number
 ) => void;
 onPieceAreaBoundaryEnterRequest?: (
   pieceId: string,
@@ -3272,9 +3273,9 @@ const routeAnchors =
       )
     : [];
 
-const targetRouteAnchor =
+const targetRouteNodeIndex =
   !targetPiece && !location
-    ? routeAnchors.find(
+    ? routeAnchors.findIndex(
         (anchor) => {
           const target =
             mapToScreen(
@@ -3289,6 +3290,13 @@ const targetRouteAnchor =
             FEATURE_MARKER_MIN_DISTANCE;
         }
       )
+    : -1;
+
+const targetRouteAnchor =
+  targetRouteNodeIndex >= 0
+    ? routeAnchors[
+        targetRouteNodeIndex
+      ]
     : undefined;
 
 if (targetRouteAnchor) {
@@ -3415,7 +3423,10 @@ onPieceDrop?.(
   snappedPosition,
   location,
   targetPiece,
-  pathDock
+  pathDock,
+  targetRouteNodeIndex >= 0
+    ? targetRouteNodeIndex
+    : undefined
 );
   }
 

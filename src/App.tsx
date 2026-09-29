@@ -2942,7 +2942,8 @@ async function handlePieceDrop(
   position: Feature['position'],
   location?: Feature,
   targetPiece?: Piece,
-  pathDock?: PiecePathDock
+  pathDock?: PiecePathDock,
+  routeNodeIndex?: number
 ) {
   if (!activeProject || !activeMap) return;
   if (loadedSectionsMapId.current !== activeMap.id) {
@@ -6906,14 +6907,16 @@ mapMediaSlotsEnabled={
   position,
   location,
   targetPiece,
-  pathDock
+  pathDock,
+  routeNodeIndex
 ) => {
   void handlePieceDrop(
     pieceId,
     position,
     location,
     targetPiece,
-    pathDock
+    pathDock,
+    routeNodeIndex
   );
 }}
 onPieceAreaBoundaryEnterRequest={(
