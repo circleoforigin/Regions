@@ -3096,11 +3096,13 @@ async function handlePieceDrop(
       return;
     }   
 
-updatePiecePosition(
-  pieceId,
-  position,
-  pathDock
-);
+if (dropProject === activeProject) {
+  updatePiecePosition(
+    pieceId,
+    position,
+    pathDock
+  );
+}
 
 return;
   }
