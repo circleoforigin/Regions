@@ -4487,6 +4487,7 @@ function saveSectionProperties() {
 {layerVisibility.paths && (
   <PathOverlay
     targetedSegmentId={piecePathTargetId}
+    targetedTerminalId={pieceTerminalNodeTarget?.terminalId}
     editing={interactionMode === 'path'}
     terminalPromotionEnabled={
       interactionMode === 'path' ||
