@@ -3723,7 +3723,7 @@ return closest;
       })()
     : null;
 
-    const pieceFeatureNodeTarget =
+const pieceFeatureNodeTarget =
   piecePreview
     ? visibleFeatures.reduce<{
         featureId: string;
@@ -3736,6 +3736,58 @@ return closest;
               piecePreview.position.x,
               piecePreview.position.y
             );
+
+            const pieceTerminalNodeTarget =
+  piecePreview
+    ? pathNetwork.terminals.reduce<{
+        terminalId: string;
+        position: Point;
+        distance: number;
+      } | null>(
+        (closest, terminal) => {
+          const previewScreen =
+            mapToScreen(
+              piecePreview.position.x,
+              piecePreview.position.y
+            );
+
+          const targetScreen =
+            mapToScreen(
+              terminal.position.x,
+              terminal.position.y
+            );
+
+          const distance =
+            Math.hypot(
+              previewScreen.x -
+                targetScreen.x,
+              previewScreen.y -
+                targetScreen.y
+            );
+
+          if (
+            distance >
+            NODE_SNAP_DISTANCE
+          ) {
+            return closest;
+          }
+
+          if (
+            closest &&
+            closest.distance <= distance
+          ) {
+            return closest;
+          }
+
+          return {
+            terminalId: terminal.id,
+            position: terminal.position,
+            distance,
+          };
+        },
+        null
+      )
+    : null;
 
           const targetScreen =
             mapToScreen(
@@ -4434,22 +4486,14 @@ function saveSectionProperties() {
 
 {layerVisibility.paths && (
   <PathOverlay
-    targetedSegmentId={
-      piecePathTargetId
-    }
-  editing={
-    interactionMode === 'path'
-  }
+    targetedSegmentId={piecePathTargetId}
+    editing={interactionMode === 'path'}
     terminalPromotionEnabled={
       interactionMode === 'path' ||
       interactionMode === 'build'
     }
-    distanceTargeting={
-      distanceInteractionActive
-    }
-    exploreTargeting={
-      interactionMode === 'explore'
-    }
+    distanceTargeting={distanceInteractionActive}
+    exploreTargeting={interactionMode === 'explore'}
     onExplorePathClick={(
       segmentId,
       position
@@ -5034,6 +5078,9 @@ function saveSectionProperties() {
     state.selectedFeatureId === feature.id ? 'selected' : '',
     distanceSelected ? 'distance-selected' : '',
     pathTerminal ? 'path-terminal' : '',
+    pieceFeatureNodeTarget?.featureId === feature.id
+      ? 'piece-node-targeted'
+      : '',
     isMoving ? 'moving' : '',
     moveIsValid ? '' : 'invalid',
   ].filter(Boolean).join(' ');
