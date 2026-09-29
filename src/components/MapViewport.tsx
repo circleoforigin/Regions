@@ -2408,19 +2408,6 @@ const routeAnchors =
       ]
     : resolvedDistanceAnchors;
 
-if (distanceSegments.length > 0) {
-  routeAnchors.push(distanceSegments[0].start);
-
-  for (
-    const segment of
-      distanceSegments
-  ) {
-    routeAnchors.push(segment.end);
-  }
-} else {
-  routeAnchors.push(...resolvedDistanceAnchors);
-}
-
 for (
   const resolved of
     routeAnchors
@@ -2445,15 +2432,32 @@ for (
       });
       break;
 
-    case 'path':
-      nodes.push({
-        kind: 'path',
-        segmentId: anchor.segmentId,
-        position: anchor.position,
-        usePathFromPrevious:
-          anchor.usePathFromPrevious,
-      });
-      break;
+    case 'path': {
+  const pathSegment =
+    resolvedPathSegments.find(
+      (segment) =>
+        segment.segment.id ===
+        anchor.segmentId
+    );
+
+  const position =
+    pathSegment
+      ? projectPointOntoPathDock(
+          pathSegment,
+          anchor.position
+        ).position
+      : anchor.position;
+
+  nodes.push({
+    kind: 'path',
+    segmentId: anchor.segmentId,
+    position,
+    usePathFromPrevious:
+      anchor.usePathFromPrevious,
+  });
+
+  break;
+}
 
     case 'terminal':
       nodes.push({
@@ -3376,6 +3380,39 @@ const targetRouteAnchor =
 if (targetRouteAnchor) {
   snappedPosition =
     targetRouteAnchor.position;
+
+  if (
+    targetRouteAnchor.anchor.kind ===
+      'path'
+  ) {
+    const routeSegmentId = targetRouteAnchor.anchor.segmentId;
+
+const routePathSegment =
+  resolvedPathSegments.find(
+    (segment) =>
+      segment.segment.id ===
+      routeSegmentId
+  );
+
+    if (routePathSegment) {
+      const projection =
+  projectPointOntoPathDock(
+    routePathSegment,
+    targetRouteAnchor.position
+  );
+
+snappedPosition =
+  projection.position;
+
+pathDock = {
+        segmentId: routePathSegment.segment.id,
+
+        legIndex: projection.legIndex,
+
+        fraction: projection.fraction,
+      };
+    }
+  }
 }
 
 const targetTerminal =
@@ -4678,12 +4715,26 @@ function saveSectionProperties() {
           setPartyMembersMenuOpen(false);
         }}
       />
-      <span
-        className="map-piece-label"
-        style={{ left: screenPosition.x, top: screenPosition.y }}
-      >
-        {piece.name}
-      </span>
+      {piecePreview?.pieceId === piece.id && (
+  <span
+    className="map-piece-mount-point"
+    style={{
+      left: screenPosition.x,
+      top: screenPosition.y,
+    }}
+  />
+)}
+      {piecePreview?.pieceId !== piece.id && (
+  <span
+    className="map-piece-label"
+    style={{
+      left: screenPosition.x,
+      top: screenPosition.y,
+    }}
+  >
+    {piece.name}
+  </span>
+)}
     </Fragment>
   );
 })}

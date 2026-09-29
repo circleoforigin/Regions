@@ -1038,7 +1038,7 @@
   height: 26px;
   padding: 0;
   border: 3px solid;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -100%);
   box-sizing: border-box;
   cursor: grab;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.7));
@@ -1046,6 +1046,21 @@
 
 .map-piece.dragging {
   cursor: grabbing;
+}
+
+.map-piece-mount-point {
+  position: absolute;
+  z-index: 10;
+
+  width: 4px;
+  height: 4px;
+
+  transform: translate(-50%, -50%);
+
+  border-radius: 50%;
+  background: #ffffff;
+
+  pointer-events: none;
 }
 
 .map-piece.focused {
@@ -1066,7 +1081,7 @@
 }
 
 .map-piece-diamond {
-  transform: translate(-50%, -50%) rotate(45deg);
+  transform: translate(-50%, -100%) rotate(45deg);
 }
 
 .map-piece-triangle {
@@ -1081,7 +1096,7 @@
   position: absolute;
   z-index: 9;
   max-width: 160px;
-  transform: translate(-50%, 19px);
+  transform: translate(-50%, 4px);
   overflow: hidden;
   color: #ffffff;
   font-size: 12px;

@@ -2959,6 +2959,31 @@ async function handlePieceDrop(
 
   const navigable = location?.type === 'location' ||
     location?.type === 'connection';
+    if (
+  navigable &&
+  location?.targetMapId
+) {
+  /*
+   * The Piece has physically reached the
+   * Location or Connection, so preserve
+   * that position regardless of whether
+   * the user chooses to enter.
+   */
+  updatePiecePosition(
+    pieceId,
+    position,
+    pathDock
+  );
+
+  const enter =
+    window.confirm(
+      `Enter ${location.name}?`
+    );
+
+  if (!enter) {
+    return;
+  }
+}
   if (!navigable || !location?.targetMapId) {
     try {
       if (activeMap.areaBoundaryLink && activeMap.parentMapId) {

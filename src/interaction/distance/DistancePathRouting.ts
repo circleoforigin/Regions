@@ -242,6 +242,10 @@ export function getDistanceSegmentsWithPaths(
           0
         );
 
+        if (mapDistance <= 0.000001) {
+            continue;
+        }
+
     const startAnchor:
   ResolvedDistanceAnchor =
     splitIndex === 1
