@@ -2957,6 +2957,41 @@ async function handlePieceDrop(
     return;
   }
 
+  if (
+  routeNodeIndex !== undefined &&
+  piece.waypath
+) {
+  const reachedFinalNode =
+    routeNodeIndex ===
+    piece.waypath.nodes.length - 1;
+
+  const nextWaypath =
+    reachedFinalNode
+      ? undefined
+      : {
+          nodes:
+            piece.waypath.nodes.slice(
+              routeNodeIndex
+            ),
+        };
+
+  const project = {
+    ...activeProject,
+    pieces: activeProject.pieces.map(
+      (candidate) =>
+        candidate.id === pieceId
+          ? {
+              ...candidate,
+              waypath: nextWaypath,
+            }
+          : candidate
+    ),
+  };
+
+  setActiveProject(project);
+  markProjectDirty();
+}
+
   const navigable = location?.type === 'location' ||
     location?.type === 'connection';
     if (

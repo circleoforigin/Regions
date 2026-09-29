@@ -3274,28 +3274,8 @@ const targetPiece =
       ) <= FEATURE_MARKER_MIN_DISTANCE;
     });
 
-const targetFeature =
-  !targetPiece &&
-  acquiredNode?.kind === 'feature'
-    ? visibleFeatures.find(
-        (feature) =>
-          feature.id === acquiredNode.id
-      )
-    : undefined;
-
-const location =
-  targetFeature &&
-  isNavigableFeature(targetFeature)
-    ? targetFeature
-    : undefined;
-
 let snappedPosition = preview;
 let pathDock: PiecePathDock | undefined;
-
-if (targetFeature) {
-  snappedPosition =
-    targetFeature.position;
-}
 
 const draggedPiece =
   pieces.find(
@@ -3375,6 +3355,33 @@ const targetRouteAnchor =
         targetRouteNodeIndex
       ]
     : undefined;
+
+    const targetFeatureId =
+  acquiredNode?.kind === 'feature'
+    ? acquiredNode.id
+    : targetRouteAnchor?.anchor.kind ===
+        'feature'
+      ? targetRouteAnchor.anchor.featureId
+      : undefined;
+
+const targetFeature =
+  !targetPiece && targetFeatureId
+    ? visibleFeatures.find(
+        (feature) =>
+          feature.id === targetFeatureId
+      )
+    : undefined;
+
+const location =
+  targetFeature &&
+  isNavigableFeature(targetFeature)
+    ? targetFeature
+    : undefined;
+
+if (targetFeature) {
+  snappedPosition =
+    targetFeature.position;
+}
 
 if (targetRouteAnchor)
 {
