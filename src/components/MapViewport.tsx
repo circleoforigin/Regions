@@ -3212,8 +3212,92 @@ const targetPiece =
 let snappedPosition = preview;
 let pathDock: PiecePathDock | undefined;
 
-const targetTerminal =
+const draggedPiece =
+  pieces.find(
+    (piece) =>
+      piece.id === drag.pieceId
+  );
+
+const routeAnchors =
+  draggedPiece?.waypath
+    ? resolveDistanceAnchors(
+        draggedPiece.waypath.nodes.map(
+          (
+            node,
+            index
+          ): DistanceAnchor => {
+            const id =
+              `route-drop-${drag.pieceId}-${index}`;
+
+            switch (node.kind) {
+              case 'point':
+                return {
+                  id,
+                  kind: 'temporary',
+                  pointId: id,
+                  position: node.position,
+                };
+
+              case 'feature':
+                return {
+                  id,
+                  kind: 'feature',
+                  featureId:
+                    node.featureId,
+                };
+
+              case 'path':
+                return {
+                  id,
+                  kind: 'path',
+                  segmentId:
+                    node.segmentId,
+                  position:
+                    node.position,
+                };
+
+              case 'terminal':
+                return {
+                  id,
+                  kind: 'terminal',
+                  terminalId:
+                    node.terminalId,
+                };
+            }
+          }
+        ),
+        features,
+        pieces,
+        pathNetwork.terminals
+      )
+    : [];
+
+const targetRouteAnchor =
   !targetPiece && !location
+    ? routeAnchors.find(
+        (anchor) => {
+          const target =
+            mapToScreen(
+              anchor.position.x,
+              anchor.position.y
+            );
+
+          return Math.hypot(
+            previewScreen.x - target.x,
+            previewScreen.y - target.y
+          ) <=
+            FEATURE_MARKER_MIN_DISTANCE;
+        }
+      )
+    : undefined;
+
+if (targetRouteAnchor) {
+  snappedPosition =
+    targetRouteAnchor.position;
+}
+
+const targetTerminal =
+  !targetPiece && !location && !targetRouteAnchor
     ? pathNetwork.terminals.find(
         (terminal) => {
           const target =
@@ -3274,6 +3358,7 @@ if (targetTerminal) {
 
 if (
   !targetPiece &&
+  !location &&
   !location &&
   !targetTerminal
 ) {
