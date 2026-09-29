@@ -3253,6 +3253,9 @@ const preview = {
     const preview = piecePreviewRef.current?.pieceId === drag.pieceId
       ? piecePreviewRef.current.position
       : drag.startPosition;
+
+    const acquiredRouteNode = pieceRouteNodeTarget;
+
     pieceDragRef.current = null;
     piecePreviewRef.current = null;
     setPiecePreview(null);
@@ -3285,7 +3288,8 @@ const targetPiece =
       return Math.hypot(
         previewScreen.x - target.x,
         previewScreen.y - target.y
-      ) <= FEATURE_MARKER_MIN_DISTANCE;
+      ) <=
+        NODE_SNAP_DISTANCE;
     })
   : undefined;
 
@@ -3353,21 +3357,16 @@ const routeAnchors =
     : [];
 
 const targetRouteNodeIndex =
-  !targetPiece && !location
+  !targetPiece &&
+  !location &&
+  acquiredRouteNode
     ? routeAnchors.findIndex(
-        (anchor) => {
-          const target =
-            mapToScreen(
-              anchor.position.x,
-              anchor.position.y
-            );
-
-          return Math.hypot(
-            previewScreen.x - target.x,
-            previewScreen.y - target.y
-          ) <=
-            FEATURE_MARKER_MIN_DISTANCE;
-        }
+        (anchor) =>
+          anchor.anchor.id.replace(
+            'route-drop-',
+            'route-'
+          ) ===
+          acquiredRouteNode.anchorId
       )
     : -1;
 

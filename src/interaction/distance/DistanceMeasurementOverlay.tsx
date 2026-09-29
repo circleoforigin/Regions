@@ -245,7 +245,12 @@ const breakpointNodes =
     );
   }
 )}
+</svg>
 
+<svg
+  className="distance-measurement-label-layer"
+  aria-hidden="true"
+>
 {segments.map((segment) => {
   const points =
     segment.points.map(
