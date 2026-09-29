@@ -3398,7 +3398,7 @@ if (targetRouteAnchor)
           routePathSegment,
           targetRouteAnchor.position
         );
-        
+
       pathDock = {
         segmentId: routePathSegment.segment.id,
         legIndex: projection.legIndex,
@@ -3471,7 +3471,7 @@ if (targetTerminal) {
 if (
   !targetPiece &&
   !location &&
-  !location &&
+  !targetRouteAnchor &&
   !targetTerminal
 ) {
   let closestDistance = Infinity;
@@ -3722,6 +3722,89 @@ onPieceDrop?.(
 return closest;
       })()
     : null;
+
+    const pieceFeatureNodeTarget =
+  piecePreview
+    ? visibleFeatures.reduce<{
+        featureId: string;
+        position: Point;
+        distance: number;
+      } | null>(
+        (closest, feature) => {
+          const previewScreen =
+            mapToScreen(
+              piecePreview.position.x,
+              piecePreview.position.y
+            );
+
+          const targetScreen =
+            mapToScreen(
+              feature.position.x,
+              feature.position.y
+            );
+
+          const distance =
+            Math.hypot(
+              previewScreen.x -
+                targetScreen.x,
+              previewScreen.y -
+                targetScreen.y
+            );
+
+          if (
+            distance >
+            NODE_SNAP_DISTANCE
+          ) {
+            return closest;
+          }
+
+          if (
+            closest &&
+            closest.distance <= distance
+          ) {
+            return closest;
+          }
+
+          return {
+            featureId: feature.id,
+            position: feature.position,
+            distance,
+          };
+        },
+        null
+      )
+    : null;
+
+    const activePiecePreview =
+  piecePreview?.pieceId ===
+  selectedRoutePiece?.id
+    ? piecePreview
+    : null;
+
+const displayedRouteAnchors =
+  activePiecePreview &&
+  resolvedSelectedRouteAnchors.length > 0
+    ? resolvedSelectedRouteAnchors.map(
+        (anchor, index) =>
+          index === 0
+            ? {
+                ...anchor,
+                position:
+                  pieceRouteNodeTarget?.position ??
+                  activePiecePreview.position,
+              }
+            : anchor
+      )
+    : resolvedSelectedRouteAnchors;
+
+const displayedRouteSegments =
+  getDistanceSegmentsWithPaths(
+    displayedRouteAnchors,
+    resolvedPathSegments,
+    sections,
+    sectionEdges,
+    sectionNodes
+  );
 
   const partyDropTargetId = piecePreview
     ? pieces.find((candidate) => {
@@ -4330,15 +4413,13 @@ function saveSectionProperties() {
 {selectedRoutePiece?.waypath &&
   routePieceId === null && (
     <DistanceMeasurementOverlay
-  anchors={resolvedSelectedRouteAnchors}
-  segments={selectedRouteSegments}
-  distanceScale={imageRegistration?.distanceScale}
-  targetedAnchorId={
-    pieceRouteNodeTarget?.anchorId
-  }
-  pointerPosition={null}
-  mapToScreen={mapToScreen}
-/>
+      anchors={displayedRouteAnchors}
+      segments={displayedRouteSegments}
+      distanceScale={imageRegistration?.distanceScale}
+      targetedAnchorId={pieceRouteNodeTarget?.anchorId}
+      pointerPosition={null}
+      mapToScreen={mapToScreen}
+    />
   )}
 
 <DistanceMeasurementOverlay
@@ -4347,12 +4428,8 @@ function saveSectionProperties() {
   distanceScale={imageRegistration?.distanceScale}
   pointerPosition={distancePointer}
   mapToScreen={mapToScreen}
-  onRemoveAnchor={
-    distanceMeasurement.removeAnchor
-  }
-  onSelectTemporaryAnchor={
-    distanceMeasurement.addExistingPoint
-  }
+  onRemoveAnchor={distanceMeasurement.removeAnchor}
+  onSelectTemporaryAnchor={distanceMeasurement.addExistingPoint}
 />
 
 {layerVisibility.paths && (
