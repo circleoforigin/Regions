@@ -2957,6 +2957,8 @@ async function handlePieceDrop(
     return;
   }  
 
+  let dropProject = activeProject;
+
   if (
       routeNodeIndex !== undefined &&
       piece.waypath
@@ -3012,20 +3014,20 @@ async function handlePieceDrop(
       pathDock
     );
 
-  const project = {
+  dropProject = {
     ...activeProject,
     pieces: movedPieces.map(
       (candidate) =>
         candidate.id === pieceId
           ? {
-              ...candidate,
-              waypath: nextWaypath,
+            ...candidate,
+            waypath: nextWaypath,
             }
           : candidate
     ),
   };
 
-  setActiveProject(project);
+  setActiveProject(dropProject);
   markProjectDirty();
 
   if (
@@ -3033,7 +3035,7 @@ async function handlePieceDrop(
 ) {
   void handleMapEntered(
     activeMap,
-    project,
+    dropProject,
     undefined,
     'piece',
     pieceId,
@@ -3047,8 +3049,7 @@ async function handlePieceDrop(
 
   const navigable = location?.type === 'location' ||
     location?.type === 'connection';
-  const reachedRouteNode =
-    routeNodeIndex !== undefined && piece.waypath;
+ 
   if (
     navigable &&
     location?.targetMapId
@@ -3059,11 +3060,15 @@ async function handlePieceDrop(
    * that position regardless of whether
    * the user chooses to enter.
    */
-  updatePiecePosition(
-    pieceId,
-    position,
-    pathDock
-  );
+  if (dropProject === activeProject) {
+    updatePiecePosition(
+      pieceId,
+      position,
+      pathDock
+    );
+  } else {
+    setActiveProject(dropProject);
+  }
 
   const enter =
     window.confirm(
