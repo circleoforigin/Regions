@@ -11,11 +11,8 @@ import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceA
 import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
 import ModeHelp from '../interaction/ModeHelp';
-import type {
-  PiecePathDock,
-  PieceWaypath,
-  PieceWaypathAnchor,
-} from '../models/Piece';
+import type { PiecePathDock, PieceWaypath } from '../models/Piece';
+import type { Route, RouteNode } from '../models/Route';
 import {
   findFirstNavigationBoundaryCrossing,
   findNavigationAreaCrossings,
@@ -2390,7 +2387,7 @@ function finishRouteAuthoring() {
     return;
   }
 
-  const nodes: PieceWaypathAnchor[] = [];
+  const nodes: RouteNode[] = [];
 const routeAnchors =
   distanceSegments.length > 0
     ? [

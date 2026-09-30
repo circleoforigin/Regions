@@ -65,7 +65,8 @@ import type { Feature } from './models/Feature';
 import type { PathSegment } from './models/Path';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
-import type { Piece, PieceShape, PiecePathDock, PieceWaypath } from './models/Piece';
+import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
+import type { Route } from './models/Route';
 import {
   findContainingParty,
   getPartyMembers,
@@ -1630,6 +1631,7 @@ async function createProject(
     activeMapId: rootMap.id,
     featureTypes: [],
     pieces: [],
+    routes: [],
     globalMediaSlots: [],
     createdAt: now,
     updatedAt: now,
@@ -2788,7 +2790,7 @@ function updatePiecePosition(
 
 function setPieceRoute(
   pieceId: string,
-  waypath: PieceWaypath
+  waypath: Route
 ) {
   if (!activeProject) {
     return;

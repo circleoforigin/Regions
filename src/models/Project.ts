@@ -1,19 +1,11 @@
-import type {
-  FeatureTypeDefinition,
-} from './FeatureTypeDefinition';
-
-import type {
-  GlobalMediaSlot,
-} from './MediaSlot';
-
-import type {
-  Piece,
-} from './Piece';
+import type { FeatureTypeDefinition } from './FeatureTypeDefinition';
+import type { GlobalMediaSlot } from './MediaSlot';
+import type { Piece } from './Piece';
+import type { Route } from './Route';
 
 export interface Project {
   id: string;
   name: string;
-
   mapIds: string[];
 
   rootMapId?: string;
@@ -23,7 +15,7 @@ export interface Project {
     FeatureTypeDefinition[];
 
   pieces: Piece[];
-
+  routes: Route[];
   focusedPieceId?: string;
 
   /*

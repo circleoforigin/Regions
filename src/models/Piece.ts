@@ -5,8 +5,9 @@ import type {
 import type {
   RulesetExtensionData,
 } from './RulesetExtensionData';
-export type PieceKind = 'piece' | 'group';
+import type { RouteNode } from './Route';
 
+export type PieceKind = 'piece' | 'group';
 export type PieceShape =
   | 'circle'
   | 'square'
@@ -27,43 +28,8 @@ export interface PiecePathDock {
 }
 
 export interface PieceWaypath {
-  /*
-   * Ordered route anchors.
-   *
-   * The first node is the current
-   * journey origin. As the Piece
-   * progresses, earlier nodes are
-   * discarded while the reached node
-   * remains as the new origin.
-   *
-   * When the Piece reaches the final
-   * node, the route is complete.
-   */
-  nodes: PieceWaypathAnchor[];
+  nodes: RouteNode[];
 }
-
-export type PieceWaypathAnchor =
-  | {
-      kind: 'path';
-      segmentId: string;
-      position: SpatialPoint;
-      usePathFromPrevious?: boolean;
-    }
-  | {
-      kind: 'terminal';
-      terminalId: string;
-      usePathFromPrevious?: boolean;
-    }
-  | {
-      kind: 'feature';
-      featureId: string;
-      usePathFromPrevious?: boolean;
-    }
-  | {
-      kind: 'point';
-      position: SpatialPoint;
-      usePathFromPrevious?: boolean;
-    };
 
 export interface Piece extends SpatialAnchor {
   id: string;
