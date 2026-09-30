@@ -16,7 +16,8 @@ import { getDistanceSegmentsWithPaths } from '../interaction/distance/DistancePa
 
 export function routeNodeToDistanceAnchor(
   node: RouteNode
-): DistanceAnchor {
+): DistanceAnchor 
+{
   switch (node.kind) {
     case 'point':
       return {
@@ -56,9 +57,12 @@ export function routeNodeToDistanceAnchor(
 
 export function routeNodesToDistanceAnchors(
   nodes: RouteNode[]
-): DistanceAnchor[] {
-  return nodes.map(routeNodeToDistanceAnchor);
-}export function getRouteLegDistanceSegments(
+): DistanceAnchor[] 
+{ 
+    return nodes.map(routeNodeToDistanceAnchor); 
+}
+
+export function getRouteLegDistanceSegments(
   leg: RouteLeg,
   features: Feature[],
   pieces: Piece[],
