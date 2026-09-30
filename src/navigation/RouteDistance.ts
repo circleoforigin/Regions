@@ -1,4 +1,8 @@
-import type { DistanceAnchor } from '../interaction/distance/DistanceMeasurement';
+import type {
+  DistanceAnchor,
+  DistanceScale,
+  PhysicalDistance,
+} from '../interaction/distance/DistanceMeasurement';
 import type { RouteNode } from '../models/Route';
 import type { Feature } from '../models/Feature';
 import type { Piece } from '../models/Piece';
@@ -13,6 +17,7 @@ import type {
 import type { DistanceSegment } from '../interaction/distance/DistanceMeasurement';
 import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceAnchors';
 import { getDistanceSegmentsWithPaths } from '../interaction/distance/DistancePathRouting';
+import { convertMapDistance } from '../interaction/distance/DistanceMeasurement';
 
 export function routeNodeToDistanceAnchor(
   node: RouteNode
@@ -100,6 +105,45 @@ export function getRouteLegDistanceSegments(
     sections,
     sectionEdges,
     sectionNodes
+  );
+}
+
+export function getRouteLegPhysicalDistance(
+  leg: RouteLeg,
+  scale: DistanceScale | undefined,
+  features: Feature[],
+  pieces: Piece[],
+  terminals: StandalonePathTerminal[],
+  pathSegments: ResolvedPathSegment[],
+  sections: Section[] = [],
+  sectionEdges: SectionEdge[] = [],
+  sectionNodes: SectionNode[] = []
+): PhysicalDistance | null
+{
+  const segments = getRouteLegDistanceSegments(
+    leg,
+    features,
+    pieces,
+    terminals,
+    pathSegments,
+    sections,
+    sectionEdges,
+    sectionNodes
+  );
+
+  if (segments.length === 0)
+  {
+    return null;
+  }
+
+  const mapDistance = segments.reduce(
+    (total, segment) => total + segment.mapDistance,
+    0
+  );
+
+  return convertMapDistance(
+    mapDistance,
+    scale
   );
 }
 
