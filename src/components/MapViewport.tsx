@@ -13,6 +13,7 @@ import type { InteractionMode } from '../interaction/InteractionMode';
 import ModeHelp from '../interaction/ModeHelp';
 import type { PiecePathDock } from '../models/Piece';
 import type { Route, RouteNode } from '../models/Route';
+import { routeNodesToDistanceAnchors } from '../navigation/RouteDistance';
 import {
   findFirstNavigationBoundaryCrossing,
   findNavigationAreaCrossings,
@@ -691,57 +692,9 @@ const selectedRoute =
 
 const selectedRouteAnchors: DistanceAnchor[] =
   selectedRoute
-    ? selectedRoute.nodes.map(
-          (
-            node
-          ): DistanceAnchor => {
-            const id = node.id;
-
-            switch (node.kind) {
-              case 'point':
-                return {
-                  id,
-                  kind: 'temporary',
-                  pointId: id,
-                  position: node.position,
-                  usePathFromPrevious:
-                    node.usePathFromPrevious,
-                };
-
-              case 'feature':
-                return {
-                  id,
-                  kind: 'feature',
-                  featureId:
-                    node.featureId,
-                  usePathFromPrevious:
-                    node.usePathFromPrevious,
-                };
-
-              case 'path':
-                return {
-                  id,
-                  kind: 'path',
-                  segmentId:
-                    node.segmentId,
-                  position:
-                    node.position,
-                  usePathFromPrevious:
-                    node.usePathFromPrevious,
-                };
-
-              case 'terminal':
-                return {
-                  id,
-                  kind: 'terminal',
-                  terminalId:
-                    node.terminalId,
-                  usePathFromPrevious:
-                    node.usePathFromPrevious,
-                };
-            }
-          }
-        )
+    ? routeNodesToDistanceAnchors(
+        selectedRoute.nodes
+      )
     : [];
 
 const resolvedDistanceAnchors =
@@ -3299,51 +3252,8 @@ if (!draggedRoute) {
           );
 
         const routeAnchors =
-          resolveDistanceAnchors(
-            draggedRoute.nodes.map(
-              (
-                node
-              ): DistanceAnchor => {
-                const id = node.id;
-
-                switch (node.kind) {
-                  case 'point':
-                    return {
-                      id,
-                      kind: 'temporary',
-                      pointId: id,
-                      position:
-                        node.position,
-                    };
-
-                  case 'feature':
-                    return {
-                      id,
-                      kind: 'feature',
-                      featureId:
-                        node.featureId,
-                    };
-
-                  case 'path':
-                    return {
-                      id,
-                      kind: 'path',
-                      segmentId:
-                        node.segmentId,
-                      position:
-                        node.position,
-                    };
-
-                  case 'terminal':
-                    return {
-                      id,
-                      kind: 'terminal',
-                      terminalId:
-                        node.terminalId,
-                    };
-                }
-              }
-            ),
+         resolveDistanceAnchors(
+            routeNodesToDistanceAnchors(draggedRoute.nodes),
             features,
             pieces,
             pathNetwork.terminals
@@ -3429,49 +3339,7 @@ const draggedRoute =
 const routeAnchors =
   draggedRoute
     ? resolveDistanceAnchors(
-        draggedRoute.nodes.map(
-          (
-            node
-          ): DistanceAnchor => {
-            const id = node.id;
-
-            switch (node.kind) {
-              case 'point':
-                return {
-                  id,
-                  kind: 'temporary',
-                  pointId: id,
-                  position: node.position,
-                };
-
-              case 'feature':
-                return {
-                  id,
-                  kind: 'feature',
-                  featureId:
-                    node.featureId,
-                };
-
-              case 'path':
-                return {
-                  id,
-                  kind: 'path',
-                  segmentId:
-                    node.segmentId,
-                  position:
-                    node.position,
-                };
-
-              case 'terminal':
-                return {
-                  id,
-                  kind: 'terminal',
-                  terminalId:
-                    node.terminalId,
-                };
-            }
-          }
-        ),
+        routeNodesToDistanceAnchors(draggedRoute.nodes),
         features,
         pieces,
         pathNetwork.terminals
@@ -3745,53 +3613,11 @@ if (!draggedRoute) {
 
 const routeAnchors =
   resolveDistanceAnchors(
-    draggedRoute.nodes.map(
-              (
-                node
-              ): DistanceAnchor => {
-                const id = node.id;
-
-                switch (node.kind) {
-                  case 'point':
-                    return {
-                      id,
-                      kind: 'temporary',
-                      pointId: id,
-                      position: node.position,
-                    };
-
-                  case 'feature':
-                    return {
-                      id,
-                      kind: 'feature',
-                      featureId:
-                        node.featureId,
-                    };
-
-                  case 'path':
-                    return {
-                      id,
-                      kind: 'path',
-                      segmentId:
-                        node.segmentId,
-                      position:
-                        node.position,
-                    };
-
-                  case 'terminal':
-                    return {
-                      id,
-                      kind: 'terminal',
-                      terminalId:
-                        node.terminalId,
-                    };
-                }
-              }
-            ),
-            features,
-            pieces,
-            pathNetwork.terminals
-          );
+    routeNodesToDistanceAnchors(draggedRoute.nodes),
+    features,
+    pieces,
+    pathNetwork.terminals
+  );
 
         const previewScreen =
           mapToScreen(
