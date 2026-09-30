@@ -11,7 +11,7 @@ import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceA
 import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
 import ModeHelp from '../interaction/ModeHelp';
-import type { PiecePathDock, PieceWaypath } from '../models/Piece';
+import type { PiecePathDock } from '../models/Piece';
 import type { Route, RouteNode } from '../models/Route';
 import {
   findFirstNavigationBoundaryCrossing,
@@ -262,9 +262,10 @@ onDeletePiece?: (piece: Piece) => void;
 onRemovePartyMember?: (partyId: string, memberId: string) => void;
 onDisbandParty?: (partyId: string) => void;
 onPieceTrackedChange?: (pieceId: string, tracked: boolean) => void;
+routes: Route[];
 onSetPieceRoute?: (
   piece: Piece,
-  waypath: PieceWaypath
+  nodes: Route['nodes']
 ) => void;
 onClearPieceRoute?: (
   piece: Piece
@@ -406,6 +407,7 @@ function MapViewport({
   onPieceTrackedChange,
   onSetPieceRoute,
   onClearPieceRoute,
+  routes,
   onFocusPiece,
   onViewportCenterChange,
   focusPiecePosition,
@@ -674,15 +676,23 @@ const selectedRoutePiece =
       )
     : undefined;
 
+const selectedRoute =
+  selectedRoutePiece
+    ? routes.find(
+        (route) =>
+          route.pieceId === selectedRoutePiece.id
+      )
+    : undefined;
+
 const selectedRouteAnchors: DistanceAnchor[] =
-  selectedRoutePiece?.waypath
-    ? selectedRoutePiece.waypath.nodes.map(
+  selectedRoute
+    ? selectedRoute.nodes.map(
           (
             node,
             index
           ): DistanceAnchor => {
             const id =
-              `route-${selectedRoutePiece.id}-${index}`;
+              `route-${selectedRoute.id}-${index}`;
 
             switch (node.kind) {
               case 'point':
@@ -2467,7 +2477,7 @@ for (
   if (nodes.length > 0) {
     onSetPieceRoute?.(
       piece,
-      { nodes }
+      nodes
     );
   }
 
