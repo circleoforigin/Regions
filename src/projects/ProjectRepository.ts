@@ -21,8 +21,17 @@ export function ensureValidPieceFocus(
 }
 
 function normalizeProject(project: Project): Project {
-  const pieces = Array.isArray(project.pieces) ? project.pieces : [];
-  const focusedPieceId = ensureValidPieceFocus(
+  const pieces =
+  Array.isArray(project.pieces)
+    ? project.pieces
+    : [];
+
+const routes =
+  Array.isArray(project.routes)
+    ? project.routes
+    : [];
+
+const focusedPieceId = ensureValidPieceFocus(
     pieces,
     project.focusedPieceId
   );
@@ -31,7 +40,7 @@ function normalizeProject(project: Project): Project {
   ...project,
 
   pieces,
-
+  routes,
   focusedPieceId,
 
   featureTypes:

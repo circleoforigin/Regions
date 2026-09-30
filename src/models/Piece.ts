@@ -5,7 +5,6 @@ import type {
 import type {
   RulesetExtensionData,
 } from './RulesetExtensionData';
-import type { RouteNode } from './Route';
 
 export type PieceKind = 'piece' | 'group';
 export type PieceShape =
@@ -27,10 +26,6 @@ export interface PiecePathDock {
   fraction: number;
 }
 
-export interface PieceWaypath {
-  nodes: RouteNode[];
-}
-
 export interface Piece extends SpatialAnchor {
   id: string;
   kind: PieceKind;
@@ -38,7 +33,6 @@ export interface Piece extends SpatialAnchor {
   mapId: string;
   position: SpatialPoint;
   pathDock?: PiecePathDock;
-  waypath?: PieceWaypath;
   appearance: PieceAppearance;
   tracked?: boolean;
   memberPieceIds?: string[];

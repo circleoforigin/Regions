@@ -668,6 +668,14 @@ useEffect(() => {
   selectedPathSegment?.segmentId,
 ]);
 
+const getPieceRoute = (
+  pieceId: string
+): Route | undefined =>
+  routes.find(
+    (route) =>
+      route.pieceId === pieceId
+  );
+
 const selectedRoutePiece =
   selectedPieceId
     ? pieces.find(
@@ -678,21 +686,16 @@ const selectedRoutePiece =
 
 const selectedRoute =
   selectedRoutePiece
-    ? routes.find(
-        (route) =>
-          route.pieceId === selectedRoutePiece.id
-      )
+    ? getPieceRoute(selectedRoutePiece.id)
     : undefined;
 
 const selectedRouteAnchors: DistanceAnchor[] =
   selectedRoute
     ? selectedRoute.nodes.map(
           (
-            node,
-            index
+            node
           ): DistanceAnchor => {
-            const id =
-              `route-${selectedRoute.id}-${index}`;
+            const id = node.id;
 
             switch (node.kind) {
               case 'point':
@@ -2417,6 +2420,12 @@ for (
   switch (anchor.kind) {
     case 'temporary':
       nodes.push({
+        id: crypto.randomUUID(),
+        mapId,
+        source: {
+          moduleId: 'Regions',
+          type: 'route-point',
+        },
         kind: 'point',
         position: anchor.position,
         usePathFromPrevious:
@@ -2426,6 +2435,13 @@ for (
 
     case 'feature':
       nodes.push({
+        id: crypto.randomUUID(),
+        mapId,
+        source: {
+          moduleId: 'Regions',
+          type: 'feature',
+          referenceId: anchor.featureId,
+        },
         kind: 'feature',
         featureId: anchor.featureId,
         usePathFromPrevious:
@@ -2450,6 +2466,13 @@ for (
       : anchor.position;
 
   nodes.push({
+    id: crypto.randomUUID(),
+    mapId,
+    source: {
+      moduleId: 'Regions',
+      type: 'path',
+      referenceId: anchor.segmentId,
+    },
     kind: 'path',
     segmentId: anchor.segmentId,
     position,
@@ -2462,6 +2485,13 @@ for (
 
     case 'terminal':
       nodes.push({
+        id: crypto.randomUUID(),
+        mapId,
+        source: {
+          moduleId: 'Regions',
+          type: 'path-terminal',
+          referenceId: anchor.terminalId,
+        },
         kind: 'terminal',
         terminalId: anchor.terminalId,
         usePathFromPrevious:
@@ -3255,15 +3285,12 @@ const preview = {
       : drag.startPosition;const acquiredNode =
   pieceNodeTarget?.kind === 'route'
     ? (() => {
-        const draggedPiece =
-          pieces.find(
-            (piece) =>
-              piece.id === drag.pieceId
-          );
+        const draggedRoute =
+  getPieceRoute(drag.pieceId);
 
-        if (!draggedPiece?.waypath) {
-          return pieceNodeTarget;
-        }
+if (!draggedRoute) {
+  return pieceNodeTarget;
+}
 
         const previewScreen =
           mapToScreen(
@@ -3273,13 +3300,11 @@ const preview = {
 
         const routeAnchors =
           resolveDistanceAnchors(
-            draggedPiece.waypath.nodes.map(
+            draggedRoute.nodes.map(
               (
-                node,
-                index
+                node
               ): DistanceAnchor => {
-                const id =
-                  `route-${drag.pieceId}-${index}`;
+                const id = node.id;
 
                 switch (node.kind) {
                   case 'point':
@@ -3398,21 +3423,17 @@ const targetPiece =
 let snappedPosition = preview;
 let pathDock: PiecePathDock | undefined;
 
-const draggedPiece =
-  pieces.find(
-    (piece) =>
-      piece.id === drag.pieceId
-  );
+const draggedRoute =
+  getPieceRoute(drag.pieceId);
 
 const routeAnchors =
-  draggedPiece?.waypath
+  draggedRoute
     ? resolveDistanceAnchors(
-        draggedPiece.waypath.nodes.map(
+        draggedRoute.nodes.map(
           (
-            node,
-            index
+            node
           ): DistanceAnchor => {
-            const id = `route-${drag.pieceId}-${index}`;
+            const id = node.id;
 
             switch (node.kind) {
               case 'point':
@@ -3713,26 +3734,22 @@ onPieceDrop?.(
     const pieceRouteNodeTarget =
   piecePreview
     ? (() => {
-        const draggedPiece =
-          pieces.find(
-            (piece) =>
-              piece.id ===
-              piecePreview.pieceId
-          );
+        const draggedRoute =
+  getPieceRoute(
+    piecePreview.pieceId
+  );
 
-        if (!draggedPiece?.waypath) {
-          return null;
-        }
+if (!draggedRoute) {
+  return null;
+}
 
-        const routeAnchors =
-          resolveDistanceAnchors(
-            draggedPiece.waypath.nodes.map(
+const routeAnchors =
+  resolveDistanceAnchors(
+    draggedRoute.nodes.map(
               (
-                node,
-                index
+                node
               ): DistanceAnchor => {
-                const id =
-  `route-${draggedPiece.id}-${index}`;
+                const id = node.id;
 
                 switch (node.kind) {
                   case 'point':
@@ -4586,8 +4603,10 @@ function saveSectionProperties() {
   </div>
 )}
 
-{selectedRoutePiece?.waypath &&
-  routePieceId === null && (
+{selectedRoute &&
+  routePieceId === null &&
+  piecePreview?.pieceId ===
+    selectedRoute.pieceId && (
     <DistanceMeasurementOverlay
       anchors={displayedRouteAnchors}
       segments={displayedRouteSegments}
@@ -6156,7 +6175,7 @@ onDescriptionChange={(
   Edit...
 </button>
 
-{piece.waypath ? (
+{getPieceRoute(piece.id) ? (
   <button
     type="button"
     onClick={() => {

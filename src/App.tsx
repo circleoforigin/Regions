@@ -2790,23 +2790,45 @@ function updatePiecePosition(
 
 function setPieceRoute(
   pieceId: string,
-  waypath: Route
+  nodes: Route['nodes']
 ) {
   if (!activeProject) {
     return;
   }
 
+  const existingRoute =
+    activeProject.routes.find(
+      (route) =>
+        route.pieceId === pieceId
+    );
+
+  const now = new Date();
+
+const route: Route = {
+  id:
+    existingRoute?.id ??
+    crypto.randomUUID(),
+  pieceId,
+  createdAt:
+    existingRoute?.createdAt ??
+    now,
+  updatedAt: now,
+  nodes,
+};
+
   const project = {
     ...activeProject,
-    pieces: activeProject.pieces.map(
-      (piece) =>
-        piece.id === pieceId
-          ? {
-              ...piece,
-              waypath,
-            }
-          : piece
-    ),
+    routes: existingRoute
+      ? activeProject.routes.map(
+          (candidate) =>
+            candidate.id === existingRoute.id
+              ? route
+              : candidate
+        )
+      : [
+          ...activeProject.routes,
+          route,
+        ],
   };
 
   setActiveProject(project);
@@ -2822,14 +2844,9 @@ function clearPieceRoute(
 
   const project = {
     ...activeProject,
-    pieces: activeProject.pieces.map(
-      (piece) =>
-        piece.id === pieceId
-          ? {
-              ...piece,
-              waypath: undefined,
-            }
-          : piece
+    routes: activeProject.routes.filter(
+      (route) =>
+        route.pieceId !== pieceId
     ),
   };
 
@@ -2960,24 +2977,31 @@ async function handlePieceDrop(
   }  
 
   let dropProject = activeProject;
+  const pieceRoute =
+  activeProject.routes.find(
+    (route) =>
+      route.pieceId === pieceId
+  );
 
   if (
       routeNodeIndex !== undefined &&
-      piece.waypath
+      pieceRoute
     ) {
   const reachedFinalNode =
-    routeNodeIndex ===
-    piece.waypath.nodes.length - 1;
+  routeNodeIndex ===
+  pieceRoute.nodes.length - 1;
 
-  const nextWaypath =
-    reachedFinalNode
-      ? undefined
-      : {
-          nodes:
-            piece.waypath.nodes.slice(
-              routeNodeIndex
-            ),
-        };
+const nextRoute =
+  reachedFinalNode
+    ? undefined
+    : {
+        ...pieceRoute,
+        updatedAt: new Date(),
+        nodes:
+          pieceRoute.nodes.slice(
+            routeNodeIndex
+          ),
+      };
 
   const key =
     `${activeProject.id}:${pieceId}:${activeMap.id}`;
@@ -3017,17 +3041,20 @@ async function handlePieceDrop(
     );
 
   dropProject = {
-    ...activeProject,
-    pieces: movedPieces.map(
-      (candidate) =>
-        candidate.id === pieceId
-          ? {
-            ...candidate,
-            waypath: nextWaypath,
-            }
-          : candidate
-    ),
-  };
+  ...activeProject,
+  pieces: movedPieces,
+  routes: nextRoute
+    ? activeProject.routes.map(
+        (route) =>
+          route.id === pieceRoute.id
+            ? nextRoute
+            : route
+      )
+    : activeProject.routes.filter(
+        (route) =>
+          route.id !== pieceRoute.id
+      ),
+};
 
   setActiveProject(dropProject);
   markProjectDirty();
@@ -7010,6 +7037,7 @@ mapMediaSlotsEnabled={
             piece.id !== pendingArrival?.pieceId;
         })}
         allPieces={activeProject.pieces}
+        routes={activeProject.routes}
         focusedPieceId={activeProject.focusedPieceId}
         edgeScrollingEnabled={regionsSettings.edgeScrollingEnabled}
         featureTypes={activeProject.featureTypes}
@@ -7073,14 +7101,14 @@ onEditPiece={handleEditPiece}
         onDisbandParty={handleDisbandParty}
         onPieceTrackedChange={handlePieceTrackedChange}
         onSetPieceRoute={(
-          piece,
-          waypath
-        ) => {
-          setPieceRoute(
-            piece.id,
-            waypath
-          );
-        }}
+  piece,
+  nodes
+) => {
+  setPieceRoute(
+    piece.id,
+    nodes
+  );
+}}
         onClearPieceRoute={(piece) => {
           clearPieceRoute(piece.id);
         }}
