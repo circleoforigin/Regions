@@ -1777,7 +1777,12 @@ function normalizeMap(map: RegionMap): RegionMap {
     ? map.featureIds
     : [];
   const sectionIds = Array.isArray(map.sectionIds) ? map.sectionIds : [];
-  const normalized = { ...map, featureIds, sectionIds };
+  const normalized = {
+    ...map,
+    featureIds,
+    sectionIds,
+    simulationScale: map.simulationScale ?? 'overworld',
+  };
 
   delete (normalized as RegionMap & { features?: Feature[] }).features;
   return normalized;
@@ -4180,7 +4185,8 @@ function linkAreaLocation(area: Section, destination: RegionMap, isNew: boolean)
   if (polygon.length < 3) return false;
   const pivotX = (Math.min(...polygon.map((point) => point.x)) + Math.max(...polygon.map((point) => point.x))) / 2;
   const pivotY = (Math.min(...polygon.map((point) => point.y)) + Math.max(...polygon.map((point) => point.y))) / 2;
-  const child: RegionMap = { ...destination, parentMapId: activeMap.id, updatedAt: new Date(),
+  const child: RegionMap = { ...destination, parentMapId: activeMap.id,
+    simulationScale: 'area', updatedAt: new Date(),
     areaBoundaryLink: { areaId: area.id,
       alignment: { rotation: 0, zoom: 100, width: 100, height: 100, x: 0, y: 0, pivotX, pivotY } } };
   setPendingMaps((current) => [...current.filter((map) => map.id !== child.id), child]);
@@ -5087,6 +5093,10 @@ async function handleCreateLocation() {
       : undefined,
   });
   childMap.name = name;
+  childMap.simulationScale = navigationFeatureKind === 'location'
+    ? 'local'
+    : 'overworld';
+
   const locationArea = locationAreaId ? activeSections.find((area) => area.id === locationAreaId) : undefined;
   if (locationAreaId && !locationArea) return;
   if (locationArea) Object.assign(childMap, copyAreaResourcesToLocation(locationArea, activeMap.mediaSlotOverrides));

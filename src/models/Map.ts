@@ -11,6 +11,12 @@ export type MapDistanceUnit =
   | 'meters'
   | 'kilometers';
 
+  export type MapSimulationScale =
+  | 'overworld'
+  | 'area'
+  | 'local'
+  | 'special';
+
 export interface MapImageRegistration {
   scale: number;
   offsetX: number;
@@ -43,7 +49,7 @@ export interface Map {
   areaBoundaryLink?: AreaBoundaryLink;
   id: string;
   name: string;
-
+  simulationScale?: MapSimulationScale;
   description?: string;
 
   /*
