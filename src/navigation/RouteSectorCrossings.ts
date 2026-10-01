@@ -4,6 +4,8 @@ import type { Piece } from '../models/Piece';
 import type { RouteLeg } from '../models/Route';
 import type { StandalonePathTerminal } from '../models/Path';
 import type { ResolvedPathSegment } from '../paths/PathMapState';
+import type { PhysicalDistance } from '../interaction/distance/DistanceMeasurement';
+import { convertMapDistance } from '../interaction/distance/DistanceMeasurement';
 import type {
   Section,
   SectionEdge,
@@ -17,6 +19,11 @@ import { getSectorSizeInMapUnits } from '../spatial/Sector';
 import { findSectorCrossings } from '../spatial/SectorCrossings';
 import { getRouteLegWorldGeometry } from './RouteWorldGeometry';
 
+export interface RouteSectorCrossing extends SectorCrossing
+{
+  distance: PhysicalDistance;
+}
+
 export function getRouteLegSectorCrossings(
   leg: RouteLeg,
   maps: RegionMap[],
@@ -28,7 +35,7 @@ export function getRouteLegSectorCrossings(
   sections: Section[] = [],
   sectionEdges: SectionEdge[] = [],
   sectionNodes: SectionNode[] = []
-): SectorCrossing[]
+): RouteSectorCrossing[]
 {
   const geometry = getRouteLegWorldGeometry(
     leg,
@@ -69,9 +76,24 @@ export function getRouteLegSectorCrossings(
     return [];
   }
 
-  return findSectorCrossings(
-    geometry.worldMapId,
-    geometry.points,
-    sectorSize
+  const crossings = findSectorCrossings(
+  geometry.worldMapId,
+  geometry.points,
+  sectorSize
+);
+
+return crossings.flatMap((crossing) =>
+{
+  const distance = convertMapDistance(
+    crossing.mapDistance,
+    distanceScale
   );
+
+  return distance
+    ? [{
+        ...crossing,
+        distance,
+      }]
+    : [];
+  });
 }
