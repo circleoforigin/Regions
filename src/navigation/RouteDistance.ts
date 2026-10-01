@@ -14,10 +14,6 @@ import type {
   SectionEdge,
   SectionNode,
 } from '../models/Section';
-import {
-  getSectionPolygon,
-  isPointInPolygon,
-} from '../sections/SectionGeometry';
 import type { DistanceSegment } from '../interaction/distance/DistanceMeasurement';
 import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceAnchors';
 import { getDistanceSegmentsWithPaths } from '../interaction/distance/DistancePathRouting';
@@ -150,63 +146,3 @@ export function getRouteLegPhysicalDistance(
     scale
   );
 }
-
-export interface RouteLegSpatialSegment
-{
-  segment: DistanceSegment;
-  areas: Section[];
-}
-
-export function getRouteLegSpatialSegments(
-  leg: RouteLeg,
-  features: Feature[],
-  pieces: Piece[],
-  terminals: StandalonePathTerminal[],
-  pathSegments: ResolvedPathSegment[],
-  sections: Section[] = [],
-  sectionEdges: SectionEdge[] = [],
-  sectionNodes: SectionNode[] = []
-): RouteLegSpatialSegment[]
-{
-  const segments = getRouteLegDistanceSegments(
-    leg,
-    features,
-    pieces,
-    terminals,
-    pathSegments,
-    sections,
-    sectionEdges,
-    sectionNodes
-  );
-
-  return segments.map((segment) => {
-    const midpoint = {
-      x: (segment.start.position.x + segment.end.position.x) / 2,
-      y: (segment.start.position.y + segment.end.position.y) / 2,
-    };
-
-    const areas = sections.filter((section) => {
-      if (section.kind !== 'area')
-      {
-        return false;
-      }
-
-      const polygon = getSectionPolygon(
-        section,
-        sectionEdges,
-        sectionNodes
-      );
-
-      return isPointInPolygon(
-        midpoint,
-        polygon
-      );
-    });
-
-    return {
-      segment,
-      areas,
-    };
-  });
-}
-

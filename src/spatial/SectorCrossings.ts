@@ -8,6 +8,7 @@ export interface SectorCrossing
   to: SectorAddress;
   segmentIndex: number;
   fraction: number;
+  mapDistance: number;
 }
 
 function getSectorCoordinate(
@@ -89,6 +90,7 @@ export function findSectorCrossings(
   }
 
   const crossings: SectorCrossing[] = [];
+  let completedDistance = 0;
 
   for (
     let segmentIndex = 0;
@@ -97,6 +99,11 @@ export function findSectorCrossings(
   ) {
     const start = points[segmentIndex];
     const end = points[segmentIndex + 1];
+
+    const segmentDistance = Math.hypot(
+        end.x - start.x,
+        end.y - start.y
+    );
 
     const fractions = [
       ...getBoundaryFractions(
@@ -191,8 +198,12 @@ export function findSectorCrossings(
         to,
         segmentIndex,
         fraction,
+        mapDistance:
+            completedDistance +
+            segmentDistance * fraction,
       });
     }
+    completedDistance += segmentDistance;
   }
 
   return crossings;
