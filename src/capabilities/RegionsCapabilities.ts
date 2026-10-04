@@ -20,6 +20,12 @@ const travelCommandDefinition: CommandDefinition = {
     'Prospects travel for Pieces possessing Routes.',
   input: [
     {
+      key: 'prospectId',
+      label: 'Prospect ID',
+      type: 'string',
+      required: true,
+    },
+    {
       key: 'startTime',
       label: 'Start Time',
       type: 'number',
@@ -39,6 +45,11 @@ const travelLegProspectedEventDefinition: EventDefinition = {
   description:
     'Describes a prospective Route Leg so other systems can generate events during its travel interval.',
   fields: [
+    {
+      key: 'prospectId',
+      label: 'Prospect ID',
+      type: 'string',
+    },
     {
       key: 'pieceId',
       label: 'Piece ID',

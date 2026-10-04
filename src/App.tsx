@@ -1113,6 +1113,7 @@ void moduleEventBus
         const payload =
           message.payload as
             | {
+                prospectId?: string;
                 startTime?: number;
                 pace?: string;
               }
@@ -1120,7 +1121,8 @@ void moduleEventBus
 
         if (
           !activeProject ||
-          typeof payload?.startTime !== 'number'
+          !payload?.prospectId ||
+          typeof payload.startTime !== 'number'
         )
         {
           return;
@@ -1236,9 +1238,11 @@ const endTime =
   payload.startTime +
   result.duration;
 
-console.log(
-  '[Regions] Route Leg prospected.',
+moduleEventBus.emit(
+  'Regions.TravelLegProspected',
   {
+    prospectId:
+      payload.prospectId,
     pieceId:
       spatialPiece.id,
     routeId:
@@ -1255,11 +1259,17 @@ console.log(
     distance,
     pace:
       payload.pace ?? 'medium',
+    piece:
+      spatialPiece,
+    route,
+    routeLeg,
   }
 );
 
 return {
   accepted: true,
+  prospectId:
+    payload.prospectId,
 };
       }
     );
