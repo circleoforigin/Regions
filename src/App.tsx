@@ -46,14 +46,10 @@ import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
-import MapScaleCalibrationDialog
-  from './maps/MapScaleCalibrationDialog';
+import MapScaleCalibrationDialog from './maps/MapScaleCalibrationDialog';
 
-import type {
-  MapScalePoint,
-} from './maps/MapScaleCalibration';
-import JournalViewPanel
-  from './integrations/journal/JournalViewPanel';
+import type { MapScalePoint } from './maps/MapScaleCalibration';
+import JournalViewPanel from './integrations/journal/JournalViewPanel';
 import type {
   LocationMapMetadata,
   MapViewportHandle,
@@ -67,6 +63,9 @@ import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
 import type { Route } from './models/Route';
+import { getRouteLegs } from './models/Route';
+import { getRouteLegPhysicalDistance } from './navigation/RouteDistance';
+import { getRouteLegSpatialContext } from './navigation/RouteSpatialContext';
 import {
   findContainingParty,
   getPartyMembers,
@@ -75,8 +74,7 @@ import {
   movePartyAndMembers,
   resolveSpatialPiece,
 } from './models/Piece';
-import MapMediaSlotsDialog
-  from './components/MapMediaSlotsDialog';
+import MapMediaSlotsDialog from './components/MapMediaSlotsDialog';
 import {
   areGlobalMediaSlotsComplete,
   resolveMediaSlots,
@@ -104,9 +102,7 @@ import {
   savePathSegment,
   type PathNetwork,
 } from './paths/PathNetwork';
-import {
-  resolvePathSegments,
-} from './paths/PathMapState';
+import { resolvePathSegments } from './paths/PathMapState';
 import { resolveArea } from './sections/AreaContext';
 import { sectionRepository } from './sections/SectionRepository';
 import { sectionEdgeRepository } from './sections/SectionEdgeRepository';
@@ -122,9 +118,7 @@ import {
   ensureValidPieceFocus,
   projectRepository,
 } from './projects/ProjectRepository';;
-import {
-  hostedMapImageService,
-} from './services/maps/HostedMapImageService';
+import { hostedMapImageService } from './services/maps/HostedMapImageService';
 import { useRegionsState } from './state/RegionsStateContext';
 
 type ProjectActionOutcome = 'unchanged' | 'saved' | 'discarded';
@@ -1069,12 +1063,11 @@ const [
     modulePresence.start();
 
     modulePresence.announceReady();
-
     const updateJournalAvailability = () => {
-  setJournalAvailable(
-    modulePresence.isReady('journal')
-  );
-};
+      setJournalAvailable(
+        modulePresence.isReady('journal')
+      );
+    };
 
 const unsubscribePresence =
   modulePresence.subscribe(
@@ -1109,6 +1102,187 @@ void moduleEventBus
   modulePresence.stop();
 };
   }, []);
+
+  useEffect(() =>
+{
+  const unsubscribeTravel =
+    moduleEventBus.subscribe(
+      'Simulation.TravelRequested',
+      (message) =>
+      {
+        const payload =
+          message.payload as
+            | {
+                startTime?: number;
+                pace?: string;
+              }
+            | undefined;
+
+        if (
+          !activeProject ||
+          typeof payload?.startTime !== 'number'
+        )
+        {
+          return;
+        }
+
+        const focusedPiece =
+          activeProject.pieces.find(
+            (piece) =>
+              piece.id ===
+              activeProject.focusedPieceId
+          );
+
+        if (!focusedPiece)
+        {
+          return;
+        }
+
+        const spatialPiece =
+          resolveSpatialPiece(
+            focusedPiece.id,
+            activeProject.pieces
+          ) ?? focusedPiece;
+
+        const route =
+          activeProject.routes.find(
+            (candidate) =>
+              candidate.pieceId ===
+              spatialPiece.id
+          );
+
+        if (!route)
+        {
+          return;
+        }
+
+        const routeLeg =
+          getRouteLegs(route)[0];
+
+        if (!routeLeg)
+        {
+          return;
+        }
+
+        const routeMap =
+  [
+    activeMap,
+    ...projectMaps,
+    ...pendingMaps,
+  ].find(
+    (map) =>
+      map?.id ===
+      routeLeg.start.mapId
+  );
+
+if (!routeMap)
+{
+  console.error(
+    '[Regions] Travel could not resolve the Route Leg map.'
+  );
+
+  return;
+}
+
+const resolvedPathSegments =
+  resolvePathSegments(
+    activePathNetwork.segments,
+    activePathNetwork.terminals,
+    activeFeatures
+  );
+
+const distance =
+  getRouteLegPhysicalDistance(
+    routeLeg,
+    routeMap.imageRegistration?.distanceScale,
+    activeFeatures,
+    activeProject.pieces,
+    activePathNetwork.terminals,
+    resolvedPathSegments,
+    activeSections,
+    activeSectionEdges,
+    activeSectionNodes
+  );
+
+if (!distance)
+{
+  console.error(
+    '[Regions] Travel could not calculate Route Leg distance.'
+  );
+
+  return;
+}
+
+void moduleEventBus
+  .request<{
+    duration: number;
+    speedMph: number;
+  }>(
+    'rules.executeFunction',
+    {
+      functionId:
+        'TravelTime',
+
+      input: {
+        distance,
+        pace:
+          payload.pace ?? 'medium',
+      },
+    }
+  )
+  .then((result) =>
+  {
+    const endTime =
+      payload.startTime! +
+      result.duration;
+
+    console.log(
+      '[Regions] Route Leg prospected.',
+      {
+        pieceId:
+          spatialPiece.id,
+        routeId:
+          route.id,
+        routeLegId:
+          routeLeg.id,
+        startTime:
+          payload.startTime,
+        endTime,
+        duration:
+          result.duration,
+        speedMph:
+          result.speedMph,
+        distance,
+        pace:
+          payload.pace ?? 'medium',
+      }
+    );
+  })
+  .catch((error: unknown) =>
+  {
+    console.error(
+      '[Regions] Unable to calculate travel time.',
+      error
+    );
+  });
+      }
+    );
+
+  return () =>
+  {
+    unsubscribeTravel();
+  };
+}, [
+  activeProject,
+  activeMap,
+  projectMaps,
+  pendingMaps,
+  activePathNetwork,
+  activeFeatures,
+  activeSections,
+  activeSectionEdges,
+  activeSectionNodes,
+]);
 
   useEffect(() => {
     return () => {
