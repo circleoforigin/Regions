@@ -3,19 +3,35 @@ import {
   projectEventDefinitions,
   projectQueryDefinitions,
 } from '@settingforge/module-sdk';
-
 import type {
+  CommandDefinition,
   EventDefinition,
 } from '@settingforge/module-sdk';
-
 import {
   emitImageEventDefinition,
   locationEventDefinitions,
 } from '../events/LocationEvents';
+import { regionsSpatialQueryDefinitions } from './RegionsSpatialCapabilities';
 
-import {
-  regionsSpatialQueryDefinitions,
-} from './RegionsSpatialCapabilities';
+const travelCommandDefinition: CommandDefinition = {
+  id: 'Regions.Travel',
+  label: 'Travel',
+  description:
+    'Prospects travel for Pieces possessing Routes.',
+  input: [
+    {
+      key: 'startTime',
+      label: 'Start Time',
+      type: 'number',
+      required: true,
+    },
+    {
+      key: 'pace',
+      label: 'Travel Pace',
+      type: 'string',
+    },
+  ],
+};
 
 const travelLegProspectedEventDefinition: EventDefinition = {
   id: 'Regions.TravelLegProspected',
@@ -70,6 +86,7 @@ export const regionsEventDefinitions:
   ];
 
 export const regionsCommandDefinitions = [
+  travelCommandDefinition,
   ...projectCommandDefinitions,
 ];
 

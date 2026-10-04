@@ -1103,12 +1103,12 @@ void moduleEventBus
 };
   }, []);
 
-  useEffect(() =>
+ useEffect(() =>
 {
-  const unsubscribeTravel =
-    moduleEventBus.subscribe(
-      'Simulation.TravelRequested',
-      (message) =>
+  const unregisterTravel =
+    moduleEventBus.registerRequestHandler(
+      'Regions.Travel',
+      async (message) =>
       {
         const payload =
           message.payload as
@@ -1213,65 +1213,61 @@ if (!distance)
   return;
 }
 
-void moduleEventBus
-  .request<{
-    duration: number;
-    speedMph: number;
-  }>(
-    'rules.executeFunction',
-    {
-      functionId:
-        'TravelTime',
-
-      input: {
-        distance,
-        pace:
-          payload.pace ?? 'medium',
-      },
-    }
-  )
-  .then((result) =>
-  {
-    const endTime =
-      payload.startTime! +
-      result.duration;
-
-    console.log(
-      '[Regions] Route Leg prospected.',
+const result =
+  await moduleEventBus
+    .request<{
+      duration: number;
+      speedMph: number;
+    }>(
+      'rules.executeFunction',
       {
-        pieceId:
-          spatialPiece.id,
-        routeId:
-          route.id,
-        routeLegId:
-          routeLeg.id,
-        startTime:
-          payload.startTime,
-        endTime,
-        duration:
-          result.duration,
-        speedMph:
-          result.speedMph,
-        distance,
-        pace:
-          payload.pace ?? 'medium',
+        functionId:
+          'TravelTime',
+
+        input: {
+          distance,
+          pace:
+            payload.pace ?? 'medium',
+        },
       }
     );
-  })
-  .catch((error: unknown) =>
+
+const endTime =
+  payload.startTime +
+  result.duration;
+
+console.log(
+  '[Regions] Route Leg prospected.',
   {
-    console.error(
-      '[Regions] Unable to calculate travel time.',
-      error
-    );
-  });
+    pieceId:
+      spatialPiece.id,
+    routeId:
+      route.id,
+    routeLegId:
+      routeLeg.id,
+    startTime:
+      payload.startTime,
+    endTime,
+    duration:
+      result.duration,
+    speedMph:
+      result.speedMph,
+    distance,
+    pace:
+      payload.pace ?? 'medium',
+  }
+);
+
+return {
+  accepted: true,
+};
       }
     );
 
   return () =>
-  {
-    unsubscribeTravel();
-  };
+{
+  unregisterTravel();
+};
 }, [
   activeProject,
   activeMap,
