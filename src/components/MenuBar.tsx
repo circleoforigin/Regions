@@ -544,15 +544,9 @@ function MenuBar({
             </button>
           </div>
         )}
-      </div>
+      </div>   
 
-      {projectName && (
-        <div className="menu-project-name">
-          {projectName}.proj
-        </div>
-      )}
-
-            <div className="menu-bar-spacer" />
+      <div className="menu-bar-spacer" />
 
       <ModeSelector
         mode={interactionMode}
