@@ -1228,8 +1228,8 @@ const result =
 
         input: {
           distance,
-          pace:
-            payload.pace ?? 'medium',
+          pace: payload.pace ?? 'medium',
+          movementSpeed: 30,
         },
       }
     );

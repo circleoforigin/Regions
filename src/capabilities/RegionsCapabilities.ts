@@ -81,6 +81,11 @@ const travelLegProspectedEventDefinition: EventDefinition = {
       type: 'number',
     },    
     {
+      key: 'speedMph',
+      label: 'Speed MPH',
+      type: 'number',
+    },
+    {
       key: 'pace',
       label: 'Travel Pace',
       type: 'string',
