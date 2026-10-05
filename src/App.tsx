@@ -62,7 +62,10 @@ import type { PathSegment } from './models/Path';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
-import type { Route } from './models/Route';
+import type {
+  Route,
+  RouteLegProfile,
+} from './models/Route';
 import { getRouteLegs } from './models/Route';
 import { getRouteLegPhysicalDistance } from './navigation/RouteDistance';
 import { getRouteLegSpatialContext } from './navigation/RouteSpatialContext';
@@ -2975,7 +2978,8 @@ function updatePiecePosition(
 
 function setPieceRoute(
   pieceId: string,
-  nodes: Route['nodes']
+  nodes: Route['nodes'],
+  legProfiles: RouteLegProfile[]
 ) {
   if (!activeProject) {
     return;
@@ -2997,8 +3001,9 @@ const route: Route = {
   createdAt:
     existingRoute?.createdAt ??
     now,
-  updatedAt: now,
-  nodes,
+   updatedAt: now,
+   nodes,
+   legProfiles,
 };
 
   const project = {
@@ -7291,14 +7296,16 @@ onEditPiece={handleEditPiece}
         onDisbandParty={handleDisbandParty}
         onPieceTrackedChange={handlePieceTrackedChange}
         onSetPieceRoute={(
-  piece,
-  nodes
-) => {
-  setPieceRoute(
-    piece.id,
-    nodes
-  );
-}}
+          piece,
+          nodes,
+          legProfiles
+        ) => {
+          setPieceRoute(
+            piece.id,
+            nodes,
+            legProfiles
+          );
+        }}
         onClearPieceRoute={(piece) => {
           clearPieceRoute(piece.id);
         }}

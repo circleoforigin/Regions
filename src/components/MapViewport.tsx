@@ -12,7 +12,11 @@ import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
 import ModeHelp from '../interaction/ModeHelp';
 import type { PiecePathDock } from '../models/Piece';
-import type { Route, RouteNode } from '../models/Route';
+import type {
+  Route,
+  RouteLegProfile,
+  RouteNode,
+} from '../models/Route';
 import { routeNodesToDistanceAnchors } from '../navigation/RouteDistance';
 import {
   findFirstNavigationBoundaryCrossing,
@@ -21,7 +25,7 @@ import {
 import type { RulesetExtensionData } from '../models/RulesetExtensionData';
 import RulesetInteractionPanel from '../rules/RulesetInteractionPanel';
 import { useRulesetInteraction } from '../rules/useRulesetInteraction';
-
+import { convertMapDistance } from '../interaction/distance/DistanceMeasurement';
 import {
   Fragment,
   forwardRef,
@@ -266,7 +270,8 @@ onPieceTrackedChange?: (pieceId: string, tracked: boolean) => void;
 routes: Route[];
 onSetPieceRoute?: (
   piece: Piece,
-  nodes: Route['nodes']
+  nodes: Route['nodes'],
+  legProfiles: RouteLegProfile[]
 ) => void;
 onClearPieceRoute?: (
   piece: Piece
@@ -2457,10 +2462,90 @@ for (
   }
 }
 
+const legProfiles: RouteLegProfile[] = [];
+
+for (
+  let index = 0;
+  index < distanceSegments.length;
+  index += 1
+)
+{
+  const segment =
+    distanceSegments[index];
+
+  const startNode =
+    nodes[index];
+
+  const endNode =
+    nodes[index + 1];
+
+  if (!startNode || !endNode)
+  {
+    continue;
+  }
+
+  const distance =
+    convertMapDistance(
+      segment.mapDistance,
+      imageRegistration?.distanceScale
+    );
+
+  if (!distance)
+  {
+    continue;
+  }
+
+  let mapDistanceFromStart = 0;
+
+  const points =
+    segment.points.map(
+      (position, pointIndex) =>
+      {
+        if (pointIndex > 0)
+        {
+          const previous =
+            segment.points[
+              pointIndex - 1
+            ];
+
+          mapDistanceFromStart +=
+            Math.hypot(
+              position.x -
+                previous.x,
+              position.y -
+                previous.y
+            );
+        }
+
+        return {
+          position,
+
+          distanceFromLegStart:
+            convertMapDistance(
+              mapDistanceFromStart,
+              imageRegistration
+                ?.distanceScale
+            ) ?? {
+              value: 0,
+              unit: distance.unit,
+            },
+        };
+      }
+    );
+
+  legProfiles.push({
+    legId:
+      `${startNode.id}:${endNode.id}`,
+    distance,
+    points,
+  });
+}
+
   if (nodes.length > 0) {
     onSetPieceRoute?.(
       piece,
-      nodes
+      nodes,
+      legProfiles
     );
   }
 
