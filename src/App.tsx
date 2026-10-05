@@ -3181,15 +3181,32 @@ async function handlePieceDrop(
   routeNodeIndex ===
   pieceRoute.nodes.length - 1;
 
+const remainingNodes =
+  pieceRoute.nodes.slice(
+    routeNodeIndex
+  );
+
+const remainingLegIds =
+  new Set(
+    remainingNodes
+      .slice(0, -1)
+      .map(
+        (node, index) =>
+          `${node.id}:${remainingNodes[index + 1].id}`
+      )
+  );
+
 const nextRoute =
   reachedFinalNode
     ? undefined
     : {
         ...pieceRoute,
         updatedAt: new Date(),
-        nodes:
-          pieceRoute.nodes.slice(
-            routeNodeIndex
+        nodes: remainingNodes,
+        legProfiles:
+          pieceRoute.legProfiles?.filter(
+            (profile) =>
+              remainingLegIds.has(profile.legId)
           ),
       };
 

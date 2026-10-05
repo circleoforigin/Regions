@@ -42,6 +42,7 @@ export interface RouteNodeSource {
 
 export interface RouteTraversalPoint
 {
+  mapId: string;
   position: SpatialPoint;
   distanceFromLegStart: PhysicalDistance;
   spatialContext?: SpatialContext;
