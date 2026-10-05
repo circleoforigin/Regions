@@ -197,7 +197,12 @@ function App() {
   );
 
   const [activeFeatures, setActiveFeatures] = useState<Feature[]>([]);
-  
+
+  const [
+    projectFeatures,
+    setProjectFeatures,
+  ] = useState<Feature[]>([]);
+
   const [
     activePathNetwork,
     setActivePathNetwork,
@@ -2057,6 +2062,56 @@ async function loadEffectiveMapWithFeatures(
 
   return loadMapState(effectiveMap);
 }
+
+async function loadProjectFeatures(): Promise<void>
+{
+  const features =
+    await Promise.all(
+      projectMaps.map(
+        (map) =>
+          loadEffectiveMapFeatures(map)
+      )
+    );
+
+  const featuresById =
+    new Map<string, Feature>();
+
+  for (const feature of features.flat())
+  {
+    featuresById.set(
+      feature.id,
+      feature
+    );
+  }
+
+  setProjectFeatures(
+    [...featuresById.values()]
+  );
+}
+
+useEffect(() =>
+{
+  if (!activeProject)
+  {
+    setProjectFeatures([]);
+    return;
+  }
+
+  void loadProjectFeatures().catch(
+    (error) =>
+    {
+      console.error(
+        'Unable to load Project Features:',
+        error
+      );
+    }
+  );
+}, [
+  activeProject,
+  projectMaps,
+  pendingFeatures,
+  pendingFeatureDeletionIds,
+]);
 
 type LoadedMapState = Awaited<
   ReturnType<
@@ -7239,6 +7294,7 @@ mapMediaSlotsEnabled={
           }
         }}
         features={activeFeatures}
+        projectFeatures={projectFeatures}
         pathNetwork={activePathNetwork}
         onPathNetworkChange={handlePathNetworkChange}
         onSelectedPathChange={setSelectedPathId}

@@ -2520,8 +2520,8 @@ for (
         }
 
         return {
+          mapId,
           position,
-
           distanceFromLegStart:
             convertMapDistance(
               mapDistanceFromStart,
