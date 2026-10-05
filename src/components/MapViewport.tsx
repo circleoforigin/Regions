@@ -198,6 +198,7 @@ onCalibrationPointMove?: (
   point: Point
 ) => void;
 features: Feature[];
+projectFeatures?: Feature[];
 pathNetwork: PathNetwork;
 
 onPathNetworkChange: (
@@ -384,6 +385,7 @@ function MapViewport({
   onCalibrationPoint,
   onCalibrationPointMove,
   features,
+  projectFeatures = features,
   pathNetwork,
   onPathNetworkChange,
   onPathMapChange,
