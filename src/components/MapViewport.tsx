@@ -27,6 +27,12 @@ import RulesetInteractionPanel from '../rules/RulesetInteractionPanel';
 import { useRulesetInteraction } from '../rules/useRulesetInteraction';
 import { convertMapDistance } from '../interaction/distance/DistanceMeasurement';
 import {
+  findSectorCrossings,
+  OVERWORLD_SECTOR_RESOLUTION,
+} from '../spatial/Sector';
+import { resolveSpatialContext } from '../spatial/SpatialContextResolver';
+import { resolveWorldPosition } from '../spatial/WorldPositionResolver';
+import {
   Fragment,
   forwardRef,
   useEffect,
@@ -175,6 +181,7 @@ export interface LocationMapMetadata {
 interface MapViewportProps {
   imageUrl: string;
   mapId: string;
+  map: RegionMap;
   mapName: string;
   mapTypeId?: string;
   parentMapName: string;
@@ -184,14 +191,11 @@ interface MapViewportProps {
   onParentMapChange: (mapId: string) => void;
   onMakeWorldRoot: () => void;
   imageRegistration?: MapImageRegistration;
-calibrationActive?: boolean;
+  calibrationActive?: boolean;
+  calibrationFirstPoint?: Point | null;
+  calibrationSecondPoint?: Point | null;
 
-calibrationFirstPoint?: Point | null;
-calibrationSecondPoint?: Point | null;
-
-onCalibrationPoint?: (
-  point: Point
-) => void;
+onCalibrationPoint?: (point: Point) => void;
 
 onCalibrationPointMove?: (
   pointIndex: 0 | 1,
@@ -298,7 +302,6 @@ onSelectedPathChange?: (
 onDeleteFeature?: (
   feature: Feature
 ) => void;
-
 onNewFeatureRequest?: (
   x: number,
   y: number
@@ -373,6 +376,7 @@ const MapViewport = forwardRef<MapViewportHandle, MapViewportProps>(
 function MapViewport({
   imageUrl,
   mapId,
+  map,
   mapName,
   mapTypeId,
   parentMapName,
@@ -389,9 +393,6 @@ function MapViewport({
   onCalibrationPointMove,
   features,
   projectFeatures = features,
-  projectSections = sections,
-  projectSectionEdges = sectionEdges,
-  projectSectionNodes = sectionNodes,
   pathNetwork,
   onPathNetworkChange,
   onPathMapChange,
@@ -442,6 +443,9 @@ function MapViewport({
   sections = [],
   sectionNodes = [],
   sectionEdges = [],
+  projectSections = sections,
+  projectSectionEdges = sectionEdges,
+  projectSectionNodes = sectionNodes,
   sectionMode = null,
   onSectionModeChange,
   onCreateSection,
@@ -2366,6 +2370,23 @@ function finishRouteAuthoring() {
     return;
   }
 
+  const routeMaps = new Map<string, RegionMap>();
+
+  for (const candidate of locationMaps)
+  {
+    routeMaps.set(
+      candidate.id,
+      candidate
+    );
+  }
+
+  routeMaps.set(
+    map.id,
+    map
+  );
+
+  const spatialMaps = [...routeMaps.values()];
+
   const nodes: RouteNode[] = [];
 const routeAnchors =
   distanceSegments.length > 0
@@ -2503,43 +2524,160 @@ for (
     continue;
   }
 
-  let mapDistanceFromStart = 0;
+    let mapDistanceFromStart = 0;
 
-  const points =
-    segment.points.map(
-      (position, pointIndex) =>
+  const points: RouteLegProfile['points'] =
+    [];
+
+  const addTraversalPoint = (
+    position: {
+      x: number;
+      y: number;
+    },
+    distanceFromStart: number
+  ) =>
+  {
+    const spatialContext =
+      resolveSpatialContext(
+        mapId,
+        position,
+        spatialMaps,
+        projectFeatures,
+        projectSections,
+        projectSectionEdges,
+        projectSectionNodes,
+        OVERWORLD_SECTOR_RESOLUTION
+      );
+
+    points.push({
+      mapId,
+      position,
+      distanceFromLegStart:
+        convertMapDistance(
+          distanceFromStart,
+          imageRegistration
+            ?.distanceScale
+        ) ?? {
+          value: 0,
+          unit: distance.unit,
+        },
+      ...(spatialContext
+        ? { spatialContext }
+        : {}),
+    });
+  };
+
+  for (
+    let pointIndex = 0;
+    pointIndex < segment.points.length;
+    pointIndex += 1
+  )
+  {
+    const position =
+      segment.points[pointIndex];
+
+    if (pointIndex === 0)
+    {
+      addTraversalPoint(
+        position,
+        0
+      );
+
+      continue;
+    }
+
+    const previous =
+      segment.points[
+        pointIndex - 1
+      ];
+
+    const segmentMapDistance =
+      Math.hypot(
+        position.x - previous.x,
+        position.y - previous.y
+      );
+
+    const worldStart =
+      resolveWorldPosition(
+        mapId,
+        previous,
+        spatialMaps,
+        projectFeatures
+      );
+
+    const worldEnd =
+      resolveWorldPosition(
+        mapId,
+        position,
+        spatialMaps,
+        projectFeatures
+      );
+
+    if (
+      worldStart &&
+      worldEnd &&
+      worldStart.mapId === worldEnd.mapId
+    )
+    {
+      const worldMap =
+        spatialMaps.find(
+          (candidate) =>
+            candidate.id ===
+            worldStart.mapId
+        );
+
+      const worldDistanceScale =
+        worldMap
+          ?.imageRegistration
+          ?.distanceScale;
+
+      if (worldDistanceScale)
       {
-        if (pointIndex > 0)
+        const crossings =
+          findSectorCrossings(
+            worldStart,
+            worldEnd,
+            worldDistanceScale,
+            OVERWORLD_SECTOR_RESOLUTION
+          );
+
+        for (const crossing of crossings)
         {
-          const previous =
-            segment.points[
-              pointIndex - 1
-            ];
-
-          mapDistanceFromStart +=
-            Math.hypot(
-              position.x -
-                previous.x,
-              position.y -
+          const crossingPosition = {
+            x:
+              previous.x +
+              (
+                position.x -
+                previous.x
+              ) *
+              crossing.fraction,
+            y:
+              previous.y +
+              (
+                position.y -
                 previous.y
-            );
-        }
+              ) *
+              crossing.fraction,
+          };
 
-        return {
-          mapId,
-          position,
-          distanceFromLegStart:
-            convertMapDistance(
-              mapDistanceFromStart,
-              imageRegistration
-                ?.distanceScale
-            ) ?? {
-              value: 0,
-              unit: distance.unit,
-            },
-        };
+          addTraversalPoint(
+            crossingPosition,
+            mapDistanceFromStart +
+              segmentMapDistance *
+                crossing.fraction
+          );
+        }
       }
+    }
+
+    mapDistanceFromStart +=
+      segmentMapDistance;
+
+    addTraversalPoint(
+      position,
+      mapDistanceFromStart
     );
+  }
 
   legProfiles.push({
     legId:

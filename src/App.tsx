@@ -7397,6 +7397,7 @@ mapMediaSlotsEnabled={
         ref={mapViewportRef}
         imageUrl={activeMapImageUrl}
         mapId={activeMap.id}
+        map={activeMap}
         mapName={activeMap.name}
         mapTypeId={activeMap.featureTypeId}
         parentMapName={parentMapName}
