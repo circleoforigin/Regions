@@ -1,4 +1,6 @@
+import type { PhysicalDistance } from '../interaction/distance/DistanceMeasurement';
 import type { SpatialPoint } from '../spatial/SpatialAnchor';
+import type { SpatialContext } from '../spatial/SpatialContext';
 
 export interface Route {
   id: string;
@@ -17,13 +19,39 @@ export interface Route {
    * When the Piece reaches the final
    * node, the route is complete.
    */
-  nodes: RouteNode[];
+    nodes: RouteNode[];
+
+  /*
+   * Spatial travel facts resolved while
+   * the Route's Map is loaded.
+   *
+   * Profiles are keyed by the stable
+   * RouteLeg ID rather than array index
+   * so Route progress may discard earlier
+   * nodes without changing the identity
+   * of the remaining Legs.
+   */
+  legProfiles?: RouteLegProfile[];
 }
 
 export interface RouteNodeSource {
   moduleId: string;
   type: string;
   referenceId?: string;
+}
+
+export interface RouteTraversalPoint
+{
+  position: SpatialPoint;
+  distanceFromLegStart: PhysicalDistance;
+  spatialContext?: SpatialContext;
+}
+
+export interface RouteLegProfile
+{
+  legId: string;
+  distance: PhysicalDistance;
+  points: RouteTraversalPoint[];
 }
 
 export type RouteNode =
