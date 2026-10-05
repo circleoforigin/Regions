@@ -210,11 +210,27 @@ function App() {
     terminals: [],
     segments: [],
   });
-  const [activeSections, setActiveSections] = useState<Section[]>([]);
+    const [activeSections, setActiveSections] = useState<Section[]>([]);
   const [activeSectionNodes, setActiveSectionNodes] =
     useState<SectionNode[]>([]);
   const [activeSectionEdges, setActiveSectionEdges] =
     useState<SectionEdge[]>([]);
+
+  const [
+    projectSections,
+    setProjectSections,
+  ] = useState<Section[]>([]);
+
+  const [
+    projectSectionNodes,
+    setProjectSectionNodes,
+  ] = useState<SectionNode[]>([]);
+
+  const [
+    projectSectionEdges,
+    setProjectSectionEdges,
+  ] = useState<SectionEdge[]>([]);
+
   const {
     interactionMode,
     setInteractionMode,
@@ -2111,6 +2127,124 @@ useEffect(() =>
   projectMaps,
   pendingFeatures,
   pendingFeatureDeletionIds,
+]);
+
+useEffect(() =>
+{
+  let cancelled = false;
+
+  async function loadProjectSectionData()
+  {
+    if (!activeProject)
+    {
+      setProjectSections([]);
+      setProjectSectionEdges([]);
+      setProjectSectionNodes([]);
+      return;
+    }
+
+    const storedSections =
+      await Promise.all(
+        projectMaps
+          .filter(
+            (map) =>
+              map.id !== activeMap?.id
+          )
+          .map(
+            (map) =>
+              sectionRepository.loadSections(
+                map.sectionIds ?? []
+              )
+          )
+      );
+
+    const sections = [
+      ...storedSections.flat(),
+      ...activeSections,
+    ];
+
+    const storedEdges =
+      await sectionEdgeRepository.loadEdges(
+        [
+          ...new Set(
+            sections
+              .filter(
+                (section) =>
+                  section.mapId !== activeMap?.id
+              )
+              .flatMap(
+                (section) =>
+                  section.edgeIds
+              )
+          ),
+        ]
+      );
+
+    const edges = [
+      ...storedEdges,
+      ...activeSectionEdges,
+    ];
+
+    const storedNodes =
+      await sectionNodeRepository.loadNodes(
+        [
+          ...new Set(
+            edges
+              .filter(
+                (edge) =>
+                  edge.mapId !== activeMap?.id
+              )
+              .flatMap(
+                (edge) => [
+                  edge.startNodeId,
+                  edge.endNodeId,
+                ]
+              )
+          ),
+        ]
+      );
+
+    const nodes = [
+      ...storedNodes,
+      ...activeSectionNodes,
+    ];
+
+    if (cancelled)
+    {
+      return;
+    }
+
+    setProjectSections(sections);
+    setProjectSectionEdges(edges);
+    setProjectSectionNodes(nodes);
+  }
+
+  void loadProjectSectionData().catch(
+    (error) =>
+    {
+      if (cancelled)
+      {
+        return;
+      }
+
+      console.error(
+        'Unable to load Project Section data:',
+        error
+      );
+    }
+  );
+
+  return () =>
+  {
+    cancelled = true;
+  };
+}, [
+  activeProject,
+  activeMap,
+  projectMaps,
+  activeSections,
+  activeSectionEdges,
+  activeSectionNodes,
 ]);
 
 type LoadedMapState = Awaited<
@@ -7295,6 +7429,9 @@ mapMediaSlotsEnabled={
         }}
         features={activeFeatures}
         projectFeatures={projectFeatures}
+        projectSections={projectSections}
+        projectSectionEdges={projectSectionEdges}
+        projectSectionNodes={projectSectionNodes}
         pathNetwork={activePathNetwork}
         onPathNetworkChange={handlePathNetworkChange}
         onSelectedPathChange={setSelectedPathId}
