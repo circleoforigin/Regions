@@ -3,37 +3,17 @@ import {
   useEffect,
   useState,
 } from 'react';
-
-import type {
-  Feature,
-} from '../models/Feature';
-
-import type {
-  Map,
-} from '../models/Map';
-
-import type {
-  PathTerminalReference,
-} from '../models/Path';
-
-import type {
-  SpatialPoint,
-} from '../spatial/SpatialAnchor';
-
+import type { Feature } from '../models/Feature';
+import type { Map } from '../models/Map';
+import type { PathTerminalReference } from '../models/Path';
+import type { SpatialPoint } from '../spatial/SpatialAnchor';
 import {
   createPathSegment,
   createStandalonePathTerminal,
   splitPathSegment,
 } from './PathAuthoring';
-
-import {
-  insertPathShapePoint,
-} from './PathGeometry';
-
-import {
-  resolvePathSegment,
-} from './PathMapState';
-
+import { insertPathShapePoint } from './PathGeometry';
+import { resolvePathSegment } from './PathMapState';
 import {
   deletePathSegment,
   deletePathShapePoint,
@@ -44,10 +24,7 @@ import {
   savePathTerminal,
   type PathNetwork,
 } from './PathNetwork';
-
-import {
-  usePathAuthoring,
-} from './usePathAuthoring';
+import { usePathAuthoring } from './usePathAuthoring';
 
 interface UsePathInteractionOptions {
   active: boolean;
@@ -55,9 +32,7 @@ interface UsePathInteractionOptions {
   network: PathNetwork;
   features: Feature[];
 
-  onNetworkChange: (
-    network: PathNetwork
-  ) => void;
+  onNetworkChange: (network: PathNetwork) => void;
 
   onMapChange: (
     updater: (
@@ -74,8 +49,7 @@ export function usePathInteraction({
   onNetworkChange,
   onMapChange,
 }: UsePathInteractionOptions) {
-  const authoring =
-    usePathAuthoring();
+  const authoring = usePathAuthoring();
 
   const [
     movingTerminalId,
@@ -107,26 +81,37 @@ export function usePathInteraction({
     useCallback(
       async (
         position: SpatialPoint,
-        feature?: Feature
+        feature?: Feature,
+        terminalId?: string
       ) => {
-        if (!active) {
+        if (!active) 
+        {
           return;
         }
 
-        let terminal:
-          PathTerminalReference;
+        let terminal: PathTerminalReference;
 
         let createdStandalone:
           ReturnType<
             typeof createStandalonePathTerminal
           > | null = null;
 
-        if (feature) {
+        if (terminalId)
+        {
+          terminal = {
+            kind: 'standalone',
+            terminalId,
+          };
+        }
+        else if (feature)
+        {
           terminal = {
             kind: 'feature',
             featureId: feature.id,
           };
-        } else {
+        }
+        else
+        {
           createdStandalone =
             createStandalonePathTerminal(
               mapId,
@@ -135,13 +120,14 @@ export function usePathInteraction({
 
           terminal = {
             kind: 'standalone',
-            terminalId:
-              createdStandalone.id,
+            terminalId: createdStandalone.id,
           };
         }
 
-        if (!authoring.draft) {
-          if (createdStandalone) {
+        if (!authoring.draft) 
+        {
+          if (createdStandalone)
+        {
             await onMapChange(
               async (map) =>
                 savePathTerminal(
@@ -160,9 +146,7 @@ export function usePathInteraction({
             });
           }
 
-          authoring.begin(
-            terminal
-          );
+          authoring.begin(terminal);
 
           return;
         }
@@ -195,8 +179,7 @@ export function usePathInteraction({
         );
 
         onNetworkChange({
-          terminals:
-            createdStandalone
+          terminals: createdStandalone
               ? [
                   ...network.terminals,
                   createdStandalone,
@@ -233,9 +216,7 @@ export function usePathInteraction({
           return;
         }
 
-        authoring.addShapePoint(
-          position
-        );
+        authoring.addShapePoint(position);
       },
       [
         active,
@@ -249,7 +230,8 @@ export function usePathInteraction({
         segmentId: string,
         position: SpatialPoint
       ) => {
-        if (!active) {
+        if (!active)
+        {
           return;
         }
 
@@ -260,7 +242,8 @@ export function usePathInteraction({
               segmentId
           );
 
-        if (!segment) {
+        if (!segment)
+        {
           return;
         }
 
@@ -271,7 +254,8 @@ export function usePathInteraction({
             features
           );
 
-        if (!resolved) {
+        if (!resolved)
+        {
           return;
         }
 
@@ -318,7 +302,8 @@ export function usePathInteraction({
         segmentId: string,
         position: SpatialPoint
       ) => {
-        if (!active) {
+        if (!active)
+        {
           return;
         }
 
@@ -329,7 +314,8 @@ export function usePathInteraction({
               segmentId
           );
 
-        if (!segment) {
+        if (!segment)
+        {
           return;
         }
 
@@ -340,7 +326,8 @@ export function usePathInteraction({
             features
           );
 
-        if (!resolved) {
+        if (!resolved)
+        {
           return;
         }
 
@@ -405,7 +392,8 @@ export function usePathInteraction({
               segmentId
           );
 
-        if (!segment) {
+        if (!segment)
+        {
           return;
         }
 
@@ -440,7 +428,8 @@ export function usePathInteraction({
       async (
         segmentId: string
       ) => {
-        if (!active) {
+        if (!active)
+        {
           return;
         }
 
@@ -454,9 +443,7 @@ export function usePathInteraction({
               );
 
             const deletedTerminals =
-              new Set(
-                result.deletedTerminalIds
-              );
+              new Set(result.deletedTerminalIds);
 
             onNetworkChange({
               terminals:
@@ -492,13 +479,12 @@ export function usePathInteraction({
       (
         terminalId: string
       ) => {
-        if (!active) {
+        if (!active)
+        {
           return;
         }
 
-        setMovingTerminalId(
-          terminalId
-        );
+        setMovingTerminalId(terminalId);
       },
       [active]
     );
@@ -508,7 +494,8 @@ export function usePathInteraction({
       async (
         position: SpatialPoint
       ) => {
-        if (!movingTerminalId) {
+        if (!movingTerminalId)
+        {
           return;
         }
 
@@ -521,7 +508,8 @@ export function usePathInteraction({
 
         setMovingTerminalId(null);
 
-        if (!terminal) {
+        if (!terminal)
+        {
           return;
         }
 
@@ -557,7 +545,8 @@ export function usePathInteraction({
         segmentId: string,
         pointId: string
       ) => {
-        if (!active) {
+        if (!active)
+        {
           return;
         }
 
@@ -579,7 +568,8 @@ export function usePathInteraction({
 
         setMovingShapePoint(null);
 
-        if (!moving) {
+        if (!moving)
+        {
           return;
         }
 
@@ -590,7 +580,8 @@ export function usePathInteraction({
               moving.segmentId
           );
 
-        if (!segment) {
+        if (!segment)
+        {
           return;
         }
 
@@ -628,8 +619,7 @@ export function usePathInteraction({
     }, []);
 
   return {
-    draft:
-      authoring.draft,
+    draft: authoring.draft,
 
     movingTerminalId,
     movingShapePoint,
@@ -651,8 +641,7 @@ export function usePathInteraction({
 
     cancelMove,
 
-    cancelDraft:
-      authoring.cancel,
+    cancelDraft: authoring.cancel,
   };
 }
 

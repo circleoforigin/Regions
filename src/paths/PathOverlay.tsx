@@ -320,20 +320,21 @@ export default function PathOverlay({
           <polyline
             key={item.segment.id}
             className={[
-  'path-segment',
-  editing
-    ? 'path-segment-editable'
-    : distanceTargeting
-      ? 'path-segment-distance-target'
-      : exploreTargeting
-        ? 'path-segment-explore-target'
-        : 'path-segment-display',
+              'path-segment',
+              `path-segment-${item.segment.type}`,
+              editing
+                ? 'path-segment-editable'
+                : distanceTargeting
+                  ? 'path-segment-distance-target'
+                  : exploreTargeting
+                    ? 'path-segment-explore-target'
+                    : 'path-segment-display',
 
-  targetedSegmentId ===
-  item.segment.id
-    ? 'path-segment-piece-target'
-    : '',
-].join(' ')}
+              targetedSegmentId ===
+              item.segment.id
+                ? 'path-segment-piece-target'
+                : '',
+            ].join(' ')}
             points={
               points
                 .map(

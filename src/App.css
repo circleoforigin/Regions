@@ -3169,6 +3169,34 @@ box-shadow:
   stroke-linejoin: round;
 }
 
+.path-segment-road {
+  stroke: #000000;
+  stroke-width: 3;
+}
+
+.path-segment-path {
+  stroke: #000000;
+  stroke-width: 2;
+  stroke-dasharray: 2 6;
+}
+
+.path-segment-creek {
+  stroke: #248cff;
+  stroke-width: 2;
+  stroke-dasharray: 2 6;
+}
+
+.path-segment-river {
+  stroke: #248cff;
+  stroke-width: 3;
+}
+
+.path-segment-airway {
+  stroke: #ff8a1f;
+  stroke-width: 5;
+  opacity: 0.6;
+}
+
 .path-segment-editable {
   pointer-events: stroke;
   cursor: pointer;

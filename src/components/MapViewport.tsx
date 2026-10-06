@@ -621,6 +621,9 @@ function MapViewport({
     segmentId?: string;
     position: Point;
     pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    moved: boolean;
   } | null>(
     null
   );
@@ -638,7 +641,8 @@ useEffect(() => {
 ]);
 
 useEffect(() => {
-  if (interactionMode === 'path') {
+  if (interactionMode === 'path') 
+  {
     return;
   }
 
@@ -3169,22 +3173,32 @@ if (interactionMode === 'path') {
       event.pointerId &&
     point &&
     isPointInsideMap(point)
-  ) {
+  ) 
+  {
+    const moved =
+      pathDragPreview.moved ||
+      Math.hypot(
+        event.clientX - pathDragPreview.startClientX,
+        event.clientY - pathDragPreview.startClientY
+      ) >= 4;
+
     setPathDragPreview({
       ...pathDragPreview,
       position: point,
+      moved,
     });
 
     return;
   }
 }
 
-if (distanceInteractionActive) {
+if (distanceInteractionActive)
+{
   const viewport = viewportRef.current;
 
-  if (viewport) {
-    const rect =
-      viewport.getBoundingClientRect();
+  if (viewport) 
+  {
+    const rect = viewport.getBoundingClientRect();
 
     setDistancePointer({
       x: event.clientX - rect.left,
@@ -3192,49 +3206,46 @@ if (distanceInteractionActive) {
     });
   }
 }
-    if (sectionMode || movingSectionNode) {
+    if (sectionMode || movingSectionNode)
+    {
       const point = screenToMap(event.clientX, event.clientY);
       setSectionPointer(point);
-      if (point && movingSectionNode) {
+      if (point && movingSectionNode) 
+      {
         setMovingSectionNode({ ...movingSectionNode, position: point });
       }
     }
-    if (pendingArrivalPlacement) {
+    if (pendingArrivalPlacement)
+    {
       const point = screenToMap(event.clientX, event.clientY);
-      if (point) {
+      if (point) 
+      {
         setArrivalPreviewState({ key: arrivalPlacementKey, position: point });
       }
     }
-    if (state.editingMode === 'move-feature') {
+    if (state.editingMode === 'move-feature')
+    {
       const point = screenToMap(event.clientX, event.clientY);
       if (point) dispatch({ type: 'featureMove.preview', position: point });
       return;
     }
 
-    const drag =
-      dragRef.current;
+    const drag = dragRef.current;
 
-    if (
-      !drag ||
-      drag.pointerId !==
-        event.pointerId
-    ) {
+    if (!drag || drag.pointerId !== event.pointerId) 
+    {
       return;
     }
 
     const nextPan = {
-      x:
-        drag.startPan.x +
+      x: drag.startPan.x +
         (
-          event.clientX -
-          drag.startPointer.x
+          event.clientX - drag.startPointer.x
         ),
 
-      y:
-        drag.startPan.y +
+      y: drag.startPan.y +
         (
-          event.clientY -
-          drag.startPointer.y
+          event.clientY - drag.startPointer.y
         ),
     };
 
@@ -4133,19 +4144,18 @@ const displayedRouteSegments =
     ? locationMapMetadata[selectedFeature.id]
     : undefined;
 
-    function saveName() {
-  if (!selectedFeature) {
+function saveName()
+{
+  if (!selectedFeature) 
+  {
     return;
   }
 
-  const name =
-    nameDraft.trim();
+  const name = nameDraft.trim();
 
-  if (!name) {
-    setNameDraft(
-      selectedFeature.name
-    );
-
+  if (!name)
+  {
+    setNameDraft(selectedFeature.name);
     setEditingName(false);
     return;
   }
@@ -4156,15 +4166,14 @@ const displayedRouteSegments =
   setEditingName(false);
 }
 
-function cancelNameEdit() {
-  setNameDraft(
-    selectedFeature?.name ?? ''
-  );
-
+function cancelNameEdit()
+{
+  setNameDraft(selectedFeature?.name ?? '');
   setEditingName(false);
 }
 
-  function saveSubtitle() {
+  function saveSubtitle()
+  {
   if (!selectedFeature) return;
 
   const subtitle = subtitleDraft.trim();
@@ -4174,20 +4183,22 @@ function cancelNameEdit() {
   setEditingSubtitle(false);
 }
 
-function cancelSubtitleEdit() {
+function cancelSubtitleEdit() 
+{
   setSubtitleDraft(selectedFeature?.subtitle ?? '');
   setEditingSubtitle(false);
 }
 
 function handlePathTerminalPointerDown(
-  event:
-    React.PointerEvent<SVGCircleElement>,
+  event: React.PointerEvent<SVGCircleElement>,
   terminalId: string
-) {
+)
+{
   if (
     interactionMode !== 'path' ||
     event.button !== 0
-  ) {
+  )
+  {
     return;
   }
 
@@ -4197,46 +4208,47 @@ function handlePathTerminalPointerDown(
         candidate.id === terminalId
     );
 
-  if (!terminal) {
+  if (!terminal)
+  {
     return;
   }
 
   event.preventDefault();
   event.stopPropagation();
 
-  event.currentTarget.setPointerCapture(
-    event.pointerId
-  );
-
-  pathInteraction.beginTerminalMove(
-    terminalId
-  );
+  event.currentTarget.setPointerCapture(event.pointerId);
+  pathInteraction.beginTerminalMove(terminalId);
 
   setPathDragPreview({
     kind: 'terminal',
     id: terminalId,
     position: terminal.position,
     pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    moved: false,
   });
 }
 
 function handlePathShapePointerDown(
-  event:
-    React.PointerEvent<SVGCircleElement>,
+  event: React.PointerEvent<SVGCircleElement>,
   segmentId: string,
   pointId: string
-) {
+) 
+{
   if (
     interactionMode !== 'path' ||
     event.button !== 0
-  ) {
+  )
+  {
     return;
   }
 
   event.preventDefault();
   event.stopPropagation();
 
-  if (event.shiftKey) {
+  if (event.shiftKey)
+  {
     void pathInteraction.removeShapePoint(
       segmentId,
       pointId
@@ -4257,13 +4269,12 @@ function handlePathShapePointerDown(
         candidate.id === pointId
     );
 
-  if (!point) {
+  if (!point)
+  {
     return;
   }
 
-  event.currentTarget.setPointerCapture(
-    event.pointerId
-  );
+  event.currentTarget.setPointerCapture(event.pointerId);
 
   pathInteraction.beginShapeMove(
     segmentId,
@@ -4276,6 +4287,9 @@ function handlePathShapePointerDown(
     segmentId,
     position: point.position,
     pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    moved: false,
   });
 }
 
@@ -4294,8 +4308,7 @@ function handlePathNodePointerUp(
   event.preventDefault();
   event.stopPropagation();
 
-  const preview =
-    pathDragPreview;
+  const preview = pathDragPreview;
 
   setPathDragPreview(null);
 
@@ -4304,22 +4317,41 @@ function handlePathNodePointerUp(
     event.pointerId
   );
 
-  if (preview.kind === 'terminal') {
-    void pathInteraction
-      .commitTerminalMove(
-        preview.position
+  if (preview.kind === 'terminal')
+  {
+    if (preview.moved)
+    {
+      void pathInteraction.commitTerminalMove(preview.position);
+      return;
+    }
+
+    pathInteraction.cancelMove();
+
+    const terminal =
+      pathNetwork.terminals.find(
+        (candidate) =>
+          candidate.id === preview.id
       );
+
+    if (!terminal)
+    {
+      return;
+    }
+
+    void pathInteraction.handleTerminalIntent(
+      terminal.position,
+      undefined,
+      terminal.id
+    );
 
     return;
   }
 
-  void pathInteraction
-    .commitShapeMove(
-      preview.position
-    );
+  void pathInteraction.commitShapeMove(preview.position);
 }
 
-function cancelPathNodeMove() {
+function cancelPathNodeMove()
+{
   setPathDragPreview(null);
   pathInteraction.cancelMove();
 }
@@ -4327,7 +4359,8 @@ function cancelPathNodeMove() {
 function handleSectionNodePointerDown(
   event: React.PointerEvent<HTMLButtonElement>,
   node: SectionNode
-) {
+)
+{
   event.stopPropagation();
 
   if (event.button !== 0) {
