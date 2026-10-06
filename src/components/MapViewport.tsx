@@ -2688,12 +2688,17 @@ for (
     );
   }
 
-  legProfiles.push({
-    legId:
-      `${startNode.id}:${endNode.id}`,
-    distance,
-    points,
-  });
+legProfiles.push({
+  legId: `${startNode.id}:${endNode.id}`,
+  distance,
+  ...(segment.pathSegmentId
+    ? {
+        pathSegmentId:
+          segment.pathSegmentId,
+      }
+    : {}),
+  points,
+});
 }
 
   if (nodes.length > 0) {

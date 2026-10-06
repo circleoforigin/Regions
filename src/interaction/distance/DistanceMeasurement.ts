@@ -52,12 +52,14 @@ export interface DistanceSegmentBreakpoint {
   segmentId?: string;
 }
 
-export interface DistanceSegment {
+export interface DistanceSegment
+{
   start: ResolvedDistanceAnchor;
   end: ResolvedDistanceAnchor;
   mapDistance: number;
   kind: 'straight' | 'path';
   points: SpatialPoint[];
+  pathSegmentId?: string;
   breakpoints?: DistanceSegmentBreakpoint[];
 }
 

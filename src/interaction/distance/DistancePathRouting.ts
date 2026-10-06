@@ -245,6 +245,8 @@ export function getDistanceSegmentsWithPaths(
                 }
             }
 
+            const pathSegmentId = route.legs[0]?.segmentId;
+
             const crossings =
                 findNavigationAreaPolylineCrossings(
                     route.points,
@@ -270,14 +272,14 @@ export function getDistanceSegmentsWithPaths(
 
             if (crossings.length === 0) 
             {
-                result.push({
-                    start,
-                    end,
-                    mapDistance: route.distance,
-                    kind: 'path',
-                    points: route.points,
-                });
-
+result.push({
+  start,
+  end,
+  mapDistance: route.distance,
+  kind: 'path',
+  points: route.points,
+  pathSegmentId,
+});
     continue;
   }
 
@@ -430,13 +432,14 @@ export function getDistanceSegmentsWithPaths(
               splitEnd.position,
           };
 
-    result.push({
-      start: startAnchor,
-      end: endAnchor,
-      mapDistance,
-      kind: 'path',
-      points,
-    });
+result.push({
+  start: startAnchor,
+  end: endAnchor,
+  mapDistance,
+  kind: 'path',
+  points,
+  pathSegmentId,
+});
   }
 
   continue;

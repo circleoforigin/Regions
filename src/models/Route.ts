@@ -52,6 +52,7 @@ export interface RouteLegProfile
 {
   legId: string;
   distance: PhysicalDistance;
+  pathSegmentId?: string;
   points: RouteTraversalPoint[];
 }
 
