@@ -5939,12 +5939,7 @@ mapMediaSlotsEnabled={
   parentMapAvailable={Boolean(activeMap?.parentMapId)}
   addPieceEnabled={Boolean(activeProject && activeMap && activeMapImageUrl)}
   pieces={activeProject?.pieces ?? []}
-  focusedPieceId={activeProject?.focusedPieceId}
-  onFocusPiece={(pieceId) =>
-    void handleFocusPiece(
-      pieceId
-    )
-  }
+  focusedPieceId={activeProject?.focusedPieceId}  
   onGoToTrackedPiece={(pieceId) =>
     void goToPiece(
       pieceId,

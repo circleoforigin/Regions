@@ -2978,7 +2978,17 @@ box-shadow:
 }
 
 .menu-mode-control > button {
-  min-width: 92px;
+  min-width: 110px;
+  padding: 5px 9px;
+  border: 1px solid #454545;
+  background: #252525;
+  color: #eeeeee;
+  cursor: pointer;
+}
+
+.menu-mode-control > button:disabled {
+  color: #777777;
+  cursor: default;
 }
 
 .menu-mode-dropdown {
@@ -3381,18 +3391,28 @@ box-shadow:
 
 .ruleset-interaction-panel {
   display: grid;
-  gap: 10px;
+  align-content: start;
+  gap: 0;
+
   width: 100%;
+  box-sizing: border-box;
+
+  padding: 12px 14px;
 }
 
 .ruleset-interaction-field {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: 130px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 0;
 
   color: #cccccc;
   font-size: 12px;
+}
+
+.ruleset-interaction-label {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .ruleset-interaction-field input[type='text'],
@@ -3402,7 +3422,7 @@ box-shadow:
   min-width: 0;
   box-sizing: border-box;
 
-  padding: 6px;
+    padding: 2px 6px;
 
   border: 1px solid #454545;
   background: #181818;
@@ -3411,8 +3431,4 @@ box-shadow:
 
 .ruleset-interaction-field input[type='checkbox'] {
   justify-self: start;
-}
-
-.ruleset-interaction-label {
-  min-width: 0;
 }
