@@ -33,9 +33,17 @@ export interface PathShapePoint {
   position: SpatialPoint;
 }
 
+export type PathType =
+  | 'path'
+  | 'road'
+  | 'river'
+  | 'creek'
+  | 'airway';
+
 export interface PathSegment {
   id: string;
   mapId: string;
+  type: PathType;
 
    /*
    * Descriptive data is optional.

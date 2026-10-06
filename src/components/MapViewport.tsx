@@ -553,6 +553,7 @@ function MapViewport({
     patch: Partial<
       Pick<
         PathSegment,
+        | 'type'
         | 'name'
         | 'subtitle'
         | 'description'

@@ -39,6 +39,7 @@ export function createPathSegment(
   return {
     id: crypto.randomUUID(),
     mapId,
+    type: 'path',
 
     start,
     end,
@@ -90,7 +91,12 @@ export function splitPathSegment(
 
   const sharedProperties = {
     mapId: original.mapId,
+    type: original.type,
     name: original.name,
+    subtitle: original.subtitle,
+    description: original.description,
+    journalPageId: original.journalPageId,
+    rulesetData: original.rulesetData,
     layerId: original.layerId,
   };
 
