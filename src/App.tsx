@@ -1,3 +1,6 @@
+import RulesetInteractionPanel from './rules/RulesetInteractionPanel';
+import { useRulesetInteraction } from './rules/useRulesetInteraction';
+import type { RulesetExtensionData } from './models/RulesetExtensionData';
 import { copyAreaResourcesToLocation, copyLocationResourcesToArea } from './sections/AreaResources';
 import { createLocationEvents, type LocationContext } from './events/LocationEvents';
 import type { BoundaryAlignment } from './models/Map';
@@ -172,7 +175,12 @@ interface PendingArrivalIntent {
   destinationFeatureId?: string;
 }
 
-function App() {
+function App()
+{
+  const {
+    interaction: pieceRulesetInteraction,
+    loading: pieceRulesetInteractionLoading,
+  } = useRulesetInteraction('Regions.Piece');
   const loadedSectionsMapId = useRef<string | null>(null);
   const pieceAreaContexts = useRef(new Map<string, string | undefined>());
   const { state, dispatch } = useRegionsState();
@@ -842,12 +850,12 @@ const [
 
   const [editingPieceId, setEditingPieceId] =
     useState<string | null>(null);
-  const [
-    pieceEditorTab,
-    setPieceEditorTab,
-  ] = useState<'piece' | 'ruleset'>(
-    'piece'
-  );
+
+  const [pieceEditorTab, setPieceEditorTab] =
+    useState<'piece' | 'ruleset'>('piece');
+
+  const [pieceRulesetDataDraft, setPieceRulesetDataDraft] =
+    useState<RulesetExtensionData | undefined>();
 
   const [pieceNameDraft, setPieceNameDraft] = useState('');
   const [pieceShapeDraft, setPieceShapeDraft] =
@@ -3749,10 +3757,18 @@ async function focusPiece(pieceId: string, discardChanges: boolean) {
     setNavigationError(message);
   }
 }
-function handleEditPiece(piece: Piece) {
+
+function handleEditPiece(piece: Piece)
+{
   mapViewportRef.current?.cancelInteractions();
+
   setEditingPieceId(piece.id);
   setPieceEditorTab('piece');
+  setPieceRulesetDataDraft(
+    piece.rulesetData
+      ? structuredClone(piece.rulesetData)
+      : undefined
+  );
   setPieceNameDraft(piece.name);
   setPieceShapeDraft(piece.appearance.shape);
   setPieceFillDraft(piece.appearance.fillColor);
@@ -3775,6 +3791,7 @@ function handleSavePiece() {
               fillColor: pieceFillDraft,
               borderColor: pieceBorderDraft,
             },
+            rulesetData: pieceRulesetDataDraft,
           }
         : piece;
     }),
@@ -6583,6 +6600,17 @@ mapMediaSlotsEnabled={
               />
             </label>
           </>
+                ) : pieceRulesetInteractionLoading ? (
+          <div className="piece-editor-ruleset-empty">
+            Loading Ruleset data...
+          </div>
+        ) : pieceRulesetInteraction ? (
+          <RulesetInteractionPanel
+            rulesetId={pieceRulesetInteraction.rulesetId}
+            interaction={pieceRulesetInteraction.interaction}
+            value={pieceRulesetDataDraft}
+            onChange={setPieceRulesetDataDraft}
+          />
         ) : (
           <div className="piece-editor-ruleset-empty">
             No Ruleset data available.
