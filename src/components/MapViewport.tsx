@@ -465,6 +465,12 @@ function MapViewport({
 }: MapViewportProps, ref) {
   const { state, dispatch } = useRegionsState();
   const {
+    interaction: featureRulesetInteraction,
+    loading: featureRulesetLoading,
+  } = useRulesetInteraction(
+    'Regions.Feature'
+  );
+  const {
     interaction: areaRulesetInteraction,
     loading: areaRulesetLoading,
   } = useRulesetInteraction(
@@ -692,7 +698,7 @@ const getPieceRoute = (
   routes.find(
     (route) =>
       route.pieceId === pieceId
-  );
+  );  
 
 const selectedRoutePiece =
   selectedPieceId
@@ -714,6 +720,14 @@ const selectedRouteAnchors: DistanceAnchor[] =
       )
     : [];
 
+const resolvedSelectedRouteAnchors =
+  resolveDistanceAnchors(
+    selectedRouteAnchors,
+    features,
+    pieces,
+    pathNetwork.terminals
+  );
+
 const resolvedDistanceAnchors =
   resolveDistanceAnchors(
     distanceMeasurement.anchors,
@@ -721,14 +735,6 @@ const resolvedDistanceAnchors =
     pieces,
     pathNetwork.terminals
   );
-
-  const resolvedSelectedRouteAnchors =
-    resolveDistanceAnchors(
-      selectedRouteAnchors,
-      features,
-      pieces,
-      pathNetwork.terminals
-    );
 
   const resolvedPathSegments =
     resolvePathSegments(
@@ -740,15 +746,6 @@ const resolvedDistanceAnchors =
   const distanceSegments =
     getDistanceSegmentsWithPaths(
       resolvedDistanceAnchors,
-      resolvedPathSegments,
-      sections,
-      sectionEdges,
-      sectionNodes
-    );
-
-  const selectedRouteSegments =
-    getDistanceSegmentsWithPaths(
-      resolvedSelectedRouteAnchors,
       resolvedPathSegments,
       sections,
       sectionEdges,
@@ -4045,8 +4042,7 @@ const pieceTerminalNodeTarget =
           }
         : null;
 
-const displayedRouteAnchors =
-  resolvedSelectedRouteAnchors;
+const displayedRouteAnchors = resolvedSelectedRouteAnchors;
 
 const displayedRouteSegments =
   getDistanceSegmentsWithPaths(

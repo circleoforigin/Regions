@@ -51,7 +51,6 @@ interface MenuBarProps {
   addPieceEnabled: boolean;
   pieces: Piece[];
   focusedPieceId?: string;
-  onFocusPiece: (pieceId: string | null) => void;
   onGoToTrackedPiece: (pieceId: string) => void;
   zoomValue?: number;
   zoomMin?: number;
@@ -91,7 +90,6 @@ function MenuBar({
   addPieceEnabled,
   pieces,
   focusedPieceId,
-  onFocusPiece,
   onGoToTrackedPiece,
   zoomValue,
   zoomMin,

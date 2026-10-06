@@ -42,8 +42,7 @@ import type {
   ProjectRenameResponse,
 } from '@settingforge/module-sdk';
 
-import GlobalMediaSlotsDialog
-  from './components/GlobalMediaSlotsDialog';
+import GlobalMediaSlotsDialog from './components/GlobalMediaSlotsDialog';
 
 import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
@@ -70,8 +69,6 @@ import type {
   RouteLegProfile,
 } from './models/Route';
 import { getRouteLegs } from './models/Route';
-import { getRouteLegPhysicalDistance } from './navigation/RouteDistance';
-import { getRouteLegSpatialContext } from './navigation/RouteSpatialContext';
 import {
   findContainingParty,
   getPartyMembers,
@@ -113,10 +110,7 @@ import { resolveArea } from './sections/AreaContext';
 import { sectionRepository } from './sections/SectionRepository';
 import { sectionEdgeRepository } from './sections/SectionEdgeRepository';
 import { sectionNodeRepository } from './sections/SectionNodeRepository';
-import {
-  getSectionPolygon,
-  isPointInPolygon,
-} from './sections/SectionGeometry';
+import { getSectionPolygon } from './sections/SectionGeometry';
 
 import { mapRepository} from './maps/MapRepository';
 import { createDefaultMap } from './maps/DefaultMap';
