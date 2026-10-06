@@ -8,20 +8,32 @@ import type {
 
 const COLLECTION = 'path-segments';
 
-export class PathSegmentRepository {
+export class PathSegmentRepository
+{
   async loadSegment(
     id: string
-  ): Promise<PathSegment | null> {
-    return hostedCollectionRepository.load<PathSegment>(
-      COLLECTION,
-      id
-    );
+  ): Promise<PathSegment | null>
+  {
+    const segment =
+      await hostedCollectionRepository.load<PathSegment>(
+        COLLECTION,
+        id
+      );
+
+    return segment
+      ? {
+          ...segment,
+          type: segment.type ?? 'path',
+        }
+      : null;
   }
 
   async loadSegments(
     ids: string[]
-  ): Promise<PathSegment[]> {
-    if (ids.length === 0) {
+  ): Promise<PathSegment[]>
+  {
+    if (ids.length === 0)
+    {
       return [];
     }
 
@@ -31,10 +43,15 @@ export class PathSegmentRepository {
         ids
       );
 
-    return items.filter(
-      (item): item is PathSegment =>
-        item !== null
-    );
+    return items
+      .filter(
+        (item): item is PathSegment =>
+          item !== null
+      )
+      .map((segment) => ({
+        ...segment,
+        type: segment.type ?? 'path',
+      }));
   }
 
   async saveSegment(

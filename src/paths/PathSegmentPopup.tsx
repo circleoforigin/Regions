@@ -6,18 +6,16 @@ import {
 
 import type {
   PathSegment,
+  PathType,
 } from '../models/Path';
+import RichTextEditor from '../components/RichTextEditor';
+import type { RichTextDocument } from '../models/RichText';
+import type { ActiveRulesetInteraction } from '../rules/RulesetInteraction';
 
-import RichTextEditor
-  from '../components/RichTextEditor';
+import RulesetInteractionPanel from '../rules/RulesetInteractionPanel';
 
-import type {
-  RichTextDocument,
-} from '../models/RichText';
-
-import type {
-  FeaturePopupAction,
-} from '../components/MapViewport';
+import type { RulesetExtensionData } from '../models/RulesetExtensionData';
+import type { FeaturePopupAction } from '../components/MapViewport';
 
 type PathPopupTab =
   | 'description'
@@ -31,34 +29,37 @@ interface PathSegmentPopupProps {
     x: number;
     y: number;
   };
-
+  rulesetInteraction: ActiveRulesetInteraction | null;
+  rulesetLoading: boolean;
+  onTypeChange?: (
+    segmentId: string,
+    type: PathType
+  ) => void;
+  onRulesetDataChange?: (
+    segmentId: string,
+    rulesetData: RulesetExtensionData
+  ) => void;
   onNameChange?: (
     segmentId: string,
     name: string
   ) => void;
-
   onSubtitleChange?: (
     segmentId: string,
     subtitle: string
   ) => void;
-
   onDescriptionChange?: (
     segmentId: string,
     description: RichTextDocument
   ) => void;
-
   onPointerDown: (
     event: ReactPointerEvent<HTMLDivElement>
   ) => void;
-
   onPointerMove: (
     event: ReactPointerEvent<HTMLDivElement>
   ) => void;
-
   onPointerUp: (
     event: ReactPointerEvent<HTMLDivElement>
   ) => void;
-
   onPointerCancel: () => void;
 }
 
@@ -66,6 +67,10 @@ export default function PathSegmentPopup({
   segment,
   actions = [],
   position,
+  rulesetInteraction,
+  rulesetLoading,
+  onTypeChange,
+  onRulesetDataChange,
   onNameChange,
   onSubtitleChange,
   onDescriptionChange,
@@ -340,7 +345,33 @@ export default function PathSegmentPopup({
       </div>
 
       <div className="feature-popup-controls path-popup-controls">
-        <div />
+        <div className="feature-popup-control">
+          <select
+            value={segment.type}
+            onChange={(event) =>
+              onTypeChange?.(
+                segment.id,
+                event.target.value as PathType
+              )
+            }
+          >
+            <option value="path">
+              Path
+            </option>
+            <option value="road">
+              Road
+            </option>
+            <option value="creek">
+              Creek
+            </option>
+            <option value="river">
+              River
+            </option>
+            <option value="airway">
+              Airway
+            </option>
+          </select>
+        </div>
 
         <div className="feature-popup-control">
           <button
@@ -498,8 +529,8 @@ export default function PathSegmentPopup({
             onClick={() =>
               toggleTab('ruleset')
             }
-          >
-            Ruleset
+          >                      
+            {rulesetInteraction?.rulesetName ?? 'Ruleset'}
           </button>
         </div>
 
@@ -518,9 +549,33 @@ export default function PathSegmentPopup({
                 }}
               />
             ) : (
-              <div className="path-popup-ruleset-empty">
-                No Ruleset data available.
-              </div>
+              <>
+                {rulesetLoading ? (
+                  <div className="path-popup-ruleset-empty">
+                    Loading Ruleset data...
+                  </div>
+                ) : rulesetInteraction ? (
+                  <RulesetInteractionPanel
+                    rulesetId={
+                      rulesetInteraction.rulesetId
+                    }
+                    interaction={
+                      rulesetInteraction.interaction
+                    }
+                    value={segment.rulesetData}
+                    onChange={(rulesetData) =>
+                      onRulesetDataChange?.(
+                        segment.id,
+                        rulesetData
+                      )
+                    }
+                  />
+                ) : (
+                  <div className="path-popup-ruleset-empty">
+                    No Ruleset data available.
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

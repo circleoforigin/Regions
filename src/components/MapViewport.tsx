@@ -476,6 +476,12 @@ function MapViewport({
   } = useRulesetInteraction(
     'Regions.Section'
   );
+  const {
+    interaction: pathRulesetInteraction,
+    loading: pathRulesetLoading,
+  } = useRulesetInteraction(
+    'Regions.PathSegment'
+  );
   const interactionPermissions =
     getInteractionModePermissions(interactionMode);
     const pathInteraction =
@@ -5478,6 +5484,30 @@ onClick={(event) => {
             ) ?? []
           }
           position={popupPosition}
+                    rulesetInteraction={
+            pathRulesetInteraction
+          }
+          rulesetLoading={
+            pathRulesetLoading
+          }
+          onTypeChange={(
+            segmentId,
+            type
+          ) => {
+            void updatePathSegment(
+              segmentId,
+              { type }
+            );
+          }}
+          onRulesetDataChange={(
+            segmentId,
+            rulesetData
+          ) => {
+            void updatePathSegment(
+              segmentId,
+              { rulesetData }
+            );
+          }}
           onNameChange={(
   segmentId,
   name
