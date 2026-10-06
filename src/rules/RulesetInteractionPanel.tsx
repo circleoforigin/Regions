@@ -1,6 +1,15 @@
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
 import type {
   RulesetInteractionDefinition,
+  RulesetInteractionDerivedResult,
 } from '@settingforge/module-sdk';
+
+import { deriveRulesetInteraction } from './RulesetInteraction';
 
 import type {
   RulesetExtensionData,
@@ -32,6 +41,83 @@ export default function RulesetInteractionPanel({
     value.schemaId === interaction.schemaId
       ? value.values
       : {};
+
+  const effectiveValues =
+    useMemo(
+      () =>
+      {
+        const result:
+          Record<string, unknown> = {};
+
+        for (const field of interaction.fields)
+        {
+          result[field.id] =
+            values[field.id] ??
+            field.defaultValue ??
+            null;
+        }
+
+        return result;
+      },
+      [
+        interaction,
+        values,
+      ]
+    );
+
+  const [
+    derivedResult,
+    setDerivedResult,
+  ] = useState<
+    RulesetInteractionDerivedResult | null
+  >(null);
+
+  useEffect(
+    () =>
+    {
+      let cancelled = false;
+
+      if (!interaction.derived)
+      {
+        setDerivedResult(null);
+
+        return;
+      }
+
+      void deriveRulesetInteraction(
+        interaction.target,
+        effectiveValues
+      )
+        .then((result) =>
+        {
+          if (!cancelled)
+          {
+            setDerivedResult(result);
+          }
+        })
+        .catch((error) =>
+        {
+          if (!cancelled)
+          {
+            console.error(
+              `Unable to derive Ruleset interaction for "${interaction.target}".`,
+              error
+            );
+
+            setDerivedResult(null);
+          }
+        });
+
+      return () =>
+      {
+        cancelled = true;
+      };
+    },
+    [
+      interaction,
+      effectiveValues,
+    ]
+  );
 
   const updateValue = (
     fieldId: string,
@@ -164,6 +250,22 @@ export default function RulesetInteractionPanel({
             </label>
           );
         }
+      )}
+            {interaction.derived?.fields.map(
+        (field) => (
+          <div
+            key={field.id}
+            className="ruleset-interaction-field"
+          >
+            <span className="ruleset-interaction-label">
+              {field.label}
+            </span>
+
+            <span>
+              {derivedResult?.values[field.id] ?? '—'}
+            </span>
+          </div>
+        )
       )}
     </div>
   );
