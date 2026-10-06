@@ -1147,7 +1147,6 @@ void moduleEventBus
             | {
                 prospectId?: string;
                 startTime?: number;
-                pace?: string;
               }
             | undefined;
 
@@ -1177,6 +1176,40 @@ void moduleEventBus
             focusedPiece.id,
             activeProject.pieces
           ) ?? focusedPiece;
+
+        const paceField =
+          pieceRulesetInteraction
+            ?.interaction.fields.find(
+              (field) =>
+                field.id === 'pace'
+            );
+
+        const rulesetData = spatialPiece.rulesetData;
+
+        const storedPace =
+          rulesetData &&
+          rulesetData.rulesetId ===
+            pieceRulesetInteraction?.rulesetId &&
+          rulesetData.schemaId ===
+            pieceRulesetInteraction?.interaction.schemaId
+            ? rulesetData.values.pace
+            : undefined;
+
+        const pace =
+          typeof storedPace === 'string'
+            ? storedPace
+            : typeof paceField?.defaultValue === 'string'
+              ? paceField.defaultValue
+              : undefined;
+
+        if (!pace)
+        {
+          console.error(
+            '[Regions] Travel requires a Ruleset-defined Pace.'
+          );
+
+          return;
+        }
 
         const route =
           activeProject.routes.find(
@@ -1260,7 +1293,7 @@ const result =
 
         input: {
           distance,
-          pace: payload.pace ?? 'medium',
+          pace,
           movementSpeed: 30,
         },
       }
@@ -1273,26 +1306,17 @@ const endTime =
 moduleEventBus.emit(
   'Regions.TravelLegProspected',
   {
-    prospectId:
-      payload.prospectId,
-    pieceId:
-      spatialPiece.id,
-    routeId:
-      route.id,
-    routeLegId:
-      routeLeg.id,
-    startTime:
-      payload.startTime,
+    prospectId: payload.prospectId,
+    pieceId: spatialPiece.id,
+    routeId: route.id,
+    routeLegId: routeLeg.id,
+    startTime: payload.startTime,
     endTime,
-    duration:
-      result.duration,
-    speedMph:
-      result.speedMph,
+    duration: result.duration,
+    speedMph: result.speedMph,
     distance,
-    pace:
-      payload.pace ?? 'medium',
-    piece:
-      spatialPiece,
+    pace: pace,
+    piece: spatialPiece,
     route,
     routeLeg,
   }
@@ -1320,6 +1344,7 @@ return {
   activeSections,
   activeSectionEdges,
   activeSectionNodes,
+  pieceRulesetInteraction,
 ]);
 
   useEffect(() => {

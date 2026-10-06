@@ -30,12 +30,7 @@ const travelCommandDefinition: CommandDefinition = {
       label: 'Start Time',
       type: 'number',
       required: true,
-    },
-    {
-      key: 'pace',
-      label: 'Travel Pace',
-      type: 'string',
-    },
+    },    
   ],
 };
 
