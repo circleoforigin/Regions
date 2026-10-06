@@ -1159,126 +1159,93 @@ void moduleEventBus
           return;
         }
 
-        const focusedPiece =
-          activeProject.pieces.find(
-            (piece) =>
-              piece.id ===
-              activeProject.focusedPieceId
-          );
-
-        if (!focusedPiece)
-        {
-          return;
-        }
-
-        const spatialPiece =
-          resolveSpatialPiece(
-            focusedPiece.id,
-            activeProject.pieces
-          ) ?? focusedPiece;
-
-        const paceField =
+                const paceField =
           pieceRulesetInteraction
             ?.interaction.fields.find(
               (field) =>
                 field.id === 'pace'
             );
 
-        const rulesetData = spatialPiece.rulesetData;
+        const travelingRoutes =
+          activeProject.routes.filter(
+            (route) =>
+              getRouteLegs(route).length > 0
+          );
 
-        const storedPace =
-          rulesetData &&
-          rulesetData.rulesetId ===
-            pieceRulesetInteraction?.rulesetId &&
-          rulesetData.schemaId ===
-            pieceRulesetInteraction?.interaction.schemaId
-            ? rulesetData.values.pace
-            : undefined;
+        if (travelingRoutes.length === 0)
+        {
+          return;
+        }
 
-        const pace =
-          typeof storedPace === 'string'
-            ? storedPace
-            : typeof paceField?.defaultValue === 'string'
-              ? paceField.defaultValue
+        let prospectedCount = 0;
+
+        for (const route of travelingRoutes)
+        {
+          const spatialPiece =
+            activeProject.pieces.find(
+              (piece) =>
+                piece.id === route.pieceId
+            );
+
+          if (!spatialPiece)
+          {
+            console.error(
+              `[Regions] Route "${route.id}" has no Piece.`
+            );
+
+            continue;
+          }
+
+          const routeLeg = getRouteLegs(route)[0];
+
+          if (!routeLeg)
+          {
+            continue;
+          }
+
+          const rulesetData = spatialPiece.rulesetData;
+
+          const storedPace =
+            rulesetData &&
+            rulesetData.rulesetId ===
+              pieceRulesetInteraction?.rulesetId &&
+            rulesetData.schemaId ===
+              pieceRulesetInteraction?.interaction.schemaId
+              ? rulesetData.values.pace
               : undefined;
 
-        if (!pace)
-        {
-          console.error(
-            '[Regions] Travel requires a Ruleset-defined Pace.'
-          );
+          const pace =
+            typeof storedPace === 'string'
+              ? storedPace
+              : typeof paceField?.defaultValue === 'string'
+                ? paceField.defaultValue
+                : undefined;
 
-          return;
-        }
+          if (!pace)
+          {
+            console.error(
+              `[Regions] Piece "${spatialPiece.id}" requires a Ruleset-defined Pace.`
+            );
 
-        const route =
-          activeProject.routes.find(
-            (candidate) =>
-              candidate.pieceId ===
-              spatialPiece.id
-          );
+            continue;
+          }
+          
+          const legProfile =
+            route.legProfiles?.find(
+              (profile) =>
+                profile.legId === routeLeg.id
+            );
 
-        if (!route)
-        {
-          return;
-        }
+          if (!legProfile)
+          {
+            console.error(
+              `[Regions] Route Leg "${routeLeg.id}" has no compiled profile.`
+            );
 
-        const routeLeg =
-          getRouteLegs(route)[0];
+            continue;
+          }
 
-        if (!routeLeg)
-        {
-          return;
-        }
-
-        const routeMap =
-  [
-    activeMap,
-    ...projectMaps,
-    ...pendingMaps,
-  ].find(
-    (map) =>
-      map?.id ===
-      routeLeg.start.mapId
-  );
-
-if (!routeMap)
-{
-  console.error(
-    '[Regions] Travel could not resolve the Route Leg map.'
-  );
-
-  return;
-}
-
-const resolvedPathSegments =
-  resolvePathSegments(
-    activePathNetwork.segments,
-    activePathNetwork.terminals,
-    activeFeatures
-  );
-
-const distance =
-  getRouteLegPhysicalDistance(
-    routeLeg,
-    routeMap.imageRegistration?.distanceScale,
-    activeFeatures,
-    activeProject.pieces,
-    activePathNetwork.terminals,
-    resolvedPathSegments,
-    activeSections,
-    activeSectionEdges,
-    activeSectionNodes
-  );
-
-if (!distance)
-{
-  console.error(
-    '[Regions] Travel could not calculate Route Leg distance.'
-  );
-
-  return;
-}
+          const distance = legProfile.distance;
 
 const result =
   await moduleEventBus
@@ -1303,30 +1270,33 @@ const endTime =
   payload.startTime +
   result.duration;
 
-moduleEventBus.emit(
-  'Regions.TravelLegProspected',
-  {
-    prospectId: payload.prospectId,
-    pieceId: spatialPiece.id,
-    routeId: route.id,
-    routeLegId: routeLeg.id,
-    startTime: payload.startTime,
-    endTime,
-    duration: result.duration,
-    speedMph: result.speedMph,
-    distance,
-    pace: pace,
-    piece: spatialPiece,
-    route,
-    routeLeg,
-  }
-);
+          moduleEventBus.emit(
+            'Regions.TravelLegProspected',
+            {
+              prospectId: payload.prospectId,
+              pieceId: spatialPiece.id,
+              routeId: route.id,
+              routeLegId: routeLeg.id,
+              startTime: payload.startTime,
+              endTime,
+              duration: result.duration,
+              speedMph: result.speedMph,
+              distance,
+              pace,
+              piece: spatialPiece,
+              route,
+              routeLeg,
+            }
+          );
 
-return {
-  accepted: true,
-  prospectId:
-    payload.prospectId,
-};
+          prospectedCount += 1;
+        }
+
+        return {
+          accepted: prospectedCount > 0,
+          prospectId: payload.prospectId,
+          prospectedCount,
+        };
       }
     );
 
