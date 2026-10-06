@@ -507,18 +507,32 @@ export function findPathRoute(
   const legs:
     PathRouteLeg[] = [];
 
-  for (const edge of routeEdges) {
+for (const edge of routeEdges)
+{
+  if (
+    edge.segmentId &&
+    edge.points.length >= 2
+  )
+  {
+    const previousLeg = legs.at(-1);
+
     if (
-  edge.segmentId &&
-  edge.points.length >= 2
-) {
-  legs.push({
-    segmentId:
-      edge.segmentId,
-    points:
-      edge.points,
-  });
-}
+      previousLeg &&
+      previousLeg.segmentId === edge.segmentId
+    )
+    {
+      previousLeg.points.push(
+        ...edge.points.slice(1)
+      );
+    }
+    else
+    {
+      legs.push({
+        segmentId: edge.segmentId,
+        points: [...edge.points],
+      });
+    }
+  }
     if (
       edge.segmentId &&
       segmentIds.at(-1) !==

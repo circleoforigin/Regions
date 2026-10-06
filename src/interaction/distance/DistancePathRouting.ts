@@ -53,27 +53,28 @@ function getRouteEndpoint(
   anchor: ResolvedDistanceAnchor,
   segments: ResolvedPathSegment[]
 ): PathRouteEndpoint | null {
-  if (anchor.anchor.kind === 'path') {
+  if (anchor.anchor.kind === 'path')
+  {
     return {
       kind: 'segment',
-      segmentId:
-        anchor.anchor.segmentId,
+      segmentId: anchor.anchor.segmentId,
       position: anchor.position,
     };
   }
 
-  if (anchor.anchor.kind === 'terminal') {
+  if (anchor.anchor.kind === 'terminal')
+  {
   return {
     kind: 'terminal',
     reference: {
       kind: 'standalone',
-      terminalId:
-        anchor.anchor.terminalId,
+      terminalId: anchor.anchor.terminalId,
     },
   };
 }
 
-  if (anchor.anchor.kind === 'feature') {
+  if (anchor.anchor.kind === 'feature') 
+  {
     const reference =
       featureTerminalReference(
         anchor.anchor.featureId,
@@ -89,6 +90,64 @@ function getRouteEndpoint(
   }
 
   return null;
+}
+
+function getPathTerminalAnchor(
+  segmentId: string,
+  position: ResolvedDistanceAnchor['position'],
+  segments: ResolvedPathSegment[]
+): ResolvedDistanceAnchor | null
+{
+  const segment = segments.find(
+    (candidate) =>
+      candidate.segment.id === segmentId
+  );
+
+  if (!segment)
+  {
+    return null;
+  }
+
+  const terminal =
+    Math.hypot(
+      segment.start.position.x - position.x,
+      segment.start.position.y - position.y
+    ) < 0.000001
+      ? segment.start
+      : Math.hypot(
+          segment.end.position.x - position.x,
+          segment.end.position.y - position.y
+        ) < 0.000001
+        ? segment.end
+        : null;
+
+  if (!terminal)
+  {
+    return null;
+  }
+
+  if (terminal.reference.kind === 'feature')
+  {
+    return {
+      anchor: {
+        id: crypto.randomUUID(),
+        kind: 'feature',
+        featureId: terminal.reference.featureId,
+        usePathFromPrevious: true,
+      },
+      position,
+    };
+  }
+
+  return {
+    anchor: {
+      id: crypto.randomUUID(),
+      kind: 'terminal',
+      terminalId: terminal.reference.terminalId,
+      usePathFromPrevious: true,
+    },
+    position,
+  };
 }
 
 export function getDistanceSegmentsWithPaths(
@@ -107,10 +166,10 @@ export function getDistanceSegmentsWithPaths(
   ) {
     const start = anchors[index - 1];
     const end = anchors[index];
-
     const usePath = end.anchor.usePathFromPrevious === true;
 
-    if (usePath) {
+    if (usePath)
+    {
       const routeStart =
         getRouteEndpoint(
           start,
@@ -123,7 +182,8 @@ export function getDistanceSegmentsWithPaths(
           pathSegments
         );
 
-      if (routeStart && routeEnd) {
+      if (routeStart && routeEnd)
+      {
         const route =
           findPathRoute(
             routeStart,
@@ -131,39 +191,92 @@ export function getDistanceSegmentsWithPaths(
             pathSegments
           );
 
-        if (route) {
-  const crossings =
-    findNavigationAreaPolylineCrossings(
-      route.points,
-      sections,
-      sectionEdges,
-      sectionNodes
-    );
-
-    const routeLegSegmentIds =
-  route.legs.flatMap(
-    (leg) =>
-      Array.from(
+        if (route) 
         {
-          length:
-            Math.max(
-              leg.points.length - 1,
-              0
-            ),
-        },
-        () => leg.segmentId
-      )
-  );
+            if (route.legs.length > 1)
+            {
+                const pathLegAnchors:
+                ResolvedDistanceAnchor[] = [
+                    start,
+                ];
 
-  if (crossings.length === 0) {
-    result.push({
-      start,
-      end,
-      mapDistance:
-        route.distance,
-      kind: 'path',
-      points: route.points,
-    });
+                for (
+                    let legIndex = 0;
+                    legIndex < route.legs.length - 1;
+                    legIndex += 1
+                )
+                {
+                    const leg = route.legs[legIndex];
+                    const position = leg.points.at(-1);
+
+                    if (!position)
+                    {
+                        continue;
+                    }
+
+                    const terminalAnchor =
+                        getPathTerminalAnchor(
+                            leg.segmentId,
+                            position,
+                            pathSegments
+                        );
+
+                    if (terminalAnchor)
+                    {
+                        pathLegAnchors.push(terminalAnchor);
+                    }
+                }
+
+                pathLegAnchors.push(end);
+
+                if (pathLegAnchors.length > 2)
+                {
+                    result.push(
+                        ...getDistanceSegmentsWithPaths(
+                            pathLegAnchors,
+                            pathSegments,
+                            sections,
+                            sectionEdges,
+                            sectionNodes
+                        )
+                    );
+
+                    continue;
+                }
+            }
+
+            const crossings =
+                findNavigationAreaPolylineCrossings(
+                    route.points,
+                    sections,
+                    sectionEdges,
+                    sectionNodes
+                );
+
+            const routeLegSegmentIds =
+                route.legs.flatMap(
+                    (leg) =>
+                        Array.from(
+                        {
+                            length:
+                                Math.max(
+                                    leg.points.length - 1,
+                                    0
+                                ),
+                        },
+                        () => leg.segmentId
+                        )
+                );
+
+            if (crossings.length === 0) 
+            {
+                result.push({
+                    start,
+                    end,
+                    mapDistance: route.distance,
+                    kind: 'path',
+                    points: route.points,
+                });
 
     continue;
   }
