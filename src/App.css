@@ -3413,6 +3413,11 @@ box-shadow:
   margin-top: -10px;
 }
 
+.path-popup-controls .feature-popup-control-menu button {
+  padding: 2px 10px;
+  line-height: 1.15;
+}
+
 /* =========================
    RULESET INTERACTION PANEL
    ========================= */

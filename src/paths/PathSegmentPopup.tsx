@@ -104,7 +104,12 @@ export default function PathSegmentPopup({
     setActiveTab,
   ] = useState<PathPopupTab>(null);
 
-    const [
+  const [
+    typeExpanded,
+    setTypeExpanded,
+  ] = useState(false);
+
+  const [
     actionsExpanded,
     setActionsExpanded,
   ] = useState(false);
@@ -127,6 +132,7 @@ export default function PathSegmentPopup({
 
     setActiveTab(null);
 
+    setTypeExpanded(false);
     setActionsExpanded(false);
     setExpandedActionId(null);
   }, [segment.id]);
@@ -345,32 +351,69 @@ export default function PathSegmentPopup({
       </div>
 
       <div className="feature-popup-controls path-popup-controls">
-        <div className="feature-popup-control">
-          <select
-            value={segment.type}
-            onChange={(event) =>
-              onTypeChange?.(
-                segment.id,
-                event.target.value as PathType
-              )
+                <div className="feature-popup-control">
+          <button
+            type="button"
+            className="feature-popup-control-toggle"
+            aria-expanded={typeExpanded}
+            onPointerDown={(event) =>
+              event.stopPropagation()
             }
+            onClick={() =>
+            {
+              setActionsExpanded(false);
+              setExpandedActionId(null);
+              setTypeExpanded(
+                (current) => !current
+              );
+            }}
           >
-            <option value="path">
-              Path
-            </option>
-            <option value="road">
-              Road
-            </option>
-            <option value="creek">
-              Creek
-            </option>
-            <option value="river">
-              River
-            </option>
-            <option value="airway">
-              Airway
-            </option>
-          </select>
+            Type: {
+              segment.type.charAt(0).toUpperCase() +
+              segment.type.slice(1)
+            }{' '}
+            <span aria-hidden="true">
+              ▾
+            </span>
+          </button>
+
+          {typeExpanded && (
+            <div className="feature-popup-control-menu type-menu">
+              {(
+                [
+                  ['path', 'Path'],
+                  ['road', 'Road'],
+                  ['creek', 'Creek'],
+                  ['river', 'River'],
+                  ['airway', 'Airway'],
+                ] as const
+              ).map(([type, label]) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={
+                    segment.type === type
+                      ? 'selected'
+                      : ''
+                  }
+                  onPointerDown={(event) =>
+                    event.stopPropagation()
+                  }
+                  onClick={() =>
+                  {
+                    onTypeChange?.(
+                      segment.id,
+                      type as PathType
+                    );
+
+                    setTypeExpanded(false);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="feature-popup-control">
@@ -378,7 +421,10 @@ export default function PathSegmentPopup({
             type="button"
             className="feature-popup-control-toggle"
             aria-expanded={actionsExpanded}
-            onClick={() => {
+            onClick={() =>
+            {
+              setTypeExpanded(false);
+
               setActionsExpanded(
                 (current) => !current
               );
