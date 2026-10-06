@@ -5908,7 +5908,11 @@ onDescriptionChange={(
         );
       }}
     >
-      Ruleset
+            {(
+        selectedArea
+          ? areaRulesetInteraction
+          : featureRulesetInteraction
+      )?.rulesetName ?? 'Ruleset'}
     </button>
   </div>
 

@@ -4,8 +4,10 @@ import type {
 } from '@settingforge/module-sdk';
 import { moduleEventBus } from '../host/ModuleBus';
 
-export interface ActiveRulesetInteraction {
+export interface ActiveRulesetInteraction
+{
   rulesetId: string;
+  rulesetName: string;
   rulesetVersion: string;
   interaction: RulesetInteractionDefinition;
 }

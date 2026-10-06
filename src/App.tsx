@@ -6497,7 +6497,7 @@ mapMediaSlotsEnabled={
           Piece
         </button>
 
-        <button
+                <button
           type="button"
           className={
             pieceEditorTab === 'ruleset'
@@ -6508,7 +6508,7 @@ mapMediaSlotsEnabled={
             setPieceEditorTab('ruleset')
           }
         >
-          Ruleset
+          {pieceRulesetInteraction?.rulesetName ?? 'Ruleset'}
         </button>
       </div>
 
