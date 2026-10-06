@@ -465,10 +465,10 @@ function MapViewport({
 }: MapViewportProps, ref) {
   const { state, dispatch } = useRegionsState();
   const {
-    interaction: featureRulesetInteraction,
-    loading: featureRulesetLoading,
+    interaction: areaRulesetInteraction,
+    loading: areaRulesetLoading,
   } = useRulesetInteraction(
-    'Regions.Feature'
+    'Regions.Section'
   );
   const interactionPermissions =
     getInteractionModePermissions(interactionMode);
@@ -977,6 +977,7 @@ const selectedFeature: Feature | undefined =
         targetMapId: selectedArea.targetMapId,
         featureTypeId: selectedArea.featureTypeId,
         journalPageId: selectedArea.journalPageId,
+        rulesetData: selectedArea.rulesetData,
         noteLinks: [],
       }
     : features.find(
@@ -5938,35 +5939,62 @@ onDescriptionChange={(
             }
           }}
         />
-      ) : featureRulesetLoading ? (
-  <div className="path-popup-ruleset-empty">
-    Loading Ruleset data...
-  </div>
-) : featureRulesetInteraction ? (
-  <RulesetInteractionPanel
-    rulesetId={
-      featureRulesetInteraction
-        .rulesetId
-    }
-    interaction={
-      featureRulesetInteraction
-        .interaction
-    }
-    value={
-      selectedFeature.rulesetData
-    }
-    onChange={(rulesetData) => {
-      onFeatureRulesetDataChange?.(
-        selectedFeature.id,
-        rulesetData
-      );
-    }}
-  />
-) : (
-  <div className="path-popup-ruleset-empty">
-    No Ruleset data available.
-  </div>
-)}
+      ) : (
+        <>
+          {(selectedArea
+            ? areaRulesetLoading
+            : featureRulesetLoading
+          ) ? (
+            <div className="path-popup-ruleset-empty">
+              Loading Ruleset data...
+            </div>
+          ) : (selectedArea
+            ? areaRulesetInteraction
+            : featureRulesetInteraction
+          ) ? (
+            <RulesetInteractionPanel
+              rulesetId={
+                (selectedArea
+                  ? areaRulesetInteraction
+                  : featureRulesetInteraction
+                )!.rulesetId
+              }
+              interaction={
+                (selectedArea
+                  ? areaRulesetInteraction
+                  : featureRulesetInteraction
+                )!.interaction
+              }
+              value={
+                selectedArea
+                  ? selectedArea.rulesetData
+                  : selectedFeature.rulesetData
+              }
+              onChange={(rulesetData) =>
+              {
+                if (selectedArea)
+                {
+                  updateAreaIdentity(
+                    selectedArea.id,
+                    { rulesetData }
+                  );
+
+                  return;
+                }
+
+                onFeatureRulesetDataChange?.(
+                  selectedFeature.id,
+                  rulesetData
+                );
+              }}
+            />
+          ) : (
+            <div className="path-popup-ruleset-empty">
+              No Ruleset data available.
+            </div>
+          )}
+        </>
+      )}
     </div>
   )}
 </div>
