@@ -1277,7 +1277,7 @@ const result =
 input: {
   distance,
   pace,
-  movementSpeed: 30,
+  entityIds: spatialPiece.entityIds,
 
   area: area
     ? {
