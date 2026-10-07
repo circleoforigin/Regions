@@ -1240,28 +1240,7 @@ void moduleEventBus
             continue;
           }
 
-          const distance = legProfile.distance;
-
-          const areaId =
-  legProfile.points.find(
-    (point) =>
-      point.spatialContext?.areaId
-  )?.spatialContext?.areaId;
-
-const area =
-  areaId
-    ? projectSections.find(
-        (section) =>
-          section.id === areaId
-      )
-    : undefined;
-
-const pathSegment =
-  legProfile.pathSegmentId
-    ? await pathSegmentRepository.loadSegment(
-        legProfile.pathSegmentId
-      )
-    : null;
+          const distance = legProfile.distance;          
 
 const result =
   await moduleEventBus
@@ -1279,20 +1258,20 @@ input: {
   pace,
   entityIds: spatialPiece.entityIds,
 
-  area: area
-    ? {
-        rulesetData:
-          area.rulesetData ?? null,
-      }
-    : null,
+area: legProfile.area
+  ? {
+      rulesetData:
+        legProfile.area.rulesetData ?? null,
+    }
+  : null,
 
-  path: pathSegment
-    ? {
-        type: pathSegment.type,
-        rulesetData:
-          pathSegment.rulesetData ?? null,
-      }
-    : null,
+path: legProfile.path
+  ? {
+      type: legProfile.path.type,
+      rulesetData:
+        legProfile.path.rulesetData ?? null,
+    }
+  : null,
 },
       }
     );

@@ -1,6 +1,8 @@
 import type { PhysicalDistance } from '../interaction/distance/DistanceMeasurement';
 import type { SpatialPoint } from '../spatial/SpatialAnchor';
 import type { SpatialContext } from '../spatial/SpatialContext';
+import type { PathType } from './Path';
+import type { RulesetExtensionData } from './RulesetExtensionData';
 
 export interface Route {
   id: string;
@@ -48,11 +50,26 @@ export interface RouteTraversalPoint
   spatialContext?: SpatialContext;
 }
 
+export interface RouteLegAreaProfile
+{
+  id: string;
+  rulesetData?: RulesetExtensionData;
+}
+
+export interface RouteLegPathProfile
+{
+  id: string;
+  type: PathType;
+  rulesetData?: RulesetExtensionData;
+}
+
 export interface RouteLegProfile
 {
   legId: string;
   distance: PhysicalDistance;
-  pathSegmentId?: string;
+  area?: RouteLegAreaProfile;
+  zoneIds: string[];
+  path?: RouteLegPathProfile;
   points: RouteTraversalPoint[];
 }
 

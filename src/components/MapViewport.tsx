@@ -966,12 +966,46 @@ const resolvedDistanceAnchors =
     return { ...node, position: movingSectionNode.position };
   });
 
+  function getAreaControlPosition(
+  section: Section
+)
+{
+  const polygon =
+    getSectionPolygon(
+      section,
+      sectionEdges,
+      displayedSectionNodes
+    );
+
+  if (
+    state.editingMode === 'move-feature' &&
+    movingFeatureId === section.id &&
+    movingFeaturePreviewPosition
+  )
+  {
+    return movingFeaturePreviewPosition;
+  }
+
+  const position =
+    section.controlPosition;
+
+  return position &&
+    isPointInPolygon(
+      position,
+      polygon
+    )
+      ? position
+      : getAreaLabelPosition(
+          polygon
+        );
+}
+
   const selectedArea = sections.find((section) => section.kind === 'area' &&
     section.id === state.selectedFeatureId && isSectionVisible(section));
   const linkedLocationMap = selectedArea?.targetMapId
     ? locationMaps.findLast((map) => map.id === selectedArea.targetMapId) : undefined;
   const areaPosition = selectedArea ? getAreaControlPosition(selectedArea) : null;
-const selectedFeature: Feature | undefined =
+  const selectedFeature: Feature | undefined =
   selectedArea && areaPosition
     ? {
         id: selectedArea.id,
@@ -2688,18 +2722,64 @@ for (
     );
   }
 
+  const spatialContext =
+  points[0]?.spatialContext;
+
+const area =
+  spatialContext?.areaId
+    ? projectSections.find(
+        (section) =>
+          section.id === spatialContext.areaId
+      )
+    : undefined;
+
+const pathSegment =
+  segment.pathSegmentId
+    ? pathNetwork.segments.find(
+        (candidate) =>
+          candidate.id === segment.pathSegmentId
+      )
+    : undefined;
+
 legProfiles.push({
   legId: `${startNode.id}:${endNode.id}`,
   distance,
-  ...(segment.pathSegmentId
+
+  ...(area
     ? {
-        pathSegmentId:
-          segment.pathSegmentId,
+        area: {
+          id: area.id,
+          ...(area.rulesetData
+            ? {
+                rulesetData:
+                  area.rulesetData,
+              }
+            : {}),
+        },
       }
     : {}),
+
+  zoneIds: [
+    ...(spatialContext?.zoneIds ?? []),
+  ],
+
+  ...(pathSegment
+    ? {
+        path: {
+          id: pathSegment.id,
+          type: pathSegment.type,
+          ...(pathSegment.rulesetData
+            ? {
+                rulesetData:
+                  pathSegment.rulesetData,
+              }
+            : {}),
+        },
+      }
+    : {}),
+
   points,
 });
-}
 
   if (nodes.length > 0) {
     onSetPieceRoute?.(
@@ -4458,14 +4538,6 @@ function handleSectionNodePointerUp(
 
 function cancelSectionNodeMove() {
   setMovingSectionNode(null);
-}
-
-function getAreaControlPosition(section: Section) {
-  const polygon = getSectionPolygon(section, sectionEdges, displayedSectionNodes);
-  if (state.editingMode === 'move-feature' && movingFeatureId === section.id && movingFeaturePreviewPosition) return movingFeaturePreviewPosition;
-  const position = section.controlPosition;
-  return position && isPointInPolygon(position, polygon)
-    ? position : getAreaLabelPosition(polygon);
 }
 
 function openSectionProperties(section: Section) {
