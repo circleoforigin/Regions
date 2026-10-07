@@ -2759,10 +2759,6 @@ legProfiles.push({
       }
     : {}),
 
-  zoneIds: [
-    ...(spatialContext?.zoneIds ?? []),
-  ],
-
   ...(pathSegment
     ? {
         path: {

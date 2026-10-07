@@ -68,7 +68,6 @@ export interface RouteLegProfile
   legId: string;
   distance: PhysicalDistance;
   area?: RouteLegAreaProfile;
-  zoneIds: string[];
   path?: RouteLegPathProfile;
   points: RouteTraversalPoint[];
 }
