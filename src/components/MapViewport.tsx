@@ -2776,6 +2776,7 @@ legProfiles.push({
 
   points,
 });
+}
 
   if (nodes.length > 0) {
     onSetPieceRoute?.(
