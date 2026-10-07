@@ -61,6 +61,7 @@ import type { Project } from './models/Project';
 import type { Map as RegionMap } from './models/Map';
 import type { Feature } from './models/Feature';
 import type { PathSegment } from './models/Path';
+import { pathSegmentRepository } from './paths/PathSegmentRepository';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
@@ -1241,6 +1242,27 @@ void moduleEventBus
 
           const distance = legProfile.distance;
 
+          const areaId =
+  legProfile.points.find(
+    (point) =>
+      point.spatialContext?.areaId
+  )?.spatialContext?.areaId;
+
+const area =
+  areaId
+    ? projectSections.find(
+        (section) =>
+          section.id === areaId
+      )
+    : undefined;
+
+const pathSegment =
+  legProfile.pathSegmentId
+    ? await pathSegmentRepository.loadSegment(
+        legProfile.pathSegmentId
+      )
+    : null;
+
 const result =
   await moduleEventBus
     .request<{
@@ -1252,11 +1274,26 @@ const result =
         functionId:
           'TravelTime',
 
-        input: {
-          distance,
-          pace,
-          movementSpeed: 30,
-        },
+input: {
+  distance,
+  pace,
+  movementSpeed: 30,
+
+  area: area
+    ? {
+        rulesetData:
+          area.rulesetData ?? null,
+      }
+    : null,
+
+  path: pathSegment
+    ? {
+        type: pathSegment.type,
+        rulesetData:
+          pathSegment.rulesetData ?? null,
+      }
+    : null,
+},
       }
     );
 
@@ -2854,14 +2891,18 @@ function getNextPieceName(pieces: Piece[]): string {
   return `Piece ${suffix}`;
 }
 
-function handleAddPiece() {
+function handleAddPiece() 
+{
   if (!activeProject || !activeMap || !activeMapImageUrl) return;
 
   const piece: Piece = {
-    id: crypto.randomUUID(),
-    kind: 'piece',
-    name: getNextPieceName(activeProject.pieces),
-    mapId: activeMap.id,
+  id: crypto.randomUUID(),
+  kind: 'piece',
+  name: getNextPieceName(activeProject.pieces),
+  entityIds: [
+    `T${crypto.randomUUID()}`,
+  ],
+  mapId: activeMap.id,
     tracked: true,
     position: viewportCenter,
     appearance: {
@@ -3006,6 +3047,18 @@ function handlePartyDrop(sourceId: string, targetId: string) {
     .filter((id) => activeProject.pieces.some((piece) =>
       piece.id === id && piece.kind !== 'group'));
   if (memberPieceIds.length < 2) return;
+  
+  const entityIds = [
+    ...new Set(
+      memberPieceIds.flatMap(
+        (pieceId) =>
+          activeProject.pieces.find(
+            (piece) =>
+              piece.id === pieceId
+          )?.entityIds ?? []
+      )
+    ),
+  ];
 
   const survivor = target.kind === 'group'
     ? target
@@ -3033,12 +3086,17 @@ function handlePartyDrop(sourceId: string, targetId: string) {
           mapId: survivor.mapId,
           position: survivor.position,
           memberPieceIds,
+          entityIds,
         };
       }
       return memberIds.has(piece.id) ? { ...piece, mapId: survivor.mapId } : piece;
     });
   if (!pieces.some((piece) => piece.id === survivor.id)) {
-    pieces.push({ ...survivor, memberPieceIds });
+    pieces.push({
+      ...survivor,
+      memberPieceIds,
+      entityIds,
+    });
   }
   const focusedWasMerged = activeProject.focusedPieceId === source.id ||
     activeProject.focusedPieceId === target.id ||

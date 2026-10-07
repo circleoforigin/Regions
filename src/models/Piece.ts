@@ -26,10 +26,12 @@ export interface PiecePathDock {
   fraction: number;
 }
 
-export interface Piece extends SpatialAnchor {
+export interface Piece extends SpatialAnchor
+{
   id: string;
   kind: PieceKind;
   name: string;
+  entityIds: string[];
   mapId: string;
   position: SpatialPoint;
   pathDock?: PiecePathDock;
