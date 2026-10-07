@@ -63,12 +63,22 @@ export interface RouteLegPathProfile
   rulesetData?: RulesetExtensionData;
 }
 
+export interface RouteLegEndpointProfile
+{
+  featureId?: string;
+  enteringAreaId?: string;
+  leavingAreaId?: string;
+  enteringPathId?: string;
+  leavingPathId?: string;
+}
+
 export interface RouteLegProfile
 {
   legId: string;
   distance: PhysicalDistance;
   area?: RouteLegAreaProfile;
   path?: RouteLegPathProfile;
+  endpoint?: RouteLegEndpointProfile;
   points: RouteTraversalPoint[];
 }
 

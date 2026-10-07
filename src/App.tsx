@@ -1293,6 +1293,7 @@ const endTime =
               speedMph: result.speedMph,
               distance,
               pace,
+              endpoint: legProfile.endpoint,
               piece: spatialPiece,
               route,
               routeLeg,

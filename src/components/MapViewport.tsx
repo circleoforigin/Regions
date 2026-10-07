@@ -2778,6 +2778,90 @@ legProfiles.push({
 });
 }
 
+for (
+  let index = 0;
+  index < legProfiles.length;
+  index += 1
+)
+{
+  const profile =
+    legProfiles[index];
+
+  const nextProfile =
+    legProfiles[index + 1];
+
+  const endNode =
+    nodes[index + 1];
+
+  if (!profile || !endNode)
+  {
+    continue;
+  }
+
+  const endpoint:
+    RouteLegProfile['endpoint'] = {};
+
+  if (endNode.kind === 'feature')
+  {
+    endpoint.featureId =
+      endNode.featureId;
+  }
+
+  const currentAreaId =
+    profile.area?.id;
+
+  const nextAreaId =
+    nextProfile?.area?.id;
+
+  if (
+    currentAreaId !== nextAreaId
+  )
+  {
+    if (currentAreaId)
+    {
+      endpoint.leavingAreaId =
+        currentAreaId;
+    }
+
+    if (nextAreaId)
+    {
+      endpoint.enteringAreaId =
+        nextAreaId;
+    }
+  }
+
+  const currentPathId =
+    profile.path?.id;
+
+  const nextPathId =
+    nextProfile?.path?.id;
+
+  if (
+    currentPathId !== nextPathId
+  )
+  {
+    if (currentPathId)
+    {
+      endpoint.leavingPathId =
+        currentPathId;
+    }
+
+    if (nextPathId)
+    {
+      endpoint.enteringPathId =
+        nextPathId;
+    }
+  }
+
+  if (
+    Object.keys(endpoint).length > 0
+  )
+  {
+    profile.endpoint =
+      endpoint;
+  }
+}
+
   if (nodes.length > 0) {
     onSetPieceRoute?.(
       piece,
