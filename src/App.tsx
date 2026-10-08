@@ -1140,15 +1140,13 @@ void moduleEventBus
         const payload =
           message.payload as
             | {
-                prospectId?: string;
                 startTime?: number;
               }
             | undefined;
 
         if (
           !activeProject ||
-          !payload?.prospectId ||
-          typeof payload.startTime !== 'number'
+          typeof payload?.startTime !== 'number'
         )
         {
           return;
@@ -1283,7 +1281,6 @@ const endTime =
           moduleEventBus.emit(
             'Regions.TravelLegProspected',
             {
-              prospectId: payload.prospectId,
               pieceId: spatialPiece.id,
               routeId: route.id,
               routeLegId: routeLeg.id,
@@ -1305,7 +1302,6 @@ const endTime =
 
         return {
           accepted: prospectedCount > 0,
-          prospectId: payload.prospectId,
           prospectedCount,
         };
       }
