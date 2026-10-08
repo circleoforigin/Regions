@@ -68,6 +68,7 @@ import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
 import type {
   Route,
   RouteLegProfile,
+  RouteLeg,
 } from './models/Route';
 import { getRouteLegs } from './models/Route';
 import {
@@ -1141,6 +1142,141 @@ void moduleEventBus
 };
   }, []);
 
+const prospectRouteLeg = async (
+  route: Route,
+  routeLeg: RouteLeg,
+  startTime: number,
+  distanceOverride?: number
+) =>
+{
+  if (!activeProject)
+  {
+    return false;
+  }
+
+  const spatialPiece =
+    activeProject.pieces.find(
+      (piece) =>
+        piece.id === route.pieceId
+    );
+
+  if (!spatialPiece)
+  {
+    throw new Error(
+      `Route "${route.id}" has no Piece.`
+    );
+  }
+
+  const legProfile =
+    route.legProfiles?.find(
+      (profile) =>
+        profile.legId === routeLeg.id
+    );
+
+  if (!legProfile)
+  {
+    throw new Error(
+      `Route Leg "${routeLeg.id}" has no compiled profile.`
+    );
+  }
+
+  const paceField =
+    pieceRulesetInteraction
+      ?.interaction.fields.find(
+        (field) =>
+          field.id === 'pace'
+      );
+
+  const rulesetData =
+    spatialPiece.rulesetData;
+
+  const storedPace =
+    rulesetData &&
+    rulesetData.rulesetId ===
+      pieceRulesetInteraction?.rulesetId &&
+    rulesetData.schemaId ===
+      pieceRulesetInteraction?.interaction.schemaId
+      ? rulesetData.values.pace
+      : undefined;
+
+  const pace =
+    typeof storedPace === 'string'
+      ? storedPace
+      : typeof paceField?.defaultValue === 'string'
+        ? paceField.defaultValue
+        : undefined;
+
+  if (!pace)
+  {
+    throw new Error(
+      `Piece "${spatialPiece.id}" requires a Ruleset-defined Pace.`
+    );
+  }
+
+  const distance =
+    distanceOverride !== undefined
+      ? {
+          value: distanceOverride,
+          unit: legProfile.distance.unit,
+        }
+      : legProfile.distance;
+
+  const result =
+    await moduleEventBus.request<{
+      duration: number;
+      speedMph: number;
+    }>(
+      'rules.executeFunction',
+      {
+        functionId: 'TravelTime',
+        input: {
+          distance,
+          pace,
+          entityIds: spatialPiece.entityIds,
+
+          area: legProfile.area
+            ? {
+                rulesetData:
+                  legProfile.area.rulesetData ?? null,
+              }
+            : null,
+
+          path: legProfile.path
+            ? {
+                type: legProfile.path.type,
+                rulesetData:
+                  legProfile.path.rulesetData ?? null,
+              }
+            : null,
+        },
+      }
+    );
+
+  const endTime =
+    startTime + result.duration;
+
+  moduleEventBus.emit(
+    'Regions.TravelLegProspected',
+    {
+      pieceId: spatialPiece.id,
+      routeId: route.id,
+      routeLegId: routeLeg.id,
+      startTime,
+      endTime,
+      duration: result.duration,
+      speedMph: result.speedMph,
+      distance,
+      pace,
+      endpoint: legProfile.endpoint,
+      piece: spatialPiece,
+      route,
+      routeLeg,
+    }
+  );
+
+  return true;
+};
+
  useEffect(() =>
 {
   const unregisterTravel =
@@ -1163,13 +1299,6 @@ void moduleEventBus
           return;
         }
 
-                const paceField =
-          pieceRulesetInteraction
-            ?.interaction.fields.find(
-              (field) =>
-                field.id === 'pace'
-            );
-
         const travelingRoutes =
           activeProject.routes.filter(
             (route) =>
@@ -1185,130 +1314,25 @@ void moduleEventBus
 
         for (const route of travelingRoutes)
         {
-          const spatialPiece =
-            activeProject.pieces.find(
-              (piece) =>
-                piece.id === route.pieceId
-            );
-
-          if (!spatialPiece)
-          {
-            console.error(
-              `[Regions] Route "${route.id}" has no Piece.`
-            );
-
-            continue;
-          }
-
-          const routeLeg = getRouteLegs(route)[0];
+          const routeLeg =
+            getRouteLegs(route)[0];
 
           if (!routeLeg)
           {
             continue;
           }
 
-          const rulesetData = spatialPiece.rulesetData;
-
-          const storedPace =
-            rulesetData &&
-            rulesetData.rulesetId ===
-              pieceRulesetInteraction?.rulesetId &&
-            rulesetData.schemaId ===
-              pieceRulesetInteraction?.interaction.schemaId
-              ? rulesetData.values.pace
-              : undefined;
-
-          const pace =
-            typeof storedPace === 'string'
-              ? storedPace
-              : typeof paceField?.defaultValue === 'string'
-                ? paceField.defaultValue
-                : undefined;
-
-          if (!pace)
-          {
-            console.error(
-              `[Regions] Piece "${spatialPiece.id}" requires a Ruleset-defined Pace.`
-            );
-
-            continue;
-          }
-          
-          const legProfile =
-            route.legProfiles?.find(
-              (profile) =>
-                profile.legId === routeLeg.id
-            );
-
-          if (!legProfile)
-          {
-            console.error(
-              `[Regions] Route Leg "${routeLeg.id}" has no compiled profile.`
-            );
-
-            continue;
-          }
-
-          const distance = legProfile.distance;          
-
-const result =
-  await moduleEventBus
-    .request<{
-      duration: number;
-      speedMph: number;
-    }>(
-      'rules.executeFunction',
-      {
-        functionId:
-          'TravelTime',
-
-input: {
-  distance,
-  pace,
-  entityIds: spatialPiece.entityIds,
-
-area: legProfile.area
-  ? {
-      rulesetData:
-        legProfile.area.rulesetData ?? null,
-    }
-  : null,
-
-path: legProfile.path
-  ? {
-      type: legProfile.path.type,
-      rulesetData:
-        legProfile.path.rulesetData ?? null,
-    }
-  : null,
-},
-      }
-    );
-
-const endTime =
-  payload.startTime +
-  result.duration;
-
-          moduleEventBus.emit(
-            'Regions.TravelLegProspected',
-            {
-              pieceId: spatialPiece.id,
-              routeId: route.id,
-              routeLegId: routeLeg.id,
-              startTime: payload.startTime,
-              endTime,
-              duration: result.duration,
-              speedMph: result.speedMph,
-              distance,
-              pace,
-              endpoint: legProfile.endpoint,
-              piece: spatialPiece,
+          const prospected =
+            await prospectRouteLeg(
               route,
               routeLeg,
-            }
-          );
+              payload.startTime
+            );
 
-          prospectedCount += 1;
+          if (prospected)
+          {
+            prospectedCount += 1;
+          }
         }
 
         return {
@@ -1333,6 +1357,117 @@ const endTime =
   activeSectionEdges,
   activeSectionNodes,
   pieceRulesetInteraction,
+]);
+
+useEffect(() =>
+{
+  const unregisterContinueTravel =
+    moduleEventBus.registerRequestHandler(
+      'Regions.ContinueTravel',
+      async (message) =>
+      {
+        const payload =
+          message.payload as
+            | {
+                pieceId?: string;
+                routeLegId?: string;
+                startTime?: number;
+                mode?: 'recalculate' | 'next-leg';
+                remainingDistance?: number;
+              }
+            | undefined;
+
+        if (
+          !activeProject ||
+          !payload?.pieceId ||
+          !payload.routeLegId ||
+          typeof payload.startTime !== 'number' ||
+          !payload.mode
+        )
+        {
+          return;
+        }
+
+        const route =
+          activeProject.routes.find(
+            (candidate) =>
+              candidate.pieceId === payload.pieceId
+          );
+
+        if (!route)
+        {
+          throw new Error(
+            `Piece "${payload.pieceId}" has no Route.`
+          );
+        }
+
+        const routeLegs =
+          getRouteLegs(route);
+
+        const currentLeg =
+          routeLegs.find(
+            (leg) =>
+              leg.id === payload.routeLegId
+          );
+
+        if (!currentLeg)
+        {
+          throw new Error(
+            `Route Leg "${payload.routeLegId}" was not found.`
+          );
+        }
+
+        const targetLeg =
+          payload.mode === 'next-leg'
+            ? routeLegs[currentLeg.index + 1]
+            : currentLeg;
+
+        if (!targetLeg)
+        {
+          return {
+            accepted: false,
+            routeComplete: true,
+          };
+        }
+
+        if (
+          payload.mode === 'recalculate' &&
+          (
+            typeof payload.remainingDistance !== 'number' ||
+            payload.remainingDistance < 0
+          )
+        )
+        {
+          throw new Error(
+            'Regions.ContinueTravel recalculation requires remainingDistance.'
+          );
+        }
+
+        const prospected =
+          await prospectRouteLeg(
+            route,
+            targetLeg,
+            payload.startTime,
+            payload.mode === 'recalculate'
+              ? payload.remainingDistance
+              : undefined
+          );
+
+        return {
+          accepted: prospected,
+          routeComplete: false,
+          routeId: route.id,
+          routeLegId: targetLeg.id,
+        };
+      }
+    );
+
+  return () =>
+  {
+    unregisterContinueTravel();
+  };
+}, [
+  activeProject,
 ]);
 
   useEffect(() => {

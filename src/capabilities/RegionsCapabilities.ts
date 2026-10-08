@@ -28,6 +28,44 @@ const travelCommandDefinition: CommandDefinition = {
   ],
 };
 
+const continueTravelCommandDefinition: CommandDefinition = {
+  id: 'Regions.ContinueTravel',
+  label: 'Continue Travel',
+  description:
+    'Continues prospective travel for a Piece after an Occurrence breakpoint.',
+  input: [
+    {
+      key: 'pieceId',
+      label: 'Piece ID',
+      type: 'string',
+      required: true,
+    },
+    {
+      key: 'routeLegId',
+      label: 'Route Leg ID',
+      type: 'string',
+      required: true,
+    },
+    {
+      key: 'startTime',
+      label: 'Start Time',
+      type: 'number',
+      required: true,
+    },
+    {
+      key: 'mode',
+      label: 'Continuation Mode',
+      type: 'string',
+      required: true,
+    },
+    {
+      key: 'remainingDistance',
+      label: 'Remaining Distance',
+      type: 'number',
+    },
+  ],
+};
+
 const travelLegProspectedEventDefinition: EventDefinition = {
   id: 'Regions.TravelLegProspected',
   label: 'Travel Leg Prospected',
@@ -87,8 +125,9 @@ export const regionsEventDefinitions:
 
 export const regionsCommandDefinitions = [
   travelCommandDefinition,
+  continueTravelCommandDefinition,
   ...projectCommandDefinitions,
-];
+]
 
 export const regionsQueryDefinitions = [
   ...projectQueryDefinitions,
