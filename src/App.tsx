@@ -1088,8 +1088,21 @@ const [
 
   useEffect(() => {
     modulePresence.start();
-
     modulePresence.announceReady();
+
+    if (moduleEventBus.hosted)
+    {
+      void moduleEventBus
+        .request('occurrences.registerProducer')
+        .catch((error: unknown) =>
+        {
+          console.error(
+            '[Regions] Occurrence producer registration failed.',
+            error
+          );
+        });
+    }
+
     const updateJournalAvailability = () => {
       setJournalAvailable(
         modulePresence.isReady('journal')
@@ -1097,9 +1110,7 @@ const [
     };
 
 const unsubscribePresence =
-  modulePresence.subscribe(
-    updateJournalAvailability
-  );
+  modulePresence.subscribe(updateJournalAvailability);
 
 updateJournalAvailability();
 
