@@ -64,32 +64,13 @@ function createTraversalOccurrence(
   context: TravelOccurrenceContext
 ): Occurrence | null
 {
-  /*
-   * TRAVEL OCCURRENCE POLICY
-   *
-   * This is the decision point for Regions-owned
-   * prospective spatial Occurrences.
-   *
-   * RouteLegProfile.points contains the spatial
-   * trigger points encountered while walking the
-   * RouteLeg. As Regions gains additional spatial
-   * systems, inspect each point here and determine
-   * whether it represents a meaningful occurrence:
-   *
-   * - Sector/context changes
-   * - Weather-context changes
-   * - Other Regions-owned spatial triggers
-   *
-   * Return null when the point requires no
-   * Occurrence.
-   *
-   * Recalculate Occurrences must include the
-   * continuation data required by
-   * Regions.ContinueTravel.
-   */
-
-  void point;
-  void context;
+  if (point.sectorCrossing)
+  {
+    return createTravelRecalculateOccurrence(
+      point,
+      context
+    );
+  }
 
   return null;
 }
@@ -116,9 +97,16 @@ export function generateTravelOccurrences(
         context
       );
 
-    if (occurrence)
+    if (!occurrence)
     {
-      occurrences.push(occurrence);
+      continue;
+    }
+
+    occurrences.push(occurrence);
+
+    if (occurrence.reaction === OccurrenceReactions.Recalculate)
+    {
+      return occurrences;
     }
   }
 

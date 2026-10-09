@@ -2802,8 +2802,7 @@ for (
       }
     }
 
-    mapDistanceFromStart +=
-      segmentMapDistance;
+    mapDistanceFromStart += segmentMapDistance;
 
     addTraversalPoint(
       position,
@@ -2811,8 +2810,7 @@ for (
     );
   }
 
-  const spatialContext =
-  points[0]?.spatialContext;
+  const spatialContext = points[0]?.spatialContext;
 
 const area =
   spatialContext?.areaId
@@ -2873,14 +2871,11 @@ for (
   index += 1
 )
 {
-  const profile =
-    legProfiles[index];
+  const profile = legProfiles[index];
 
-  const nextProfile =
-    legProfiles[index + 1];
+  const nextProfile = legProfiles[index + 1];
 
-  const endNode =
-    nodes[index + 1];
+  const endNode = nodes[index + 1];
 
   if (!profile || !endNode)
   {
@@ -2892,15 +2887,12 @@ for (
 
   if (endNode.kind === 'feature')
   {
-    endpoint.featureId =
-      endNode.featureId;
+    endpoint.featureId = endNode.featureId;
   }
 
-  const currentAreaId =
-    profile.area?.id;
+  const currentAreaId = profile.area?.id;
 
-  const nextAreaId =
-    nextProfile?.area?.id;
+  const nextAreaId = nextProfile?.area?.id;
 
   if (
     currentAreaId !== nextAreaId
@@ -2908,22 +2900,18 @@ for (
   {
     if (currentAreaId)
     {
-      endpoint.leavingAreaId =
-        currentAreaId;
+      endpoint.leavingAreaId = currentAreaId;
     }
 
     if (nextAreaId)
     {
-      endpoint.enteringAreaId =
-        nextAreaId;
+      endpoint.enteringAreaId = nextAreaId;
     }
   }
 
-  const currentPathId =
-    profile.path?.id;
+  const currentPathId = profile.path?.id;
 
-  const nextPathId =
-    nextProfile?.path?.id;
+  const nextPathId = nextProfile?.path?.id;
 
   if (
     currentPathId !== nextPathId
@@ -2931,23 +2919,18 @@ for (
   {
     if (currentPathId)
     {
-      endpoint.leavingPathId =
-        currentPathId;
+      endpoint.leavingPathId = currentPathId;
     }
 
     if (nextPathId)
     {
-      endpoint.enteringPathId =
-        nextPathId;
+      endpoint.enteringPathId = nextPathId;
     }
   }
 
-  if (
-    Object.keys(endpoint).length > 0
-  )
+  if (Object.keys(endpoint).length > 0)
   {
-    profile.endpoint =
-      endpoint;
+    profile.endpoint = endpoint;
   }
 }
 
@@ -2965,12 +2948,12 @@ for (
 }
 
 function handleContextMenu(
-  event:
-    React.MouseEvent<HTMLDivElement>
+  event: React.MouseEvent<HTMLDivElement>
 ) {
   event.preventDefault();
 
-if (interactionMode === 'path') {
+if (interactionMode === 'path') 
+{
   const point =
     screenToMap(
       event.clientX,
@@ -2981,10 +2964,9 @@ if (interactionMode === 'path') {
     point &&
     isPointInsideMap(point) &&
     pathInteraction.draft
-  ) {
-    pathInteraction.handleShapeIntent(
-      point
-    );
+  ) 
+  {
+    pathInteraction.handleShapeIntent(point);
   }
 
   setPieceContextMenu(null);
@@ -2997,7 +2979,8 @@ if (interactionMode === 'path') {
   return;
 }
 
-if (routePieceId !== null) {
+if (routePieceId !== null)
+{
   finishRouteAuthoring();
 
   setPieceContextMenu(null);
@@ -3010,7 +2993,8 @@ if (routePieceId !== null) {
   return;
 }
 
-if (interactionMode === 'distance') {
+if (interactionMode === 'distance')
+{
   distanceMeasurement.clear();
   setDistancePointer(null);
   setPieceContextMenu(null);
@@ -3036,10 +3020,10 @@ dispatch({
   type: 'contextMenu.close',
 });
 
-  const viewport =
-    viewportRef.current;
+  const viewport = viewportRef.current;
 
-  if (!viewport) {
+  if (!viewport)
+  {
     return;
   }
 
@@ -3049,14 +3033,14 @@ dispatch({
       event.clientY
     );
 
-  if (!point) {
+  if (!point)
+  {
     return;
   }
 
   if (!isPointInsideMap(point)) return;
 
-  const rect =
-    viewport.getBoundingClientRect();
+  const rect = viewport.getBoundingClientRect();
 
   const edge = editableEdges.find((candidate) => {
     const start = displayedSectionNodes.find((node) => {
@@ -3069,14 +3053,16 @@ dispatch({
     return pointToSegmentDistance(point, start.position, end.position) <=
       8 / scale;
   });
-  if (edge) {
+  if (edge) 
+  {
     const start = displayedSectionNodes.find((node) => {
       return node.id === edge.startNodeId;
     });
     const end = displayedSectionNodes.find((node) => {
       return node.id === edge.endNodeId;
     });
-    if (start && end) {
+    if (start && end)
+    {
       setSectionContextMenu({
         kind: 'edge',
         id: edge.id,
@@ -3089,7 +3075,8 @@ dispatch({
   }
     setSectionContextMenu(null);
 
-  if (interactionMode !== 'build') {
+  if (interactionMode !== 'build')
+  {
     return;
   }
 
@@ -3106,8 +3093,7 @@ dispatch({
 }
 
   function handleWheel(
-    event:
-      React.WheelEvent<HTMLDivElement>
+    event: React.WheelEvent<HTMLDivElement>
   ) {
     const viewport = event.currentTarget;
     const underPointer = viewport.ownerDocument.elementFromPoint(event.clientX, event.clientY);
@@ -3130,18 +3116,14 @@ dispatch({
       scale *
         zoomFactor,
       {
-        x:
-          event.clientX,
-
-        y:
-          event.clientY,
+        x: event.clientX,
+        y: event.clientY,
       }
     );
   }
 
-  function addDistanceAreaCrossings(
-  destination: Point
-) {
+  function addDistanceAreaCrossings(destination: Point)
+  {
   const resolved =
     resolveDistanceAnchors(
       distanceMeasurement.anchors,
@@ -3150,10 +3132,10 @@ dispatch({
       pathNetwork.terminals
     );
 
-  const previous =
-    resolved.at(-1);
+  const previous = resolved.at(-1);
 
-  if (!previous) {
+  if (!previous)
+  {
     return;
   }
 
@@ -3166,17 +3148,14 @@ dispatch({
       sectionNodes
     );
 
-  for (const crossing of crossings) {
-    distanceMeasurement.addPoint(
-      crossing.position
-    );
+  for (const crossing of crossings)
+  {
+    distanceMeasurement.addPoint(crossing.position);
   }
 }
 
-  function handlePointerDown(
-    event:
-      React.PointerEvent<HTMLDivElement>
-  ) {
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>)
+  {
     if (
       distanceInteractionActive &&
       event.button === 0
@@ -3187,47 +3166,43 @@ dispatch({
         target === event.currentTarget ||
         target instanceof HTMLImageElement;
 
-      if (mapBackground) {
+      if (mapBackground)
+      {
         const point = screenToMap(
           event.clientX,
           event.clientY
         );
 
         if (
-  point &&
-  isPointInsideMap(point)
-) {
-  event.preventDefault();
-
-  addDistanceAreaCrossings(
-    point
-  );
-
-  distanceMeasurement.addPoint(
-    point
-  );
-}
+          point &&
+          isPointInsideMap(point)
+        )
+        {
+          event.preventDefault();
+          addDistanceAreaCrossings(point);
+          distanceMeasurement.addPoint(point);
+        }
 
         return;
       }
     }
 
     if (
-  interactionMode === 'path' &&
-  event.button === 0 &&
-  event.ctrlKey
-) {
-  const target = event.target;
+      interactionMode === 'path' &&
+      event.button === 0 &&
+      event.ctrlKey
+    ) {
+      const target = event.target;
 
-  const mapBackground =
-    target === event.currentTarget ||
-    target instanceof HTMLImageElement;
+      const mapBackground =
+        target === event.currentTarget ||
+        target instanceof HTMLImageElement;
 
-  if (mapBackground) {
-    const point = screenToMap(
-      event.clientX,
-      event.clientY
-    );
+    if (mapBackground) {
+      const point = screenToMap(
+        event.clientX,
+        event.clientY
+      );
 
     if (
       point &&
