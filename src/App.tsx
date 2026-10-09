@@ -1222,6 +1222,15 @@ const prospectRouteLeg = async (
         }
       : legProfile.distance;
 
+  const distanceFromLegStart =
+    distanceOverride !== undefined
+      ? Math.max(
+          0,
+          legProfile.distance.value -
+            distanceOverride
+        )
+      : 0;
+
   const result =
     await moduleEventBus.request<{
       duration: number;
@@ -1275,7 +1284,7 @@ const prospectRouteLeg = async (
     }
   );
 
-    const occurrences =
+  const occurrences =
     generateTravelOccurrences({
       pieceId: spatialPiece.id,
       routeLeg,
@@ -1283,6 +1292,7 @@ const prospectRouteLeg = async (
       startTime,
       endTime,
       duration: result.duration,
+      distanceFromLegStart,
     });
 
   await moduleEventBus.request(

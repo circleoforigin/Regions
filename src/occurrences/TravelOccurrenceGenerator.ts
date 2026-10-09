@@ -16,6 +16,7 @@ export interface TravelOccurrenceContext
   startTime: number;
   endTime: number;
   duration: number;
+  distanceFromLegStart: number;
 }
 
 function getPointSimulationTime(
@@ -23,21 +24,32 @@ function getPointSimulationTime(
   context: TravelOccurrenceContext
 ): number
 {
-  const totalDistance =
-    context.legProfile.distance.value;
+  const remainingDistance =
+    Math.max(
+      0,
+      context.legProfile.distance.value -
+        context.distanceFromLegStart
+    );
 
-  if (totalDistance <= 0)
+  if (remainingDistance <= 0)
   {
     return context.startTime;
   }
+
+  const distanceFromProspectStart =
+    Math.max(
+      0,
+      point.distanceFromLegStart.value -
+        context.distanceFromLegStart
+    );
 
   const progress =
     Math.max(
       0,
       Math.min(
         1,
-        point.distanceFromLegStart.value /
-          totalDistance
+        distanceFromProspectStart /
+          remainingDistance
       )
     );
 
@@ -90,6 +102,14 @@ export function generateTravelOccurrences(
 
   for (const point of context.legProfile.points)
   {
+    if (
+      point.distanceFromLegStart.value <=
+        context.distanceFromLegStart
+    )
+    {
+      continue;
+    }
+
     const occurrence =
       createTraversalOccurrence(
         point,
