@@ -71,6 +71,7 @@ import type {
   RouteLeg,
 } from './models/Route';
 import { getRouteLegs } from './models/Route';
+import { generateTravelOccurrences } from './occurrences/TravelOccurrenceGenerator';
 import {
   findContainingParty,
   getPartyMembers,
@@ -1271,6 +1272,24 @@ const prospectRouteLeg = async (
       piece: spatialPiece,
       route,
       routeLeg,
+    }
+  );
+
+    const occurrences =
+    generateTravelOccurrences({
+      pieceId: spatialPiece.id,
+      routeLeg,
+      legProfile,
+      startTime,
+      endTime,
+      duration: result.duration,
+    });
+
+  await moduleEventBus.request(
+    'occurrences.submit',
+    {
+      pieceId: spatialPiece.id,
+      occurrences,
     }
   );
 
