@@ -16,6 +16,7 @@ import type {
   Route,
   RouteLegProfile,
   RouteNode,
+  RouteTraversalPoint,
 } from '../models/Route';
 import { routeNodesToDistanceAnchors } from '../navigation/RouteDistance';
 import {
@@ -2577,7 +2578,9 @@ for (
       x: number;
       y: number;
     },
-    distanceFromStart: number
+    distanceFromStart: number,
+    sectorCrossing?:
+      RouteTraversalPoint['sectorCrossing']
   ) =>
   {
     const spatialContext =
@@ -2606,6 +2609,9 @@ for (
         },
       ...(spatialContext
         ? { spatialContext }
+        : {}),
+      ...(sectorCrossing
+        ? { sectorCrossing }
         : {}),
     });
   };
@@ -2691,23 +2697,106 @@ for (
               previous.x +
               (
                 position.x -
-                previous.x
+                  previous.x
               ) *
               crossing.fraction,
             y:
               previous.y +
               (
                 position.y -
-                previous.y
+                  previous.y
               ) *
               crossing.fraction,
           };
+
+          const epsilon = 0.000001;
+
+          const beforeFraction =
+            Math.max(
+              0,
+              crossing.fraction - epsilon
+            );
+
+          const afterFraction =
+            Math.min(
+              1,
+              crossing.fraction + epsilon
+            );
+
+          const beforeContext =
+            resolveSpatialContext(
+              mapId,
+              {
+                x:
+                  previous.x +
+                  (
+                    position.x -
+                      previous.x
+                  ) *
+                  beforeFraction,
+                y:
+                  previous.y +
+                  (
+                    position.y -
+                      previous.y
+                  ) *
+                  beforeFraction,
+              },
+              spatialMaps,
+              projectFeatures,
+              projectSections,
+              projectSectionEdges,
+              projectSectionNodes,
+              OVERWORLD_SECTOR_RESOLUTION
+            );
+
+          const afterContext =
+            resolveSpatialContext(
+              mapId,
+              {
+                x:
+                  previous.x +
+                  (
+                    position.x -
+                      previous.x
+                  ) *
+                  afterFraction,
+                y:
+                  previous.y +
+                  (
+                    position.y -
+                      previous.y
+                  ) *
+                  afterFraction,
+              },
+              spatialMaps,
+              projectFeatures,
+              projectSections,
+              projectSectionEdges,
+              projectSectionNodes,
+              OVERWORLD_SECTOR_RESOLUTION
+            );
 
           addTraversalPoint(
             crossingPosition,
             mapDistanceFromStart +
               segmentMapDistance *
-                crossing.fraction
+                crossing.fraction,
+            beforeContext &&
+            afterContext &&
+            (
+              beforeContext.sector.worldMapId !==
+                afterContext.sector.worldMapId ||
+              beforeContext.sector.x !==
+                afterContext.sector.x ||
+              beforeContext.sector.y !==
+                afterContext.sector.y
+            )
+              ? {
+                  from: beforeContext.sector,
+                  to: afterContext.sector,
+                }
+              : undefined
           );
         }
       }

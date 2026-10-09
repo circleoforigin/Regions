@@ -1,6 +1,7 @@
 import type { PhysicalDistance } from '../interaction/distance/DistanceMeasurement';
 import type { SpatialPoint } from '../spatial/SpatialAnchor';
 import type { SpatialContext } from '../spatial/SpatialContext';
+import type { SectorAddress } from '../spatial/Sector';
 import type { PathType } from './Path';
 import type { RulesetExtensionData } from './RulesetExtensionData';
 
@@ -48,6 +49,10 @@ export interface RouteTraversalPoint
   position: SpatialPoint;
   distanceFromLegStart: PhysicalDistance;
   spatialContext?: SpatialContext;
+  sectorCrossing?: {
+    from: SectorAddress;
+    to: SectorAddress;
+  };
 }
 
 export interface RouteLegAreaProfile
