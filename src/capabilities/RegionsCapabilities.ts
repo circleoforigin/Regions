@@ -63,8 +63,41 @@ const continueTravelCommandDefinition: CommandDefinition = {
       label: 'Remaining Distance',
       type: 'number',
     },
+    {
+      key: 'distanceFromLegStart',
+      label: 'Distance From Leg Start',
+      type: 'number',
+    },
   ],
 };
+
+const commitTravelPositionCommandDefinition:
+  CommandDefinition = {
+    id: 'Regions.CommitTravelPosition',
+    label: 'Commit Travel Position',
+    description:
+      'Commits a Piece to a previously prospected position along its Route.',
+    input: [
+      {
+        key: 'pieceId',
+        label: 'Piece ID',
+        type: 'string',
+        required: true,
+      },
+      {
+        key: 'routeLegId',
+        label: 'Route Leg ID',
+        type: 'string',
+        required: true,
+      },
+      {
+        key: 'distanceFromLegStart',
+        label: 'Distance From Leg Start',
+        type: 'number',
+        required: true,
+      },
+    ],
+  };
 
 const travelLegProspectedEventDefinition: EventDefinition = {
   id: 'Regions.TravelLegProspected',
@@ -98,6 +131,16 @@ const travelLegProspectedEventDefinition: EventDefinition = {
       type: 'number',
     },
     {
+      key: 'startDistanceFromLegStart',
+      label: 'Start Distance From Leg Start',
+      type: 'number',
+    },
+    {
+      key: 'endDistanceFromLegStart',
+      label: 'End Distance From Leg Start',
+      type: 'number',
+    },
+    {
       key: 'duration',
       label: 'Duration',
       type: 'number',
@@ -126,6 +169,7 @@ export const regionsEventDefinitions:
 export const regionsCommandDefinitions = [
   travelCommandDefinition,
   continueTravelCommandDefinition,
+  commitTravelPositionCommandDefinition,
   ...projectCommandDefinitions,
 ]
 

@@ -71,6 +71,7 @@ import type {
   RouteLeg,
 } from './models/Route';
 import { getRouteLegs } from './models/Route';
+import { resolveRouteTravelPosition } from './routes/RouteTravelPosition';
 import { generateTravelOccurrences } from './occurrences/TravelOccurrenceGenerator';
 import {
   findContainingParty,
@@ -1553,6 +1554,113 @@ useEffect(() =>
   return () =>
   {
     unregisterContinueTravel();
+  };
+}, [
+  activeProject,
+]);
+
+useEffect(() =>
+{
+  const unregisterCommitTravelPosition =
+    moduleEventBus.registerRequestHandler(
+      'Regions.CommitTravelPosition',
+      (message) =>
+      {
+        const payload =
+          message.payload as
+            | {
+                pieceId?: string;
+                routeLegId?: string;
+                distanceFromLegStart?: number;
+              }
+            | undefined;
+
+        if (
+          !activeProject ||
+          !payload?.pieceId ||
+          !payload.routeLegId ||
+          typeof payload.distanceFromLegStart !==
+            'number'
+        )
+        {
+          return;
+        }
+
+        const route =
+          activeProject.routes.find(
+            (candidate) =>
+              candidate.pieceId ===
+              payload.pieceId
+          );
+
+        if (!route)
+        {
+          throw new Error(
+            `Piece "${payload.pieceId}" has no Route.`
+          );
+        }
+
+        const routeLeg =
+          getRouteLegs(route).find(
+            (candidate) =>
+              candidate.id ===
+              payload.routeLegId
+          );
+
+        if (!routeLeg)
+        {
+          throw new Error(
+            `Route Leg "${payload.routeLegId}" was not found.`
+          );
+        }
+
+        const legProfile =
+          route.legProfiles?.find(
+            (candidate) =>
+              candidate.legId ===
+              routeLeg.id
+          );
+
+        if (!legProfile)
+        {
+          throw new Error(
+            `Route Leg "${routeLeg.id}" has no compiled profile.`
+          );
+        }
+
+        const resolved =
+          resolveRouteTravelPosition(
+            legProfile,
+            payload.distanceFromLegStart
+          );
+
+        const pieces =
+          movePartyAndMembers(
+            activeProject.pieces,
+            payload.pieceId,
+            resolved.mapId,
+            resolved.position
+          );
+
+        setActiveProject({
+          ...activeProject,
+          pieces,
+        });
+
+        markProjectDirty();
+
+        return {
+          accepted: true,
+          pieceId: payload.pieceId,
+          mapId: resolved.mapId,
+          position: resolved.position,
+        };
+      }
+    );
+
+  return () =>
+  {
+    unregisterCommitTravelPosition();
   };
 }, [
   activeProject,
