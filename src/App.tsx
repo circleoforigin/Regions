@@ -1514,33 +1514,74 @@ useEffect(() =>
           };
         }
 
-       if (
-  payload.mode === 'recalculate' &&
-  (
-    typeof payload.remainingDistance !== 'number' ||
-    payload.remainingDistance < 0 ||
-    typeof payload.distanceFromLegStart !== 'number' ||
-    payload.distanceFromLegStart < 0
-  )
-)
-{
-  throw new Error(
-    'Regions.ContinueTravel recalculation requires remainingDistance and distanceFromLegStart.'
-  );
-}
+        if (
+          payload.mode === 'recalculate' &&
+          (
+            typeof payload.distanceFromLegStart !== 'number' ||
+            payload.distanceFromLegStart < 0
+          )
+        )
+        {
+          throw new Error(
+            'Regions.ContinueTravel recalculation requires distanceFromLegStart.'
+          );
+        }
 
- const prospected =
-  await prospectRouteLeg(
-    route,
-    targetLeg,
-    payload.startTime,
-    payload.mode === 'recalculate'
-      ? payload.remainingDistance
-      : undefined,
-    payload.mode === 'recalculate'
-      ? payload.distanceFromLegStart
-      : undefined
-  );
+        let remainingDistance =
+          payload.remainingDistance;
+
+        if (
+          payload.mode === 'recalculate' &&
+          remainingDistance === undefined
+        )
+        {
+          const legProfile =
+            route.legProfiles?.find(
+              (candidate) =>
+                candidate.legId ===
+                currentLeg.id
+            );
+
+          if (!legProfile)
+          {
+            throw new Error(
+              `Route Leg "${currentLeg.id}" has no compiled profile.`
+            );
+          }
+
+          remainingDistance =
+            Math.max(
+              0,
+              legProfile.distance.value -
+                payload.distanceFromLegStart!
+            );
+        }
+
+        if (
+          payload.mode === 'recalculate' &&
+          (
+            typeof remainingDistance !== 'number' ||
+            remainingDistance < 0
+          )
+        )
+        {
+          throw new Error(
+            'Regions.ContinueTravel recalculation requires a valid remaining distance.'
+          );
+        }
+
+        const prospected =
+          await prospectRouteLeg(
+            route,
+            targetLeg,
+            payload.startTime,
+            payload.mode === 'recalculate'
+              ? remainingDistance
+              : undefined,
+            payload.mode === 'recalculate'
+              ? payload.distanceFromLegStart
+              : undefined
+          );
 
         return {
           accepted: prospected,
