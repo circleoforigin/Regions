@@ -184,12 +184,13 @@ export function createTravelRecalculateOccurrence(
       : undefined,
     title,
     description,
-    reaction:
-      OccurrenceReactions.Recalculate,
-    payload: {
-      routeLegId: context.routeLeg.id,
-      mode: 'recalculate',
-      remainingDistance,
-    },
+    reaction: OccurrenceReactions.Recalculate,
+payload: {
+  routeLegId: context.routeLeg.id,
+  mode: 'recalculate',
+  remainingDistance,
+  distanceFromLegStart:
+    point.distanceFromLegStart.value,
+},
   };
 }

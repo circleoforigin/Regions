@@ -1147,7 +1147,8 @@ const prospectRouteLeg = async (
   route: Route,
   routeLeg: RouteLeg,
   startTime: number,
-  distanceOverride?: number
+  distanceOverride?: number,
+  distanceFromLegStartOverride?: number
 ) =>
 {
   if (!activeProject)
@@ -1231,14 +1232,21 @@ const prospectRouteLeg = async (
         }
       : legProfile.distance;
 
-  const distanceFromLegStart =
-    distanceOverride !== undefined
+const distanceFromLegStart =
+  distanceFromLegStartOverride !== undefined
+    ? distanceFromLegStartOverride
+    : distanceOverride !== undefined
       ? Math.max(
           0,
           legProfile.distance.value -
             distanceOverride
         )
       : 0;
+
+      console.log(
+  '[Regions.Travel] requesting TravelTime',
+  routeLeg.id
+);
 
   const result =
     await moduleEventBus.request<{
@@ -1270,6 +1278,11 @@ const prospectRouteLeg = async (
         },
       }
     );
+
+    console.log(
+  '[Regions.Travel] TravelTime returned',
+  routeLeg.id
+);
 
   const endTime =
     startTime + result.duration;
@@ -1306,6 +1319,11 @@ const prospectRouteLeg = async (
       duration: result.duration,
       distanceFromLegStart,
     });
+
+    console.log(
+  '[Regions.Travel] submitting occurrences',
+  occurrences
+);
     
   await moduleEventBus.request(
     'occurrences.submit',
@@ -1314,6 +1332,10 @@ const prospectRouteLeg = async (
       occurrences,
     }
   );
+
+  console.log(
+  '[Regions.Travel] occurrences accepted'
+);
 
   return true;
 };
@@ -1325,6 +1347,10 @@ const prospectRouteLeg = async (
       'Regions.Travel',
       async (message) =>
       {
+
+        console.log(
+  '[Regions.Travel] request received'
+);
         const payload =
           message.payload as
             | {
@@ -1392,12 +1418,24 @@ if (travelingRoutes.length === 0)
             continue;
           }
 
+          console.log(
+  '[Regions.Travel] prospecting Route',
+  route.id,
+  'Piece',
+  route.pieceId
+);
+
           const prospected =
             await prospectRouteLeg(
               route,
               routeLeg,
               payload.startTime
             );
+
+            console.log(
+  '[Regions.Travel] prospect complete',
+  route.id
+);
 
           if (prospected)
           {
@@ -1444,6 +1482,7 @@ useEffect(() =>
                 startTime?: number;
                 mode?: 'recalculate' | 'next-leg';
                 remainingDistance?: number;
+                distanceFromLegStart?: number;
               }
             | undefined;
 
@@ -1500,28 +1539,33 @@ useEffect(() =>
           };
         }
 
-        if (
-          payload.mode === 'recalculate' &&
-          (
-            typeof payload.remainingDistance !== 'number' ||
-            payload.remainingDistance < 0
-          )
-        )
-        {
-          throw new Error(
-            'Regions.ContinueTravel recalculation requires remainingDistance.'
-          );
-        }
+       if (
+  payload.mode === 'recalculate' &&
+  (
+    typeof payload.remainingDistance !== 'number' ||
+    payload.remainingDistance < 0 ||
+    typeof payload.distanceFromLegStart !== 'number' ||
+    payload.distanceFromLegStart < 0
+  )
+)
+{
+  throw new Error(
+    'Regions.ContinueTravel recalculation requires remainingDistance and distanceFromLegStart.'
+  );
+}
 
-        const prospected =
-          await prospectRouteLeg(
-            route,
-            targetLeg,
-            payload.startTime,
-            payload.mode === 'recalculate'
-              ? payload.remainingDistance
-              : undefined
-          );
+ const prospected =
+  await prospectRouteLeg(
+    route,
+    targetLeg,
+    payload.startTime,
+    payload.mode === 'recalculate'
+      ? payload.remainingDistance
+      : undefined,
+    payload.mode === 'recalculate'
+      ? payload.distanceFromLegStart
+      : undefined
+  );
 
         return {
           accepted: prospected,
