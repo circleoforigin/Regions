@@ -1243,10 +1243,6 @@ const distanceFromLegStart =
         )
       : 0;
 
-      console.log(
-  '[Regions.Travel] requesting TravelTime',
-  routeLeg.id
-);
 
   const result =
     await moduleEventBus.request<{
@@ -1278,11 +1274,6 @@ const distanceFromLegStart =
         },
       }
     );
-
-    console.log(
-  '[Regions.Travel] TravelTime returned',
-  routeLeg.id
-);
 
   const endTime =
     startTime + result.duration;
@@ -1319,11 +1310,6 @@ const distanceFromLegStart =
       duration: result.duration,
       distanceFromLegStart,
     });
-
-    console.log(
-  '[Regions.Travel] submitting occurrences',
-  occurrences
-);
     
   await moduleEventBus.request(
     'occurrences.submit',
@@ -1333,9 +1319,6 @@ const distanceFromLegStart =
     }
   );
 
-  console.log(
-  '[Regions.Travel] occurrences accepted'
-);
 
   return true;
 };
@@ -1348,9 +1331,6 @@ const distanceFromLegStart =
       async (message) =>
       {
 
-        console.log(
-  '[Regions.Travel] request received'
-);
         const payload =
           message.payload as
             | {
@@ -1418,13 +1398,6 @@ if (travelingRoutes.length === 0)
             continue;
           }
 
-          console.log(
-  '[Regions.Travel] prospecting Route',
-  route.id,
-  'Piece',
-  route.pieceId
-);
-
           const prospected =
             await prospectRouteLeg(
               route,
@@ -1432,10 +1405,6 @@ if (travelingRoutes.length === 0)
               payload.startTime
             );
 
-            console.log(
-  '[Regions.Travel] prospect complete',
-  route.id
-);
 
           if (prospected)
           {
