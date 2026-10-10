@@ -1303,6 +1303,12 @@ const distanceFromLegStart =
     }
   );
 
+  const routeLegs = getRouteLegs(route);
+
+  const isRouteEnd =
+    routeLeg.index ===
+      routeLegs.length - 1; 
+
   const occurrences =
     generateTravelOccurrences({
       pieceId: spatialPiece.id,
@@ -1311,6 +1317,7 @@ const distanceFromLegStart =
         endpointFeature?.name,
       routeLeg,
       legProfile,
+      isRouteEnd,
       startTime,
       endTime,
       duration: result.duration,

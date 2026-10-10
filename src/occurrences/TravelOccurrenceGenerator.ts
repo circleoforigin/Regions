@@ -15,6 +15,7 @@ export interface TravelOccurrenceContext
   endpointFeatureName?: string;
   routeLeg: RouteLeg;
   legProfile: RouteLegProfile;
+  isRouteEnd: boolean;
   startTime: number;
   endTime: number;
   duration: number;
@@ -125,9 +126,29 @@ export function generateTravelOccurrences(
       entityId: null,
       sectorId: null,
       type: 'location',
+      displayLabel:
+        context.isRouteEnd
+          ? 'F'
+          : undefined,
       description:
         `${context.pieceName} arrives at ` +
         `${context.endpointFeatureName}.`,
+      reaction: OccurrenceReactions.Notify,
+    });
+  }
+  else if (context.isRouteEnd)
+  {
+    occurrences.push({
+      id: crypto.randomUUID(),
+      sourceModuleId: 'regions',
+      simulationTime: context.endTime,
+      pieceId: context.pieceId,
+      entityId: null,
+      sectorId: null,
+      type: 'location',
+      displayLabel: 'F',
+      description:
+        `${context.pieceName} reaches the end of its Route.`,
       reaction: OccurrenceReactions.Notify,
     });
   }
