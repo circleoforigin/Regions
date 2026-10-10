@@ -1289,6 +1289,11 @@ const distanceFromLegStart =
       duration: result.duration,
       speedMph: result.speedMph,
       distance,
+      startDistanceFromLegStart:
+        distanceFromLegStart,
+      endDistanceFromLegStart:
+        distanceFromLegStart +
+        distance.value,
       pace,
       endpoint: legProfile.endpoint,
       piece: spatialPiece,
