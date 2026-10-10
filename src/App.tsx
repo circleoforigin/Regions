@@ -1181,6 +1181,15 @@ const prospectRouteLeg = async (
     );
   }
 
+  const endpointFeature =
+    legProfile.endpoint?.featureId
+      ? projectFeatures.find(
+          (feature) =>
+            feature.id ===
+            legProfile.endpoint?.featureId
+        )
+      : undefined;
+
   const paceField =
     pieceRulesetInteraction
       ?.interaction.fields.find(
@@ -1287,6 +1296,9 @@ const prospectRouteLeg = async (
   const occurrences =
     generateTravelOccurrences({
       pieceId: spatialPiece.id,
+      pieceName: spatialPiece.name,
+      endpointFeatureName:
+        endpointFeature?.name,
       routeLeg,
       legProfile,
       startTime,
@@ -1294,7 +1306,7 @@ const prospectRouteLeg = async (
       duration: result.duration,
       distanceFromLegStart,
     });
-
+    
   await moduleEventBus.request(
     'occurrences.submit',
     {
@@ -1328,16 +1340,45 @@ const prospectRouteLeg = async (
           return;
         }
 
-        const travelingRoutes =
-          activeProject.routes.filter(
-            (route) =>
-              getRouteLegs(route).length > 0
-          );
+const validPieceIds =
+  new Set(
+    activeProject.pieces.map(
+      (piece) => piece.id
+    )
+  );
 
-        if (travelingRoutes.length === 0)
-        {
-          return;
-        }
+const validRoutes =
+  activeProject.routes.filter(
+    (route) =>
+      validPieceIds.has(route.pieceId)
+  );
+
+if (
+  validRoutes.length !==
+  activeProject.routes.length
+)
+{
+  setActiveProject({
+    ...activeProject,
+    routes: validRoutes,
+  });
+
+  markProjectDirty();
+}
+
+const travelingRoutes =
+  validRoutes.filter(
+    (route) =>
+      getRouteLegs(route).length > 0
+  );
+
+if (travelingRoutes.length === 0)
+{
+  return {
+    accepted: false,
+    prospectedCount: 0,
+  };
+}
 
         let prospectedCount = 0;
 
@@ -4008,14 +4049,19 @@ function handleDeletePiece() {
   const pieces = activeProject.pieces.filter((piece) => {
     return piece.id !== pieceToDelete.id;
   });
-  setActiveProject({
-    ...activeProject,
+
+setActiveProject({
+  ...activeProject,
+  pieces,
+  routes: activeProject.routes.filter(
+    (route) =>
+      route.pieceId !== pieceToDelete.id
+  ),
+  focusedPieceId: ensureValidPieceFocus(
     pieces,
-    focusedPieceId: ensureValidPieceFocus(
-      pieces,
-      activeProject.focusedPieceId
-    ),
-  });
+    activeProject.focusedPieceId
+  ),
+});
   setPieceToDelete(null);
   markProjectDirty();
 }

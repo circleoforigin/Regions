@@ -11,6 +11,8 @@ import type {
 export interface TravelOccurrenceContext
 {
   pieceId: string;
+  pieceName: string;
+  endpointFeatureName?: string;
   routeLeg: RouteLeg;
   legProfile: RouteLegProfile;
   startTime: number;
@@ -108,6 +110,26 @@ export function generateTravelOccurrences(
     {
       return occurrences;
     }
+  }
+
+  if (
+    context.legProfile.endpoint?.featureId &&
+    context.endpointFeatureName
+  )
+  {
+    occurrences.push({
+      id: crypto.randomUUID(),
+      sourceModuleId: 'regions',
+      simulationTime: context.endTime,
+      pieceId: context.pieceId,
+      entityId: null,
+      sectorId: null,
+      type: 'location',
+      description:
+        `${context.pieceName} arrives at ` +
+        `${context.endpointFeatureName}.`,
+      reaction: OccurrenceReactions.Notify,
+    });
   }
 
   occurrences.sort(
