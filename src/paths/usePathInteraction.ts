@@ -12,7 +12,10 @@ import {
   createStandalonePathTerminal,
   splitPathSegment,
 } from './PathAuthoring';
-import { insertPathShapePoint } from './PathGeometry';
+import {
+  findPathCrossings,
+  insertPathShapePoint,
+} from './PathGeometry';
 import { resolvePathSegment } from './PathMapState';
 import {
   deletePathSegment,
@@ -48,9 +51,108 @@ export function usePathInteraction({
   features,
   onNetworkChange,
   onMapChange,
-}: UsePathInteractionOptions) {
+}: UsePathInteractionOptions)
+{
   const authoring = usePathAuthoring();
 
+  const getDraftEndPosition =
+    useCallback(():
+      SpatialPoint | null =>
+    {
+      const draft =
+        authoring.draft;
+
+      if (!draft)
+      {
+        return null;
+      }
+
+      const shapePoint =
+        draft.shapePoints.at(-1);
+
+      if (shapePoint)
+      {
+        return shapePoint.position;
+      }
+
+           const start =
+        draft.start;
+
+      if (start.kind === 'feature')
+      {
+        return (
+          features.find(
+            (feature) =>
+              feature.id ===
+              start.featureId
+          )?.position ?? null
+        );
+      }
+
+      return (
+        network.terminals.find(
+          (terminal) =>
+            terminal.id ===
+              start.terminalId
+        )?.position ?? null
+      );
+    [
+      authoring.draft,
+      features,
+      network.terminals,
+    ]
+  );
+
+  const crossesExistingPath =
+    useCallback(
+      (
+        endPosition: SpatialPoint
+      ): boolean =>
+      {
+        const startPosition =
+          getDraftEndPosition();
+
+        if (!startPosition)
+        {
+          return false;
+        }
+
+        const resolvedSegments =
+          network.segments
+            .map(
+              (segment) =>
+                resolvePathSegment(
+                  segment,
+                  network.terminals,
+                  features
+                )
+            )
+            .filter(
+              (
+                segment
+              ): segment is NonNullable<
+                ReturnType<
+                  typeof resolvePathSegment
+                >
+              > =>
+                segment !== null
+            );
+
+        return (
+          findPathCrossings(
+            startPosition,
+            endPosition,
+            resolvedSegments
+          ).length > 0
+        );
+      },
+      [
+        features,
+        getDraftEndPosition,
+        network.segments,
+        network.terminals,
+      ]
+    );
   const [
     movingTerminalId,
     setMovingTerminalId,
@@ -151,6 +253,12 @@ export function usePathInteraction({
           return;
         }
 
+        if (crossesExistingPath(position))
+        {
+          authoring.cancel();
+          return;
+        }
+
         const segment =
           createPathSegment(
             mapId,
@@ -197,6 +305,7 @@ export function usePathInteraction({
       [
         active,
         authoring,
+        crossesExistingPath,
         mapId,
         network,
         onMapChange,
@@ -216,11 +325,18 @@ export function usePathInteraction({
           return;
         }
 
+        if (crossesExistingPath(position))
+        {
+          authoring.cancel();
+          return;
+        }
+
         authoring.addShapePoint(position);
       },
       [
         active,
         authoring,
+        crossesExistingPath,
       ]
     );
 
