@@ -511,6 +511,10 @@ function MapViewport({
     null
   );
   const [
+    routeFinishPending,
+    setRouteFinishPending,
+  ] = useState(false);
+  const [
     selectedPieceId,
     setSelectedPieceId,
   ] = useState<string | null>(
@@ -2399,11 +2403,11 @@ function startSectionFromEdge(edgeId: string) {
 
 function cancelRouteAuthoring()
 {
+  setRouteFinishPending(false);
   distanceMeasurement.clear();
   setRoutePieceId(null);
   setDistancePointer(null);
 }
-
 
 function finishRouteAuthoring() {
   if (routePieceId === null) {
@@ -2955,6 +2959,17 @@ for (
   setDistancePointer(null);
 }
 
+useEffect(() =>
+{
+  if (!routeFinishPending)
+  {
+    return;
+  }
+
+  setRouteFinishPending(false);
+  finishRouteAuthoring();
+}, [routeFinishPending, distanceMeasurement.anchors]);
+
 function handleContextMenu(
   event: React.MouseEvent<HTMLDivElement>
 ) {
@@ -3189,6 +3204,14 @@ dispatch({
           event.preventDefault();
           addDistanceAreaCrossings(point);
           distanceMeasurement.addPoint(point);
+
+          if (
+            routePieceId !== null &&
+            event.shiftKey
+          )
+          {
+            setRouteFinishPending(true);
+          }
         }
 
         return;
