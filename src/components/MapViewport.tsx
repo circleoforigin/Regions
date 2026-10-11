@@ -5010,7 +5010,8 @@ function saveSectionProperties() {
     onDistancePathClick={(
   segmentId,
   position,
-  usePath
+  usePath,
+  finishRoute
 ) => {
   if (!usePath) {
     addDistanceAreaCrossings(
@@ -5023,10 +5024,19 @@ function saveSectionProperties() {
     position,
     usePath
   );
+
+  if (
+    routePieceId !== null &&
+    finishRoute
+  )
+  {
+    setRouteFinishPending(true);
+  }
 }}
     onDistanceTerminalClick={(
   terminalId,
-  usePath
+  usePath,
+  finishRoute
 ) => {
   if (!usePath) {
     const terminal =
@@ -5046,6 +5056,14 @@ function saveSectionProperties() {
     terminalId,
     usePath
   );
+
+    if (
+    routePieceId !== null &&
+    finishRoute
+  )
+  {
+    setRouteFinishPending(true);
+  }
 }}
     terminals={
       pathNetwork.terminals
@@ -5647,6 +5665,14 @@ onClick={(event) => {
     feature.id,
     event.ctrlKey
   );
+
+  if (
+    routePieceId !== null &&
+    event.shiftKey
+  )
+  {
+    setRouteFinishPending(true);
+  }
 
   return;
 }

@@ -162,7 +162,8 @@ interface PathOverlayProps {
   onDistancePathClick: (
     segmentId: string,
     position: SpatialPoint,
-    usePath: boolean
+    usePath: boolean,
+    finishRoute: boolean
   ) => void;
   onExplorePathClick: (
     segmentId: string,
@@ -170,7 +171,8 @@ interface PathOverlayProps {
   ) => void;
   onDistanceTerminalClick: (
     terminalId: string,
-    usePath: boolean
+    usePath: boolean,
+    finishRoute: boolean
   ) => void;
   terminals:
     StandalonePathTerminal[];
@@ -371,7 +373,8 @@ export default function PathOverlay({
     onDistancePathClick(
       item.segment.id,
       position,
-      event.ctrlKey
+      event.ctrlKey,
+      event.shiftKey
     );
 
     return;
@@ -488,7 +491,8 @@ export default function PathOverlay({
 
                 onDistanceTerminalClick(
                     terminal.id,
-                    event.ctrlKey
+                    event.ctrlKey,
+                    event.shiftKey
                 );
               }}
               onContextMenu={(event) =>
