@@ -355,3 +355,218 @@ export function insertPathShapePoint(
     updatedAt: new Date(),
   };
 }
+
+export interface PathCrossing {
+  segmentId: string;
+  position: SpatialPoint;
+  fraction: number;
+  terminal?: ResolvedPathSegment['start'];
+}
+
+const PATH_CROSSING_TERMINAL_SNAP_DISTANCE = 2;
+
+export function findPathCrossings(
+  start: SpatialPoint,
+  end: SpatialPoint,
+  segments: ResolvedPathSegment[]
+): PathCrossing[]
+{
+  const crossings: PathCrossing[] = [];
+
+  for (const resolved of segments)
+  {
+    const points = [
+      resolved.start.position,
+
+      ...resolved.segment.shapePoints.map(
+        (point) => point.position
+      ),
+
+      resolved.end.position,
+    ];
+
+    for (
+      let index = 0;
+      index < points.length - 1;
+      index += 1
+    )
+    {
+      const crossing =
+        findLineSegmentIntersection(
+          start,
+          end,
+          points[index],
+          points[index + 1]
+        );
+
+      if (!crossing)
+      {
+        continue;
+      }
+
+      const terminal =
+        [
+          resolved.start,
+          resolved.end,
+        ].find(
+          (candidate) =>
+            Math.hypot(
+              candidate.position.x -
+                crossing.position.x,
+              candidate.position.y -
+                crossing.position.y
+            ) <=
+              PATH_CROSSING_TERMINAL_SNAP_DISTANCE
+        );
+
+      const position =
+        terminal?.position ??
+        crossing.position;
+
+      const duplicate =
+        crossings.some(
+          (candidate) =>
+            Math.hypot(
+              candidate.position.x -
+                position.x,
+              candidate.position.y -
+                position.y
+            ) < 0.000001
+        );
+
+      if (duplicate)
+      {
+        continue;
+      }
+
+      crossings.push({
+        segmentId:
+          resolved.segment.id,
+        position,
+        fraction:
+          getLineFraction(
+            start,
+            end,
+            position
+          ),
+        ...(terminal
+          ? { terminal }
+          : {}),
+      });
+    }
+  }
+
+  return crossings
+    .filter(
+      (crossing) =>
+        crossing.fraction >
+          0.000001 &&
+        crossing.fraction <
+          0.999999
+    )
+    .sort(
+      (left, right) =>
+        left.fraction -
+        right.fraction
+    );
+}
+
+function findLineSegmentIntersection(
+  routeStart: SpatialPoint,
+  routeEnd: SpatialPoint,
+  pathStart: SpatialPoint,
+  pathEnd: SpatialPoint
+): {
+  position: SpatialPoint;
+} | null
+{
+  const routeDx =
+    routeEnd.x - routeStart.x;
+
+  const routeDy =
+    routeEnd.y - routeStart.y;
+
+  const pathDx =
+    pathEnd.x - pathStart.x;
+
+  const pathDy =
+    pathEnd.y - pathStart.y;
+
+  const denominator =
+    routeDx * pathDy -
+    routeDy * pathDx;
+
+  if (Math.abs(denominator) < 0.000001)
+  {
+    return null;
+  }
+
+  const offsetX =
+    pathStart.x - routeStart.x;
+
+  const offsetY =
+    pathStart.y - routeStart.y;
+
+  const routeFraction =
+    (
+      offsetX * pathDy -
+      offsetY * pathDx
+    ) / denominator;
+
+  const pathFraction =
+    (
+      offsetX * routeDy -
+      offsetY * routeDx
+    ) / denominator;
+
+  if (
+    routeFraction < 0 ||
+    routeFraction > 1 ||
+    pathFraction < 0 ||
+    pathFraction > 1
+  )
+  {
+    return null;
+  }
+
+  return {
+    position: {
+      x:
+        routeStart.x +
+        routeDx * routeFraction,
+      y:
+        routeStart.y +
+        routeDy * routeFraction,
+    },
+  };
+}
+
+function getLineFraction(
+  start: SpatialPoint,
+  end: SpatialPoint,
+  position: SpatialPoint
+): number
+{
+  const dx =
+    end.x - start.x;
+
+  const dy =
+    end.y - start.y;
+
+  const lengthSquared =
+    dx * dx + dy * dy;
+
+  if (lengthSquared <= 0)
+  {
+    return 0;
+  }
+
+  return (
+    (
+      position.x - start.x
+    ) * dx +
+    (
+      position.y - start.y
+    ) * dy
+  ) / lengthSquared;
+}

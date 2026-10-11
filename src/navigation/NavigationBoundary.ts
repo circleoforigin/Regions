@@ -58,11 +58,11 @@ export function findNavigationAreaCrossings(
       const duplicate =
         crossings.some(
           (crossing) =>
-            crossing.area.id ===
-              section.id &&
-            Math.abs(
-              crossing.fraction -
-                intersection.fraction
+            Math.hypot(
+              crossing.position.x -
+                intersection.position.x,
+              crossing.position.y -
+                intersection.position.y
             ) < 0.000001
         );
 
@@ -126,8 +126,6 @@ export function findNavigationAreaPolylineCrossings(
       const duplicate =
         crossings.some(
           (existing) =>
-            existing.area.id ===
-              crossing.area.id &&
             Math.hypot(
               existing.position.x -
                 crossing.position.x,

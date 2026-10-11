@@ -1,30 +1,22 @@
-import type {
-  PathTerminalReference,
-} from '../../models/Path';
-
-import type {
-  ResolvedPathSegment,
-} from '../../paths/PathMapState';
-
+import type { PathTerminalReference } from '../../models/Path';
+import type { ResolvedPathSegment } from '../../paths/PathMapState';
 import {
   findPathRoute,
   type PathRouteEndpoint,
 } from '../../paths/PathRouting';
-
 import type {
   DistanceSegment,
   ResolvedDistanceAnchor,
 } from './DistanceMeasurement';
-
 import type {
   Section,
   SectionEdge,
   SectionNode,
 } from '../../models/Section';
-
 import {
   findNavigationAreaPolylineCrossings,
 } from '../../navigation/NavigationBoundary';
+import { findPathCrossings } from '../../paths/PathGeometry';
 
 function featureTerminalReference(
   featureId: string,
@@ -447,21 +439,139 @@ result.push({
       }
     }
 
-    result.push({
-      start,
-      end,
-      mapDistance: Math.hypot(
-        end.position.x -
-          start.position.x,
-        end.position.y -
-          start.position.y
-      ),
-      kind: 'straight',
-      points: [
+    const pathCrossings =
+      findPathCrossings(
         start.position,
         end.position,
-      ],
-    });
+        pathSegments
+      );
+
+    if (pathCrossings.length === 0)
+    {
+      result.push({
+        start,
+        end,
+        mapDistance: Math.hypot(
+          end.position.x -
+            start.position.x,
+          end.position.y -
+            start.position.y
+        ),
+        kind: 'straight',
+        points: [
+          start.position,
+          end.position,
+        ],
+      });
+
+      continue;
+    }
+
+    const crossingAnchors:
+      ResolvedDistanceAnchor[] = [
+        start,
+      ];
+
+    for (
+      let crossingIndex = 0;
+      crossingIndex < pathCrossings.length;
+      crossingIndex += 1
+    )
+    {
+      const crossing =
+        pathCrossings[crossingIndex];
+
+      let anchor:
+        ResolvedDistanceAnchor['anchor'];
+
+      if (
+        crossing.terminal?.reference.kind ===
+          'feature'
+      )
+      {
+        anchor = {
+          id:
+            `path-crossing-${index}-${crossingIndex}`,
+          kind: 'feature',
+          featureId:
+            crossing.terminal.reference.featureId,
+        };
+      }
+      else if (
+        crossing.terminal?.reference.kind ===
+          'standalone'
+      )
+      {
+        anchor = {
+          id:
+            `path-crossing-${index}-${crossingIndex}`,
+          kind: 'terminal',
+          terminalId:
+            crossing.terminal.reference.terminalId,
+        };
+      }
+      else
+      {
+        anchor = {
+          id:
+            `path-crossing-${index}-${crossingIndex}`,
+          kind: 'path',
+          segmentId:
+            crossing.segmentId,
+          position:
+            crossing.position,
+        };
+      }
+
+      crossingAnchors.push({
+        anchor,
+        position:
+          crossing.position,
+      });
+    }
+
+    crossingAnchors.push(end);
+
+    for (
+      let crossingIndex = 1;
+      crossingIndex < crossingAnchors.length;
+      crossingIndex += 1
+    )
+    {
+      const segmentStart =
+        crossingAnchors[
+          crossingIndex - 1
+        ];
+
+      const segmentEnd =
+        crossingAnchors[
+          crossingIndex
+        ];
+
+      const mapDistance =
+        Math.hypot(
+          segmentEnd.position.x -
+            segmentStart.position.x,
+          segmentEnd.position.y -
+            segmentStart.position.y
+        );
+
+      if (mapDistance <= 0.000001)
+      {
+        continue;
+      }
+
+      result.push({
+        start: segmentStart,
+        end: segmentEnd,
+        mapDistance,
+        kind: 'straight',
+        points: [
+          segmentStart.position,
+          segmentEnd.position,
+        ],
+      });
+    }
   }
 
   return result;
