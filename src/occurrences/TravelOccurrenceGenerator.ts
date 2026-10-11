@@ -7,6 +7,7 @@ import type {
   RouteLegProfile,
   RouteTraversalPoint,
 } from '../models/Route';
+import { formatRegionsOccurrenceMessage } from './RegionsOccurrenceMessages';
 
 export interface TravelOccurrenceContext
 {
@@ -131,8 +132,14 @@ export function generateTravelOccurrences(
           ? 'F'
           : undefined,
       description:
-        `${context.pieceName} arrives at ` +
-        `${context.endpointFeatureName}.`,
+        formatRegionsOccurrenceMessage(
+          'locationArrival',
+          {
+            piece: context.pieceName,
+            location:
+              context.endpointFeatureName,
+          }
+        ),
       reaction: OccurrenceReactions.Notify,
     });
   }
@@ -148,7 +155,12 @@ export function generateTravelOccurrences(
       type: 'location',
       displayLabel: 'F',
       description:
-        `${context.pieceName} reaches the end of its Route.`,
+        formatRegionsOccurrenceMessage(
+          'routeEnd',
+          {
+            piece: context.pieceName,
+          }
+        ),
       reaction: OccurrenceReactions.Notify,
     });
   }
