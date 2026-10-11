@@ -2397,6 +2397,14 @@ function startSectionFromEdge(edgeId: string) {
   setSectionContextMenu(null);
 }
 
+function cancelRouteAuthoring()
+{
+  distanceMeasurement.clear();
+  setRoutePieceId(null);
+  setDistancePointer(null);
+}
+
+
 function finishRouteAuthoring() {
   if (routePieceId === null) {
     return;
@@ -2981,7 +2989,7 @@ if (interactionMode === 'path')
 
 if (routePieceId !== null)
 {
-  finishRouteAuthoring();
+  cancelRouteAuthoring();
 
   setPieceContextMenu(null);
   setSectionContextMenu(null);
