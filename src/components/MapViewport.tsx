@@ -106,6 +106,7 @@ import PathSegmentPopup
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
 const NODE_SNAP_DISTANCE = 8;
+const PATH_SNAP_DISTANCE = 5;
 const NAVIGATION_ZOOM_RATIO = 0.5;
 const EDGE_SCROLL_ZONE_PX = 60;
 const EDGE_SCROLL_DELAY_MS = 250;
@@ -4024,7 +4025,7 @@ if (
 
     if (
       distance <=
-        FEATURE_MARKER_MIN_DISTANCE &&
+        PATH_SNAP_DISTANCE &&
       distance < closestDistance
     ) {
       closestDistance = distance;
@@ -4099,7 +4100,7 @@ onPieceDrop?.(
 
           if (
             distance >
-            FEATURE_MARKER_MIN_DISTANCE
+            PATH_SNAP_DISTANCE
           ) {
             return closest;
           }
