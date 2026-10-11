@@ -2917,6 +2917,8 @@ for (
     endpoint.featureId = endNode.featureId;
   }
 
+  if (nextProfile)
+  {
   const currentAreaId =
     profile.area?.id;
 
@@ -3024,6 +3026,7 @@ for (
       }
     }
   }
+}
 
   if (Object.keys(endpoint).length > 0)
   {

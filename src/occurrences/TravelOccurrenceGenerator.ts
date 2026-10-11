@@ -79,6 +79,161 @@ function createTraversalOccurrence(
   return null;
 }
 
+function createEndpointTransitionOccurrences(
+  context: TravelOccurrenceContext
+): Occurrence[]
+{
+  const endpoint =
+    context.legProfile.endpoint;
+
+  if (!endpoint)
+  {
+    return [];
+  }
+
+  const occurrences: Occurrence[] = [];
+
+  const addOccurrence = (
+    description: string
+  ) =>
+  {
+    occurrences.push({
+      id: crypto.randomUUID(),
+      sourceModuleId: 'regions',
+      simulationTime: context.endTime,
+      pieceId: context.pieceId,
+      entityId: null,
+      sectorId: null,
+      type: 'section',
+      description,
+      reaction: OccurrenceReactions.Notify,
+    });
+  };
+
+  const leavingArea =
+    endpoint.leavingAreaName;
+
+  const enteringArea =
+    endpoint.enteringAreaName;
+
+  const leavingPath =
+    endpoint.leavingPathName;
+
+  const enteringPath =
+    endpoint.enteringPathName;
+
+  /*
+   * Path -> open Area is one meaningful
+   * transition rather than separate Path
+   * and Area Occurrences.
+   */
+  if (
+    leavingPath &&
+    !enteringPath &&
+    enteringArea
+  )
+  {
+    addOccurrence(
+      formatRegionsOccurrenceMessage(
+        'pathExitToArea',
+        {
+          piece: context.pieceName,
+          path: leavingPath,
+          area: enteringArea,
+        }
+      )
+    );
+  }
+  else
+  {
+    if (
+      leavingPath &&
+      enteringPath
+    )
+    {
+      addOccurrence(
+        formatRegionsOccurrenceMessage(
+          'pathTransition',
+          {
+            piece: context.pieceName,
+            fromPath: leavingPath,
+            toPath: enteringPath,
+          }
+        )
+      );
+    }
+    else if (enteringPath)
+    {
+      addOccurrence(
+        formatRegionsOccurrenceMessage(
+          'pathEncounter',
+          {
+            piece: context.pieceName,
+            path: enteringPath,
+          }
+        )
+      );
+    }
+  }
+
+  /*
+   * A Path -> Area transition already
+   * describes entering that Area.
+   */
+  const areaEntryAlreadyDescribed =
+    Boolean(
+      leavingPath &&
+      !enteringPath &&
+      enteringArea
+    );
+
+  if (!areaEntryAlreadyDescribed)
+  {
+    if (
+      leavingArea &&
+      enteringArea
+    )
+    {
+      addOccurrence(
+        formatRegionsOccurrenceMessage(
+          'areaTransition',
+          {
+            piece: context.pieceName,
+            fromArea: leavingArea,
+            toArea: enteringArea,
+          }
+        )
+      );
+    }
+    else if (enteringArea)
+    {
+      addOccurrence(
+        formatRegionsOccurrenceMessage(
+          'areaEnter',
+          {
+            piece: context.pieceName,
+            area: enteringArea,
+          }
+        )
+      );
+    }
+    else if (leavingArea)
+    {
+      addOccurrence(
+        formatRegionsOccurrenceMessage(
+          'areaExit',
+          {
+            piece: context.pieceName,
+            area: leavingArea,
+          }
+        )
+      );
+    }
+  }
+
+  return occurrences;
+}
+
 export function generateTravelOccurrences(
   context: TravelOccurrenceContext
 ): Occurrence[]
@@ -113,6 +268,12 @@ export function generateTravelOccurrences(
       return occurrences;
     }
   }
+
+  occurrences.push(
+    ...createEndpointTransitionOccurrences(
+      context
+    )
+  );
 
   if (
     context.legProfile.endpoint?.featureId &&
