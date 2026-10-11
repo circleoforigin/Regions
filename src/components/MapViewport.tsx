@@ -2837,13 +2837,49 @@ for (
     );
   }
 
-  const spatialContext = points[0]?.spatialContext;
+const spatialContext =
+  points[0]?.spatialContext;
+
+const firstSegmentPoint =
+  segment.points[0];
+
+const lastSegmentPoint =
+  segment.points[
+    segment.points.length - 1
+  ];
+
+const legSpatialContext =
+  firstSegmentPoint &&
+  lastSegmentPoint
+    ? resolveSpatialContext(
+        mapId,
+        {
+          x:
+            (
+              firstSegmentPoint.x +
+              lastSegmentPoint.x
+            ) / 2,
+          y:
+            (
+              firstSegmentPoint.y +
+              lastSegmentPoint.y
+            ) / 2,
+        },
+        spatialMaps,
+        projectFeatures,
+        projectSections,
+        projectSectionEdges,
+        projectSectionNodes,
+        OVERWORLD_SECTOR_RESOLUTION
+      )
+    : spatialContext;
 
 const area =
-  spatialContext?.areaId
+  legSpatialContext?.areaId
     ? projectSections.find(
         (section) =>
-          section.id === spatialContext.areaId
+          section.id ===
+            legSpatialContext.areaId
       )
     : undefined;
 
@@ -2919,11 +2955,9 @@ for (
 
   if (nextProfile)
   {
-  const currentAreaId =
-    profile.area?.id;
+  const currentAreaId = profile.area?.id;
 
-  const nextAreaId =
-    nextProfile?.area?.id;
+  const nextAreaId = nextProfile.area?.id;
 
   if (
     currentAreaId !== nextAreaId
@@ -2932,44 +2966,38 @@ for (
     if (currentAreaId)
     {
       const currentArea =
-        projectSections.find(
+        sections.find(
           (section) =>
             section.id === currentAreaId
         );
 
-      endpoint.leavingAreaId =
-        currentAreaId;
+      endpoint.leavingAreaId = currentAreaId;
 
       if (currentArea?.name)
       {
-        endpoint.leavingAreaName =
-          currentArea.name;
+        endpoint.leavingAreaName = currentArea.name;
       }
     }
 
     if (nextAreaId)
     {
       const nextArea =
-        projectSections.find(
+        sections.find(
           (section) =>
             section.id === nextAreaId
         );
-
-      endpoint.enteringAreaId =
-        nextAreaId;
+      endpoint.enteringAreaId = nextAreaId;
 
       if (nextArea?.name)
       {
-        endpoint.enteringAreaName =
-          nextArea.name;
+        endpoint.enteringAreaName = nextArea.name;
       }
     }
   }
 
-  const currentPathId =
-    profile.path?.id;
+  const currentPathId = profile.path?.id;
 
-  const nextPathId = nextProfile?.path?.id;
+  const nextPathId = nextProfile.path?.id;
 
   if (
     currentPathId !== nextPathId
