@@ -72,6 +72,7 @@ import type {
 } from './models/Route';
 import { getRouteLegs } from './models/Route';
 import { resolveRouteTravelPosition } from './routes/RouteTravelPosition';
+import { advanceRouteToPosition } from './routes/RouteProgress';
 import { generateTravelOccurrences } from './occurrences/TravelOccurrenceGenerator';
 import {
   findContainingParty,
@@ -1682,18 +1683,53 @@ useEffect(() =>
             payload.distanceFromLegStart
           );
 
-        const pieces =
-          movePartyAndMembers(
-            activeProject.pieces,
-            payload.pieceId,
-            resolved.mapId,
+        const advancedRoute =
+          advanceRouteToPosition(
+            route,
+            routeLeg,
+            legProfile,
+            payload.distanceFromLegStart,
             resolved.position
           );
 
-        setActiveProject({
-          ...activeProject,
-          pieces,
-        });
+        setActiveProject(
+          (current) =>
+          {
+            if (!current)
+            {
+              return current;
+            }
+
+            const pieces =
+              movePartyAndMembers(
+                current.pieces,
+                payload.pieceId!,
+                resolved.mapId,
+                resolved.position
+              );
+
+            const routes =
+              advancedRoute.nodes.length > 1
+                ? current.routes.map(
+                    (candidate) =>
+                      candidate.id ===
+                        route.id
+                        ? advancedRoute
+                        : candidate
+                  )
+                : current.routes.filter(
+                    (candidate) =>
+                      candidate.id !==
+                      route.id
+                  );
+
+            return {
+              ...current,
+              pieces,
+              routes,
+            };
+          }
+        );
 
         markProjectDirty();
 
