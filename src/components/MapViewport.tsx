@@ -729,21 +729,6 @@ const selectedRoute =
     ? getPieceRoute(selectedRoutePiece.id)
     : undefined;
 
-const selectedRouteAnchors: DistanceAnchor[] =
-  selectedRoute
-    ? routeNodesToDistanceAnchors(
-        selectedRoute.nodes
-      )
-    : [];
-
-const resolvedSelectedRouteAnchors =
-  resolveDistanceAnchors(
-    selectedRouteAnchors,
-    features,
-    pieces,
-    pathNetwork.terminals
-  );
-
 const resolvedDistanceAnchors =
   resolveDistanceAnchors(
     distanceMeasurement.anchors,
@@ -758,6 +743,35 @@ const resolvedDistanceAnchors =
       pathNetwork.terminals,
       features
     );
+
+    const displayedRoutes =
+  routes.map((route) =>
+  {
+    const anchors =
+      resolveDistanceAnchors(
+        routeNodesToDistanceAnchors(
+          route.nodes
+        ),
+        features,
+        pieces,
+        pathNetwork.terminals
+      );
+
+    const segments =
+      getDistanceSegmentsWithPaths(
+        anchors,
+        resolvedPathSegments,
+        sections,
+        sectionEdges,
+        sectionNodes
+      );
+
+    return {
+      route,
+      anchors,
+      segments,
+    };
+  });
 
   const distanceSegments =
     getDistanceSegmentsWithPaths(
@@ -4321,17 +4335,6 @@ const pieceTerminalNodeTarget =
           }
         : null;
 
-const displayedRouteAnchors = resolvedSelectedRouteAnchors;
-
-const displayedRouteSegments =
-  getDistanceSegmentsWithPaths(
-    displayedRouteAnchors,
-    resolvedPathSegments,
-    sections,
-    sectionEdges,
-    sectionNodes
-  );
-
   const partyDropTargetId = piecePreview
     ? pieces.find((candidate) => {
         if (candidate.id === piecePreview.pieceId) return false;
@@ -4950,15 +4953,16 @@ function saveSectionProperties() {
   </div>
 )}
 
-{selectedRoute &&
-  routePieceId === null &&
-  piecePreview?.pieceId ===
-    selectedRoute.pieceId && (
+{routePieceId === null &&
+  displayedRoutes.map((displayedRoute) => (
     <DistanceMeasurementOverlay
-      anchors={displayedRouteAnchors}
-      segments={displayedRouteSegments}
+      key={displayedRoute.route.id}
+      anchors={displayedRoute.anchors}
+      segments={displayedRoute.segments}
       distanceScale={imageRegistration?.distanceScale}
       targetedAnchorId={
+        selectedRoute?.id ===
+          displayedRoute.route.id &&
         pieceNodeTarget?.kind === 'route'
           ? pieceNodeTarget.id
           : undefined
@@ -4966,7 +4970,7 @@ function saveSectionProperties() {
       pointerPosition={null}
       mapToScreen={mapToScreen}
     />
-  )}
+  ))}
 
 <DistanceMeasurementOverlay
   anchors={resolvedDistanceAnchors}
