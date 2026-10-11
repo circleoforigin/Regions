@@ -2917,9 +2917,11 @@ for (
     endpoint.featureId = endNode.featureId;
   }
 
-  const currentAreaId = profile.area?.id;
+  const currentAreaId =
+    profile.area?.id;
 
-  const nextAreaId = nextProfile?.area?.id;
+  const nextAreaId =
+    nextProfile?.area?.id;
 
   if (
     currentAreaId !== nextAreaId
@@ -2927,16 +2929,43 @@ for (
   {
     if (currentAreaId)
     {
-      endpoint.leavingAreaId = currentAreaId;
+      const currentArea =
+        projectSections.find(
+          (section) =>
+            section.id === currentAreaId
+        );
+
+      endpoint.leavingAreaId =
+        currentAreaId;
+
+      if (currentArea?.name)
+      {
+        endpoint.leavingAreaName =
+          currentArea.name;
+      }
     }
 
     if (nextAreaId)
     {
-      endpoint.enteringAreaId = nextAreaId;
+      const nextArea =
+        projectSections.find(
+          (section) =>
+            section.id === nextAreaId
+        );
+
+      endpoint.enteringAreaId =
+        nextAreaId;
+
+      if (nextArea?.name)
+      {
+        endpoint.enteringAreaName =
+          nextArea.name;
+      }
     }
   }
 
-  const currentPathId = profile.path?.id;
+  const currentPathId =
+    profile.path?.id;
 
   const nextPathId = nextProfile?.path?.id;
 
@@ -2944,14 +2973,55 @@ for (
     currentPathId !== nextPathId
   )
   {
-    if (currentPathId)
-    {
-      endpoint.leavingPathId = currentPathId;
-    }
+    const currentPath =
+      currentPathId
+        ? pathNetwork.segments.find(
+            (segment) =>
+              segment.id === currentPathId
+          )
+        : undefined;
 
-    if (nextPathId)
+    const nextPath =
+      nextPathId
+        ? pathNetwork.segments.find(
+            (segment) =>
+              segment.id === nextPathId
+          )
+        : undefined;
+
+    const currentPathName = currentPath?.name?.trim();
+
+    const nextPathName = nextPath?.name?.trim();
+
+    const sameNamedPath =
+      Boolean(
+        currentPathName &&
+        nextPathName &&
+        currentPathName ===
+          nextPathName
+      );
+
+    if (!sameNamedPath)
     {
-      endpoint.enteringPathId = nextPathId;
+      if (currentPathId)
+      {
+        endpoint.leavingPathId = currentPathId;
+
+        if (currentPathName)
+        {
+          endpoint.leavingPathName = currentPathName;
+        }
+      }
+
+      if (nextPathId)
+      {
+        endpoint.enteringPathId = nextPathId;
+
+        if (nextPathName)
+        {
+          endpoint.enteringPathName = nextPathName;
+        }
+      }
     }
   }
 

@@ -24,6 +24,79 @@ export const REGIONS_OCCURRENCE_MESSAGES = {
       'piece',
     ],
   },
+
+  areaEnter: {
+    label: 'Area Enter',
+    template:
+      '{piece} enters {area}.',
+    variables: [
+      'piece',
+      'area',
+    ],
+  },
+
+  areaTransition: {
+    label: 'Area Transition',
+    template:
+      '{piece} leaves {fromArea} behind and enters {toArea}.',
+    variables: [
+      'piece',
+      'fromArea',
+      'toArea',
+    ],
+  },
+
+  areaExit: {
+    label: 'Area Exit',
+    template:
+      '{piece} travels beyond the borders of {area}.',
+    variables: [
+      'piece',
+      'area',
+    ],
+  },
+
+  pathEncounter: {
+    label: 'Path Encounter',
+    template:
+      '{piece} comes across {path}.',
+    variables: [
+      'piece',
+      'path',
+    ],
+  },
+
+  pathExitToArea: {
+    label: 'Path Exit to Area',
+    template:
+      '{piece} leaves {path} and cuts across {area}.',
+    variables: [
+      'piece',
+      'path',
+      'area',
+    ],
+  },
+
+  pathTransition: {
+    label: 'Path Transition',
+    template:
+      '{piece} leaves {fromPath} and continues along {toPath}.',
+    variables: [
+      'piece',
+      'fromPath',
+      'toPath',
+    ],
+  },
+
+  boundaryExit: {
+    label: 'Boundary Exit',
+    template:
+      '{piece} travels beyond the borders of {location}.',
+    variables: [
+      'piece',
+      'location',
+    ],
+  },
 } as const satisfies Record<
   string,
   RegionsOccurrenceMessageDefinition
