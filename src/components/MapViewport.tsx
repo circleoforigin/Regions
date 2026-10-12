@@ -752,9 +752,17 @@ const resolvedDistanceAnchors =
       features
     );
 
-    const displayedRoutes =
-  routes.map((route) =>
-  {
+const displayedRoutes =
+  routes
+    .filter(
+      (route) =>
+        route.nodes.some(
+          (node) =>
+            node.mapId === mapId
+        )
+    )
+    .map((route) =>
+    {
     const anchors =
       resolveDistanceAnchors(
         routeNodesToDistanceAnchors(
@@ -3051,7 +3059,7 @@ for (
   {
     endpoint.featureId = endNode.featureId;
   }
-  
+
   if (endNode.kind === 'boundary')
   {
     endpoint.boundaryId = endNode.boundaryId;

@@ -196,6 +196,18 @@ function App()
     null
   );
 
+  const activeProjectRef =
+  useRef<Project | null>(
+    activeProject
+  );
+
+  useEffect(() =>
+  {
+    activeProjectRef.current = activeProject;
+  }, [
+    activeProject,
+  ]);
+
   const [
     activeMap,
     setActiveMap,
@@ -1615,6 +1627,8 @@ useEffect(() =>
       'Regions.CommitTravelPosition',
       async (message) =>
       {
+        const currentProject = activeProjectRef.current;
+        
         const payload =
           message.payload as
             | {
@@ -1625,7 +1639,7 @@ useEffect(() =>
             | undefined;
 
         if (
-          !activeProject ||
+          !currentProject ||
           !payload?.pieceId ||
           !payload.routeLegId ||
           typeof payload.distanceFromLegStart !==
@@ -1636,7 +1650,7 @@ useEffect(() =>
         }
 
         const route =
-          activeProject.routes.find(
+          currentProject.routes.find(
             (candidate) =>
               candidate.pieceId ===
               payload.pieceId
@@ -1701,7 +1715,7 @@ useEffect(() =>
 
                const pieces =
           movePartyAndMembers(
-            activeProject.pieces,
+            currentProject.pieces,
             payload.pieceId,
             resolved.mapId,
             resolved.position
@@ -1709,24 +1723,27 @@ useEffect(() =>
 
         const routes =
           advancedRoute.nodes.length > 1
-            ? activeProject.routes.map(
+            ? currentProject.routes.map(
                 (candidate) =>
                   candidate.id ===
                     route.id
                     ? advancedRoute
                     : candidate
               )
-            : activeProject.routes.filter(
+            : currentProject.routes.filter(
                 (candidate) =>
                   candidate.id !==
                   route.id
               );
 
         const committedProject = {
-          ...activeProject,
+          ...currentProject,
           pieces,
           routes,
         };
+
+        activeProjectRef.current =
+          committedProject;
 
         setActiveProject(
           committedProject
@@ -1799,8 +1816,7 @@ useEffect(() =>
             },
             childMap,
             parent,
-            committedPiece.id ===
-              committedProject.focusedPieceId,
+            false,
             committedProject
           );
         }
@@ -2920,6 +2936,7 @@ async function commitPieceParentExit(
       ? parent.parentMap.id
       : sourceProject.activeMapId,
   };
+  activeProjectRef.current = updatedProject;
   setActiveProject(updatedProject);
   markProjectDirty();
   handleMapEntered(
