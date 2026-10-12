@@ -110,21 +110,29 @@ function createEndpointTransitionOccurrences(
     });
   };
 
-  const leavingArea = endpoint.leavingAreaName;
+  const leavingArea =
+    endpoint.leavingAreaName;
 
-  const enteringArea = endpoint.enteringAreaName;
+  const enteringArea =
+    endpoint.enteringAreaName;
 
-  const leavingPath = endpoint.leavingPathName;
+  const leavingPath =
+    endpoint.leavingPathName;
 
-  const enteringPath = endpoint.enteringPathName;
+  const enteringPath =
+    endpoint.enteringPathName;
 
-  const pathExitArea = endpoint.pathExitAreaName;
+  const pathExitArea =
+    endpoint.pathExitAreaName;
 
-  const encounteredPath = endpoint.encounteredPathName;
+  const encounteredPath =
+    endpoint.encounteredPathName;
 
-  const travelingPathId = context.legProfile.path?.id;
+  const travelingPathId =
+    context.legProfile.path?.id;
 
-  const encounteredPathId = endpoint.encounteredPathId;
+  const encounteredPathId =
+    endpoint.encounteredPathId;
 
   const crossingPath =
     encounteredPath &&
@@ -172,7 +180,7 @@ function createEndpointTransitionOccurrences(
       )
     );
   }
-    else if (
+  else if (
     leavingPath &&
     !enteringPath
   )
@@ -307,18 +315,23 @@ export function generateTravelOccurrences(
 
     occurrences.push(occurrence);
 
-    if (occurrence.reaction === OccurrenceReactions.Recalculate)
+    if (
+      occurrence.reaction ===
+        OccurrenceReactions.Recalculate
+    )
     {
       return occurrences;
     }
   }
 
-  occurrences.push(
-    ...createEndpointTransitionOccurrences(
-      context
-    )
-  );
-
+  /*
+   * A Feature arrival is the first
+   * meaningful event at its endpoint.
+   *
+   * Any Path or Area transition at that
+   * same position describes what happens
+   * after reaching the Feature.
+   */
   if (
     context.legProfile.endpoint?.featureId &&
     context.endpointFeatureName
@@ -348,7 +361,25 @@ export function generateTravelOccurrences(
       reaction: OccurrenceReactions.Notify,
     });
   }
-  else if (context.isRouteEnd)
+
+  occurrences.push(
+    ...createEndpointTransitionOccurrences(
+      context
+    )
+  );
+
+  /*
+   * A final Feature already represents
+   * the Route's visible completion.
+   *
+   * Only create the generic Route End
+   * Occurrence when there is no Feature
+   * arrival to represent it.
+   */
+  if (
+    context.isRouteEnd &&
+    !context.legProfile.endpoint?.featureId
+  )
   {
     occurrences.push({
       id: crypto.randomUUID(),
@@ -370,11 +401,16 @@ export function generateTravelOccurrences(
     });
   }
 
+  /*
+   * Array.sort is stable. Sorting only
+   * by simulation time deliberately
+   * preserves Regions' semantic ordering
+   * for Occurrences at the same instant.
+   */
   occurrences.sort(
     (left, right) =>
       left.simulationTime -
-        right.simulationTime ||
-      left.id.localeCompare(right.id)
+        right.simulationTime
   );
 
   occurrences.push({
@@ -423,12 +459,12 @@ export function createTravelRecalculateOccurrence(
     title,
     description,
     reaction: OccurrenceReactions.Recalculate,
-payload: {
-  routeLegId: context.routeLeg.id,
-  mode: 'recalculate',
-  remainingDistance,
-  distanceFromLegStart:
-    point.distanceFromLegStart.value,
-},
+    payload: {
+      routeLegId: context.routeLeg.id,
+      mode: 'recalculate',
+      remainingDistance,
+      distanceFromLegStart:
+        point.distanceFromLegStart.value,
+    },
   };
 }
