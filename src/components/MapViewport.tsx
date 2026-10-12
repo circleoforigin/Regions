@@ -3077,6 +3077,16 @@ for (
   }
 }
 
+  console.log(
+    '[Route Endpoint Debug]',
+    {
+      endNode,
+      profilePath: profile.path,
+      nextProfilePath: nextProfile?.path,
+      endpoint,
+    }
+  );
+
   if (Object.keys(endpoint).length > 0)
   {
     profile.endpoint = endpoint;
@@ -5933,9 +5943,34 @@ onClick={(event) => {
             segmentId,
             type
           ) => {
+            const segment =
+              pathNetwork.segments.find(
+                (candidate) =>
+                  candidate.id === segmentId
+              );
+
+            if (!segment)
+            {
+              return;
+            }
+
+            const automaticName =
+              type.charAt(0).toUpperCase() +
+              type.slice(1);
+
+            const hasCustomizedName =
+              segment.nameCustomized ??
+              Boolean(segment.name?.trim());
+
             void updatePathSegment(
               segmentId,
-              { type }
+              hasCustomizedName
+                ? { type }
+                : {
+                    type,
+                    name: automaticName,
+                    nameCustomized: false,
+                  }
             );
           }}
           onRulesetDataChange={(
@@ -5962,6 +5997,7 @@ onClick={(event) => {
     segmentId,
     {
       name: trimmedName,
+      nameCustomized: true,
     }
   );
 }}

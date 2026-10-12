@@ -55,6 +55,7 @@ export interface PathSegment {
    * segments may all be "King's Highway".
    */
   name?: string;
+  nameCustomized?: boolean;
   subtitle?: string;
   description?: RichTextDocument | string;
   journalPageId?: string;

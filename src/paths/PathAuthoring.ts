@@ -40,6 +40,8 @@ export function createPathSegment(
     id: crypto.randomUUID(),
     mapId,
     type: 'path',
+    name: 'Path',
+    nameCustomized: false,
 
     start,
     end,
@@ -93,6 +95,7 @@ export function splitPathSegment(
     mapId: original.mapId,
     type: original.type,
     name: original.name,
+    nameCustomized: original.nameCustomized,
     subtitle: original.subtitle,
     description: original.description,
     journalPageId: original.journalPageId,
