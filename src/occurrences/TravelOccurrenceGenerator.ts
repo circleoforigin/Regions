@@ -114,31 +114,11 @@ function createEndpointTransitionOccurrences(
 
   const enteringArea = endpoint.enteringAreaName;
 
-  const endpointPath = endpoint.pathName;
+  const leavingPath =
+    endpoint.leavingPathName;
 
-  const leavingPath = endpoint.leavingPathName;
-
-  const enteringPath = endpoint.enteringPathName;
-
-  const encounteredPath =
-    endpointPath &&
-    endpointPath !== leavingPath &&
-    endpointPath !== enteringPath
-      ? endpointPath
-      : undefined;
-
-  if (encounteredPath)
-  {
-    addOccurrence(
-      formatRegionsOccurrenceMessage(
-        'pathEncounter',
-        {
-          piece: context.pieceName,
-          path: encounteredPath,
-        }
-      )
-    );
-  }
+  const enteringPath =
+    endpoint.enteringPathName;
 
   /*
    * Path -> open Area is one meaningful

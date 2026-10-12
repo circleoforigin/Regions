@@ -2952,29 +2952,7 @@ for (
   {
     endpoint.featureId = endNode.featureId;
   }
-
-    if (endNode.kind === 'path')
-  {
-    const endpointPath =
-      pathNetwork.segments.find(
-        (segment) =>
-          segment.id ===
-            endNode.segmentId
-      );
-
-    endpoint.pathId =
-      endNode.segmentId;
-
-    const endpointPathName =
-      endpointPath?.name?.trim();
-
-    if (endpointPathName)
-    {
-      endpoint.pathName =
-        endpointPathName;
-    }
-  }
-
+  
   if (nextProfile)
   {
   const currentAreaId = profile.area?.id;
