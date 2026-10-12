@@ -2892,6 +2892,25 @@ const pathSegment =
       )
     : undefined;
 
+    console.log(
+  '[Route Leg Profile Debug]',
+  {
+    index,
+    segmentKind: segment.kind,
+    pathSegmentId:
+      segment.pathSegmentId,
+    startNode,
+    endNode,
+    resolvedPath:
+      pathSegment
+        ? {
+            id: pathSegment.id,
+            name: pathSegment.name,
+          }
+        : undefined,
+  }
+);
+
 legProfiles.push({
   legId: `${startNode.id}:${endNode.id}`,
   distance,
@@ -3077,16 +3096,6 @@ for (
     }
   }
 }
-
-  console.log(
-    '[Route Endpoint Debug]',
-    {
-      endNode,
-      profilePath: profile.path,
-      nextProfilePath: nextProfile?.path,
-      endpoint,
-    }
-  );
 
   if (Object.keys(endpoint).length > 0)
   {

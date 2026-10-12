@@ -114,18 +114,19 @@ function createEndpointTransitionOccurrences(
 
   const enteringArea = endpoint.enteringAreaName;
 
-  const leavingPath =
-    endpoint.leavingPathName;
+  const leavingPath = endpoint.leavingPathName;
 
-  const enteringPath =
-    endpoint.enteringPathName;
+  const enteringPath = endpoint.enteringPathName;
 
-  const encounteredPath =
-    endpoint.encounteredPathName;
+  const encounteredPath = endpoint.encounteredPathName;
+
+  const travelingPathId = context.legProfile.path?.id;
+
+  const encounteredPathId = endpoint.encounteredPathId;
 
   const crossingPath =
     encounteredPath &&
-    !leavingPath &&
+    encounteredPathId !== travelingPathId &&
     !enteringPath
       ? encounteredPath
       : undefined;
