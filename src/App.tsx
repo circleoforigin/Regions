@@ -1613,7 +1613,7 @@ useEffect(() =>
   const unregisterCommitTravelPosition =
     moduleEventBus.registerRequestHandler(
       'Regions.CommitTravelPosition',
-      (message) =>
+      async (message) =>
       {
         const payload =
           message.payload as
@@ -1683,6 +1683,13 @@ useEffect(() =>
             payload.distanceFromLegStart
           );
 
+        const completedBoundary =
+          routeLeg.end.kind === 'boundary' &&
+          payload.distanceFromLegStart >=
+            legProfile.distance.value
+            ? routeLeg.end
+            : null;
+
         const advancedRoute =
           advanceRouteToPosition(
             route,
@@ -1692,46 +1699,111 @@ useEffect(() =>
             resolved.position
           );
 
-        setActiveProject(
-          (current) =>
-          {
-            if (!current)
-            {
-              return current;
-            }
+               const pieces =
+          movePartyAndMembers(
+            activeProject.pieces,
+            payload.pieceId,
+            resolved.mapId,
+            resolved.position
+          );
 
-            const pieces =
-              movePartyAndMembers(
-                current.pieces,
-                payload.pieceId!,
-                resolved.mapId,
-                resolved.position
+        const routes =
+          advancedRoute.nodes.length > 1
+            ? activeProject.routes.map(
+                (candidate) =>
+                  candidate.id ===
+                    route.id
+                    ? advancedRoute
+                    : candidate
+              )
+            : activeProject.routes.filter(
+                (candidate) =>
+                  candidate.id !==
+                  route.id
               );
 
-            const routes =
-              advancedRoute.nodes.length > 1
-                ? current.routes.map(
-                    (candidate) =>
-                      candidate.id ===
-                        route.id
-                        ? advancedRoute
-                        : candidate
-                  )
-                : current.routes.filter(
-                    (candidate) =>
-                      candidate.id !==
-                      route.id
-                  );
+        const committedProject = {
+          ...activeProject,
+          pieces,
+          routes,
+        };
 
-            return {
-              ...current,
-              pieces,
-              routes,
-            };
-          }
+        setActiveProject(
+          committedProject
         );
 
         markProjectDirty();
+
+                if (completedBoundary)
+        {
+          const childMap =
+            activeMap?.id ===
+              resolved.mapId
+              ? activeMap
+              : await mapRepository.loadMap(
+                  resolved.mapId
+                );
+
+          if (
+            !childMap ||
+            !childMap.parentMapId
+          )
+          {
+            throw new Error(
+              'The completed Boundary Route has no valid parent Map.'
+            );
+          }
+
+          const parent =
+            await resolveParentLocation(
+              childMap
+            );
+
+          if (!parent)
+          {
+            throw new Error(
+              'This Map has no valid parent Location for Boundary exit.'
+            );
+          }
+
+          const committedPiece =
+            committedProject.pieces.find(
+              (candidate) =>
+                candidate.id ===
+                  payload.pieceId
+            );
+
+          if (!committedPiece)
+          {
+            throw new Error(
+              `Piece "${payload.pieceId}" was not found after committing Boundary travel.`
+            );
+          }
+
+          const parentPosition =
+            childMap.areaBoundaryLink
+              ? transformBoundaryPoint(
+                  completedBoundary.position,
+                  childMap.areaBoundaryLink
+                    .alignment,
+                  true
+                )
+              : parent.parentLocation
+                  .position;
+
+          await commitPieceParentExit(
+            {
+              ...committedPiece,
+              position:
+                parentPosition,
+            },
+            childMap,
+            parent,
+            committedPiece.id ===
+              committedProject.focusedPieceId,
+            committedProject
+          );
+        }
 
         return {
           accepted: true,
@@ -2827,25 +2899,26 @@ async function commitPieceParentExit(
   piece: Piece,
   childMap: RegionMap,
   parent: NonNullable<Awaited<ReturnType<typeof resolveParentLocation>>>,
-  follow: boolean
+  follow: boolean,
+  sourceProject: Project = activeProject!
 ) {
-  if (!activeProject) return;
+  if (!sourceProject) return;
   const movedPiece = {
     ...piece,
     mapId: parent.parentMap.id,
     position: piece.position,
   };
   const updatedProject = {
-    ...activeProject,
+    ...sourceProject,
     pieces: movePartyAndMembers(
-      activeProject.pieces,
+      sourceProject.pieces,
       piece.id,
       movedPiece.mapId,
       movedPiece.position
     ),
     activeMapId: follow
       ? parent.parentMap.id
-      : activeProject.activeMapId,
+      : sourceProject.activeMapId,
   };
   setActiveProject(updatedProject);
   markProjectDirty();
