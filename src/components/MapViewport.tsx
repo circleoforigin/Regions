@@ -2466,18 +2466,34 @@ function finishRouteAuthoring() {
   );
 
   const spatialMaps = [...routeMaps.values()];
+  const currentResolvedAnchors =
+    resolveDistanceAnchors(
+      distanceMeasurement.anchors,
+      features,
+      pieces,
+      pathNetwork.terminals
+    );
 
+  const currentDistanceSegments =
+    getDistanceSegmentsWithPaths(
+      currentResolvedAnchors,
+      resolvedPathSegments,
+      sections,
+      sectionEdges,
+      sectionNodes
+    );
   const nodes: RouteNode[] = [];
-const routeAnchors =
-  distanceSegments.length > 0
-    ? [
-        distanceSegments[0].start,
-        ...distanceSegments.map(
-          (segment) =>
-            segment.end
-        ),
-      ]
-    : resolvedDistanceAnchors;
+
+  const routeAnchors =
+    currentDistanceSegments.length > 0
+      ? [
+          currentDistanceSegments[0].start,
+          ...currentDistanceSegments.map(
+            (segment) =>
+              segment.end
+          ),
+        ]
+      : currentResolvedAnchors;
 
 for (
   let routeAnchorIndex = 0;
@@ -2616,12 +2632,12 @@ const legProfiles: RouteLegProfile[] = [];
 
 for (
   let index = 0;
-  index < distanceSegments.length;
+  index < currentDistanceSegments.length;
   index += 1
 )
 {
   const segment =
-    distanceSegments[index];
+    currentDistanceSegments[index];
 
   const startNode =
     nodes[index];
