@@ -2890,26 +2890,8 @@ const pathSegment =
         (candidate) =>
           candidate.id === segment.pathSegmentId
       )
-    : undefined;
+    : undefined;  
 
-    console.log(
-  '[Route Leg Profile Debug]',
-  {
-    index,
-    segmentKind: segment.kind,
-    pathSegmentId:
-      segment.pathSegmentId,
-    startNode,
-    endNode,
-    resolvedPath:
-      pathSegment
-        ? {
-            id: pathSegment.id,
-            name: pathSegment.name,
-          }
-        : undefined,
-  }
-);
 
 legProfiles.push({
   legId: `${startNode.id}:${endNode.id}`,
@@ -3080,7 +3062,26 @@ for (
 
         if (currentPathName)
         {
-          endpoint.leavingPathName = currentPathName;
+          endpoint.leavingPathName =
+            currentPathName;
+        }
+
+        if (!nextPathId && nextAreaId)
+        {
+          const pathExitArea =
+            sections.find(
+              (section) =>
+                section.id === nextAreaId
+            );
+
+          const pathExitAreaName =
+            pathExitArea?.name?.trim();
+
+          if (pathExitAreaName)
+          {
+            endpoint.pathExitAreaName =
+              pathExitAreaName;
+          }
         }
       }
 

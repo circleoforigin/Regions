@@ -77,6 +77,16 @@ export const REGIONS_OCCURRENCE_MESSAGES = {
     ],
   },
 
+  pathExit: {
+    label: 'Path Exit',
+    template:
+      '{piece} turns and steps off of {path}.',
+    variables: [
+      'piece',
+      'path',
+    ],
+  },
+
   pathTransition: {
     label: 'Path Transition',
     template:

@@ -118,6 +118,8 @@ function createEndpointTransitionOccurrences(
 
   const enteringPath = endpoint.enteringPathName;
 
+  const pathExitArea = endpoint.pathExitAreaName;
+
   const encounteredPath = endpoint.encounteredPathName;
 
   const travelingPathId = context.legProfile.path?.id;
@@ -156,7 +158,7 @@ function createEndpointTransitionOccurrences(
   if (
     leavingPath &&
     !enteringPath &&
-    enteringArea
+    pathExitArea
   )
   {
     addOccurrence(
@@ -165,7 +167,22 @@ function createEndpointTransitionOccurrences(
         {
           piece: context.pieceName,
           path: leavingPath,
-          area: enteringArea,
+          area: pathExitArea,
+        }
+      )
+    );
+  }
+    else if (
+    leavingPath &&
+    !enteringPath
+  )
+  {
+    addOccurrence(
+      formatRegionsOccurrenceMessage(
+        'pathExit',
+        {
+          piece: context.pieceName,
+          path: leavingPath,
         }
       )
     );
@@ -210,6 +227,7 @@ function createEndpointTransitionOccurrences(
     Boolean(
       leavingPath &&
       !enteringPath &&
+      pathExitArea &&
       enteringArea
     );
 

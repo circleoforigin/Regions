@@ -84,6 +84,7 @@ export interface RouteLegEndpointProfile
 
   leavingPathId?: string;
   leavingPathName?: string;
+  pathExitAreaName?: string;
 }
 
 export interface RouteLegProfile
