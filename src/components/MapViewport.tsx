@@ -514,7 +514,7 @@ function MapViewport({
   const [
     routeFinishPending,
     setRouteFinishPending,
-  ] = useState(false);
+  ] = useState<Point | null>(null);
   const routeBoundaryEndpointRef =
     useRef<{
       boundaryId: string;
@@ -2425,14 +2425,16 @@ function startSectionFromEdge(edgeId: string) {
 
 function cancelRouteAuthoring()
 {
-  setRouteFinishPending(false);
+  setRouteFinishPending(null);
   routeBoundaryEndpointRef.current = null;
   distanceMeasurement.clear();
   setRoutePieceId(null);
   setDistancePointer(null);
 }
 
-function finishRouteAuthoring() {
+function finishRouteAuthoring(
+  pendingFinalPoint?: Point
+) {
   if (routePieceId === null) {
     return;
   }
@@ -2473,6 +2475,37 @@ function finishRouteAuthoring() {
       pieces,
       pathNetwork.terminals
     );
+      const boundaryEndpoint =
+    routeBoundaryEndpointRef.current;
+
+  if (
+    boundaryEndpoint &&
+    pendingFinalPoint &&
+    (
+      currentResolvedAnchors.length === 0 ||
+      Math.hypot(
+        currentResolvedAnchors[
+          currentResolvedAnchors.length - 1
+        ].position.x -
+          pendingFinalPoint.x,
+        currentResolvedAnchors[
+          currentResolvedAnchors.length - 1
+        ].position.y -
+          pendingFinalPoint.y
+      ) > 0.000001
+    )
+  )
+  {
+    currentResolvedAnchors.push({
+      anchor: {
+        id: crypto.randomUUID(),
+        kind: 'temporary',
+        pointId: crypto.randomUUID(),
+        position: pendingFinalPoint,
+      },
+      position: pendingFinalPoint,
+    });
+  }
 
   const currentDistanceSegments =
     getDistanceSegmentsWithPaths(
@@ -3190,9 +3223,18 @@ useEffect(() =>
     return;
   }
 
-  setRouteFinishPending(false);
-  finishRouteAuthoring();
-}, [routeFinishPending, distanceMeasurement.anchors]);
+  const pendingFinalPoint =
+    routeFinishPending;
+
+  setRouteFinishPending(null);
+
+  finishRouteAuthoring(
+    pendingFinalPoint
+  );
+}, [
+  routeFinishPending,
+  distanceMeasurement.anchors,
+]);
 
 function handleContextMenu(
   event: React.MouseEvent<HTMLDivElement>
@@ -3541,7 +3583,10 @@ dispatch({
             )
           )
           {
-            setRouteFinishPending(true);
+            setRouteFinishPending(
+              boundaryCrossing?.position ??
+                point
+            );
           }
         }
 
@@ -5346,31 +5391,30 @@ function saveSectionProperties() {
     usePath
   );
 
-  if (
-    routePieceId !== null &&
-    finishRoute
-  )
+  if (routePieceId !== null && finishRoute)
   {
-    setRouteFinishPending(true);
+    setRouteFinishPending(position);
   }
 }}
-    onDistanceTerminalClick={(
+onDistanceTerminalClick={(
   terminalId,
   usePath,
   finishRoute
 ) => {
-  if (!usePath) {
-    const terminal =
-      pathNetwork.terminals.find(
-        (candidate) =>
-          candidate.id === terminalId
-      );
+  const terminal =
+    pathNetwork.terminals.find(
+      (candidate) =>
+        candidate.id === terminalId
+    );
 
-    if (terminal) {
-      addDistanceAreaCrossings(
-        terminal.position
-      );
-    }
+  if (
+    !usePath &&
+    terminal
+  )
+  {
+    addDistanceAreaCrossings(
+      terminal.position
+    );
   }
 
   distanceMeasurement.addTerminal(
@@ -5378,12 +5422,15 @@ function saveSectionProperties() {
     usePath
   );
 
-    if (
+  if (
     routePieceId !== null &&
-    finishRoute
+    finishRoute &&
+    terminal
   )
   {
-    setRouteFinishPending(true);
+    setRouteFinishPending(
+      terminal.position
+    );
   }
 }}
     terminals={
@@ -5992,7 +6039,9 @@ onClick={(event) => {
     event.shiftKey
   )
   {
-    setRouteFinishPending(true);
+    setRouteFinishPending(
+      feature.position
+    );
   }
 
   return;
