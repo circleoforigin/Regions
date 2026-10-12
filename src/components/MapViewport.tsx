@@ -567,6 +567,7 @@ function MapViewport({
         PathSegment,
         | 'type'
         | 'name'
+        | 'nameCustomized'
         | 'subtitle'
         | 'description'
         | 'journalPageId'
