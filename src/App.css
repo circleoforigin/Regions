@@ -1105,7 +1105,7 @@
   position: absolute;
   z-index: 9;
   max-width: 160px;
-  transform: translate(-50%, 4px);
+  transform: translate(-50%, calc(-100% - 12px));
   overflow: hidden;
   color: #ffffff;
   font-size: 12px;

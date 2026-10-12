@@ -5860,17 +5860,15 @@ onDistanceTerminalClick={(
     }}
   />
 )}
-      {piecePreview?.pieceId !== piece.id && (
-  <span
-    className="map-piece-label"
-    style={{
-      left: screenPosition.x,
-      top: screenPosition.y,
-    }}
-  >
-    {piece.name}
-  </span>
-)}
+      <span
+        className="map-piece-label"
+        style={{
+          left: screenPosition.x,
+          top: screenPosition.y,
+        }}
+      >
+        {piece.name}
+      </span>
     </Fragment>
   );
 })}

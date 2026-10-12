@@ -1,6 +1,7 @@
 import {
   OccurrenceReactions,
   type Occurrence,
+  type OccurrenceType,
 } from '@settingforge/module-sdk';
 import type {
   RouteLeg,
@@ -94,6 +95,7 @@ function createEndpointTransitionOccurrences(
   const occurrences: Occurrence[] = [];
 
   const addOccurrence = (
+    type: OccurrenceType,
     description: string
   ) =>
   {
@@ -104,7 +106,7 @@ function createEndpointTransitionOccurrences(
       pieceId: context.pieceId,
       entityId: null,
       sectorId: null,
-      type: 'section',
+      type,
       description,
       reaction: OccurrenceReactions.Notify,
     });
@@ -148,6 +150,7 @@ function createEndpointTransitionOccurrences(
   if (crossingPath)
   {
     addOccurrence(
+        'path',
       formatRegionsOccurrenceMessage(
         'pathEncounter',
         {
@@ -170,6 +173,7 @@ function createEndpointTransitionOccurrences(
   )
   {
     addOccurrence(
+        'path',
       formatRegionsOccurrenceMessage(
         'pathExitToArea',
         {
@@ -186,6 +190,7 @@ function createEndpointTransitionOccurrences(
   )
   {
     addOccurrence(
+        'path',
       formatRegionsOccurrenceMessage(
         'pathExit',
         {
@@ -203,6 +208,7 @@ function createEndpointTransitionOccurrences(
     )
     {
       addOccurrence(
+        'path',
         formatRegionsOccurrenceMessage(
           'pathTransition',
           {
@@ -216,6 +222,7 @@ function createEndpointTransitionOccurrences(
     else if (enteringPath)
     {
       addOccurrence(
+        'path',
         formatRegionsOccurrenceMessage(
           'pathEncounter',
           {
@@ -247,6 +254,7 @@ function createEndpointTransitionOccurrences(
     )
     {
       addOccurrence(
+        'section',
         formatRegionsOccurrenceMessage(
           'areaTransition',
           {
@@ -260,6 +268,7 @@ function createEndpointTransitionOccurrences(
     else if (enteringArea)
     {
       addOccurrence(
+        'section',
         formatRegionsOccurrenceMessage(
           'areaEnter',
           {
@@ -272,6 +281,7 @@ function createEndpointTransitionOccurrences(
     else if (leavingArea)
     {
       addOccurrence(
+        'section',
         formatRegionsOccurrenceMessage(
           'areaExit',
           {
