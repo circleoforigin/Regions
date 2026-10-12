@@ -2952,6 +2952,27 @@ for (
   {
     endpoint.featureId = endNode.featureId;
   }
+
+  if (endNode.kind === 'path')
+  {
+    const encounteredPath =
+      pathNetwork.segments.find(
+        (segment) =>
+          segment.id === endNode.segmentId
+      );
+
+    const encounteredPathName =
+      encounteredPath?.name?.trim();
+
+    endpoint.encounteredPathId =
+      endNode.segmentId;
+
+    if (encounteredPathName)
+    {
+      endpoint.encounteredPathName =
+        encounteredPathName;
+    }
+  }
   
   if (nextProfile)
   {

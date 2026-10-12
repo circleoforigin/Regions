@@ -120,6 +120,33 @@ function createEndpointTransitionOccurrences(
   const enteringPath =
     endpoint.enteringPathName;
 
+  const encounteredPath =
+    endpoint.encounteredPathName;
+
+  const crossingPath =
+    encounteredPath &&
+    !leavingPath &&
+    !enteringPath
+      ? encounteredPath
+      : undefined;
+
+  /*
+   * Crossing a Path without traveling
+   * along it is a Path encounter.
+   */
+  if (crossingPath)
+  {
+    addOccurrence(
+      formatRegionsOccurrenceMessage(
+        'pathEncounter',
+        {
+          piece: context.pieceName,
+          path: crossingPath,
+        }
+      )
+    );
+  }
+
   /*
    * Path -> open Area is one meaningful
    * transition rather than separate Path
