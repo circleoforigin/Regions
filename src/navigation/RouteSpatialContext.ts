@@ -28,6 +28,7 @@ function resolveRouteNodePosition(
   {
     case 'point':
     case 'path':
+    case 'boundary':
       return node.position;
 
     case 'feature':

@@ -515,6 +515,12 @@ function MapViewport({
     routeFinishPending,
     setRouteFinishPending,
   ] = useState(false);
+  const routeBoundaryEndpointRef =
+    useRef<{
+      boundaryId: string;
+      locationName: string;
+      position: Point;
+    } | null>(null);
   const [
     selectedPieceId,
     setSelectedPieceId,
@@ -2420,6 +2426,7 @@ function startSectionFromEdge(edgeId: string) {
 function cancelRouteAuthoring()
 {
   setRouteFinishPending(false);
+  routeBoundaryEndpointRef.current = null;
   distanceMeasurement.clear();
   setRoutePieceId(null);
   setDistancePointer(null);
@@ -2436,6 +2443,7 @@ function finishRouteAuthoring() {
   );
 
   if (!piece) {
+    routeBoundaryEndpointRef.current = null;
     distanceMeasurement.clear();
     setRoutePieceId(null);
     setDistancePointer(null);
@@ -2472,24 +2480,65 @@ const routeAnchors =
     : resolvedDistanceAnchors;
 
 for (
-  const resolved of
-    routeAnchors
-) {
+  let routeAnchorIndex = 0;
+  routeAnchorIndex < routeAnchors.length;
+  routeAnchorIndex += 1
+)
+{
+  const resolved =
+    routeAnchors[routeAnchorIndex];
+
   const anchor = resolved.anchor;
+
+  const isFinalAnchor =
+    routeAnchorIndex ===
+      routeAnchors.length - 1;
+
+  const boundaryEndpoint =
+    isFinalAnchor
+      ? routeBoundaryEndpointRef.current
+      : null;
+
   switch (anchor.kind) {
     case 'temporary':
-      nodes.push({
-        id: crypto.randomUUID(),
-        mapId,
-        source: {
-          moduleId: 'Regions',
-          type: 'route-point',
-        },
-        kind: 'point',
-        position: anchor.position,
-        usePathFromPrevious:
-          anchor.usePathFromPrevious,
-      });
+      if (boundaryEndpoint)
+      {
+        nodes.push({
+          id: crypto.randomUUID(),
+          mapId,
+          source: {
+            moduleId: 'Regions',
+            type: 'boundary',
+            referenceId:
+              boundaryEndpoint.boundaryId,
+          },
+          kind: 'boundary',
+          boundaryId:
+            boundaryEndpoint.boundaryId,
+          locationName:
+            boundaryEndpoint.locationName,
+          position:
+            boundaryEndpoint.position,
+          usePathFromPrevious:
+            anchor.usePathFromPrevious,
+        });
+      }
+      else
+      {
+        nodes.push({
+          id: crypto.randomUUID(),
+          mapId,
+          source: {
+            moduleId: 'Regions',
+            type: 'route-point',
+          },
+          kind: 'point',
+          position: anchor.position,
+          usePathFromPrevious:
+            anchor.usePathFromPrevious,
+        });
+      }
+
       break;
 
     case 'feature':
@@ -3112,6 +3161,7 @@ for (
     );
   }
 
+  routeBoundaryEndpointRef.current = null;
   distanceMeasurement.clear();
   setRoutePieceId(null);
   setDistancePointer(null);
@@ -3303,8 +3353,74 @@ dispatch({
     );
   }
 
-  function addDistanceAreaCrossings(destination: Point)
+  function findRouteBoundaryCrossing(
+  start: Point,
+  end: Point
+): {
+  boundary: Section;
+  position: Point;
+} | null
+{
+  const boundary =
+    sections.find(
+      (section) =>
+        section.kind === 'boundary' &&
+        section.edgeIds.length >= 3
+    );
+
+  if (!boundary)
   {
+    return null;
+  }
+
+  const polygon =
+    getSectionPolygon(
+      boundary,
+      sectionEdges,
+      sectionNodes
+    );
+
+  if (polygon.length < 3)
+  {
+    return null;
+  }
+
+  const startInside =
+    isPointInPolygon(
+      start,
+      polygon
+    );
+
+  if (!startInside)
+  {
+    return null;
+  }
+
+  const crossing =
+    findFirstPolygonBoundaryIntersection(
+      start,
+      end,
+      polygon
+    );
+
+  if (!crossing)
+  {
+    return null;
+  }
+
+  return {
+    boundary,
+    position: crossing.position,
+  };
+}
+
+ function addDistanceAreaCrossings(
+  destination: Point
+): {
+  boundary: Section;
+  position: Point;
+} | null
+{
   const resolved =
     resolveDistanceAnchors(
       distanceMeasurement.anchors,
@@ -3313,17 +3429,28 @@ dispatch({
       pathNetwork.terminals
     );
 
-  const previous = resolved.at(-1);
+  const previous =
+    resolved.at(-1);
 
   if (!previous)
   {
-    return;
+    return null;
   }
+
+  const boundaryCrossing =
+    findRouteBoundaryCrossing(
+      previous.position,
+      destination
+    );
+
+  const effectiveDestination =
+    boundaryCrossing?.position ??
+    destination;
 
   const crossings =
     findNavigationAreaCrossings(
       previous.position,
-      destination,
+      effectiveDestination,
       sections,
       sectionEdges,
       sectionNodes
@@ -3331,8 +3458,12 @@ dispatch({
 
   for (const crossing of crossings)
   {
-    distanceMeasurement.addPoint(crossing.position);
+    distanceMeasurement.addPoint(
+      crossing.position
+    );
   }
+
+  return boundaryCrossing;
 }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>)
@@ -3360,12 +3491,38 @@ dispatch({
         )
         {
           event.preventDefault();
-          addDistanceAreaCrossings(point);
-          distanceMeasurement.addPoint(point);
+
+          const boundaryCrossing =
+            addDistanceAreaCrossings(
+              point
+            );
+
+          if (boundaryCrossing)
+          {
+            routeBoundaryEndpointRef.current = {
+              boundaryId:
+                boundaryCrossing.boundary.id,
+              locationName: mapName,
+              position:
+                boundaryCrossing.position,
+            };
+          }
+          else
+          {
+            routeBoundaryEndpointRef.current = null;
+          }
+
+          distanceMeasurement.addPoint(
+            boundaryCrossing?.position ??
+              point
+          );
 
           if (
             routePieceId !== null &&
-            event.shiftKey
+            (
+              event.shiftKey ||
+              boundaryCrossing !== null
+            )
           )
           {
             setRouteFinishPending(true);

@@ -24,6 +24,16 @@ export function routeNodeToDistanceAnchor(
 ): DistanceAnchor 
 {
   switch (node.kind) {
+    case 'boundary':
+      return {
+        id: node.id,
+        kind: 'temporary',
+        pointId: node.id,
+        position: node.position,
+        usePathFromPrevious:
+          node.usePathFromPrevious,
+      };
+
     case 'point':
       return {
         id: node.id,

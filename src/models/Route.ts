@@ -103,6 +103,17 @@ export type RouteNode =
       mapId: string;
       source?: RouteNodeSource;
       label?: string;
+      kind: 'boundary';
+      boundaryId: string;
+      locationName: string;
+      position: SpatialPoint;
+      usePathFromPrevious?: boolean;
+    }
+  | {
+      id: string;
+      mapId: string;
+      source?: RouteNodeSource;
+      label?: string;
       kind: 'path';
       segmentId: string;
       position: SpatialPoint;
