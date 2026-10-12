@@ -3047,10 +3047,16 @@ for (
 
   const endpoint:
     RouteLegProfile['endpoint'] = {};
-
   if (endNode.kind === 'feature')
   {
     endpoint.featureId = endNode.featureId;
+  }
+  
+  if (endNode.kind === 'boundary')
+  {
+    endpoint.boundaryId = endNode.boundaryId;
+
+    endpoint.boundaryLocationName = endNode.locationName;
   }
 
   if (endNode.kind === 'path')
@@ -3061,16 +3067,13 @@ for (
           segment.id === endNode.segmentId
       );
 
-    const encounteredPathName =
-      encounteredPath?.name?.trim();
+    const encounteredPathName = encounteredPath?.name?.trim();
 
-    endpoint.encounteredPathId =
-      endNode.segmentId;
+    endpoint.encounteredPathId = endNode.segmentId;
 
     if (encounteredPathName)
     {
-      endpoint.encounteredPathName =
-        encounteredPathName;
+      endpoint.encounteredPathName = encounteredPathName;
     }
   }
   
@@ -6023,10 +6026,9 @@ onClick={(event) => {
   event.preventDefault();
   event.stopPropagation();
 
-  if (!event.ctrlKey) {
-    addDistanceAreaCrossings(
-      feature.position
-    );
+  if (!event.ctrlKey) 
+  {
+    addDistanceAreaCrossings(feature.position);
   }
 
   distanceMeasurement.addFeature(
@@ -6034,14 +6036,9 @@ onClick={(event) => {
     event.ctrlKey
   );
 
-  if (
-    routePieceId !== null &&
-    event.shiftKey
-  )
+  if (routePieceId !== null && event.shiftKey)
   {
-    setRouteFinishPending(
-      feature.position
-    );
+    setRouteFinishPending(feature.position);
   }
 
   return;
@@ -6063,10 +6060,9 @@ onClick={(event) => {
           event.stopPropagation();
           setPieceContextMenu(null);
 
-          if (distanceInteractionActive) {
-            distanceMeasurement.removeFeature(
-              feature.id
-            );
+          if (distanceInteractionActive)
+          {
+            distanceMeasurement.removeFeature(feature.id);
             return;
           }
 

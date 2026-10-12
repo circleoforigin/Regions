@@ -368,6 +368,37 @@ export function generateTravelOccurrences(
     )
   );
 
+    const boundaryLocationName =
+    context.legProfile.endpoint
+      ?.boundaryLocationName;
+
+  if (
+    context.isRouteEnd &&
+    boundaryLocationName
+  )
+  {
+    occurrences.push({
+      id: crypto.randomUUID(),
+      sourceModuleId: 'regions',
+      simulationTime: context.endTime,
+      pieceId: context.pieceId,
+      entityId: null,
+      sectorId: null,
+      type: 'location',
+      displayLabel: 'F',
+      description:
+        formatRegionsOccurrenceMessage(
+          'boundaryExit',
+          {
+            piece: context.pieceName,
+            location:
+              boundaryLocationName,
+          }
+        ),
+      reaction: OccurrenceReactions.Notify,
+    });
+  }
+
   /*
    * A final Feature already represents
    * the Route's visible completion.
@@ -378,7 +409,8 @@ export function generateTravelOccurrences(
    */
   if (
     context.isRouteEnd &&
-    !context.legProfile.endpoint?.featureId
+    !context.legProfile.endpoint?.featureId &&
+    !context.legProfile.endpoint?.boundaryId
   )
   {
     occurrences.push({

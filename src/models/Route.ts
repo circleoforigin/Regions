@@ -71,6 +71,10 @@ export interface RouteLegPathProfile
 export interface RouteLegEndpointProfile
 {
   featureId?: string;
+
+  boundaryId?: string;
+  boundaryLocationName?: string;
+
   encounteredPathId?: string;
   encounteredPathName?: string;
   enteringAreaId?: string;
