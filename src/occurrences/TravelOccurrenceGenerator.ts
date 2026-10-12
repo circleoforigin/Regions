@@ -110,17 +110,35 @@ function createEndpointTransitionOccurrences(
     });
   };
 
-  const leavingArea =
-    endpoint.leavingAreaName;
+  const leavingArea = endpoint.leavingAreaName;
 
-  const enteringArea =
-    endpoint.enteringAreaName;
+  const enteringArea = endpoint.enteringAreaName;
 
-  const leavingPath =
-    endpoint.leavingPathName;
+  const endpointPath = endpoint.pathName;
 
-  const enteringPath =
-    endpoint.enteringPathName;
+  const leavingPath = endpoint.leavingPathName;
+
+  const enteringPath = endpoint.enteringPathName;
+
+  const encounteredPath =
+    endpointPath &&
+    endpointPath !== leavingPath &&
+    endpointPath !== enteringPath
+      ? endpointPath
+      : undefined;
+
+  if (encounteredPath)
+  {
+    addOccurrence(
+      formatRegionsOccurrenceMessage(
+        'pathEncounter',
+        {
+          piece: context.pieceName,
+          path: encounteredPath,
+        }
+      )
+    );
+  }
 
   /*
    * Path -> open Area is one meaningful

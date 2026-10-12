@@ -56,52 +56,53 @@ export function usePathInteraction({
   const authoring = usePathAuthoring();
 
   const getDraftEndPosition =
-    useCallback(():
-      SpatialPoint | null =>
-    {
-      const draft =
-        authoring.draft;
-
-      if (!draft)
+    useCallback(
+      (): SpatialPoint | null =>
       {
-        return null;
-      }
+        const draft =
+          authoring.draft;
 
-      const shapePoint =
-        draft.shapePoints.at(-1);
+        if (!draft)
+        {
+          return null;
+        }
 
-      if (shapePoint)
-      {
-        return shapePoint.position;
-      }
+        const shapePoint =
+          draft.shapePoints.at(-1);
 
-           const start =
-        draft.start;
+        if (shapePoint)
+        {
+          return shapePoint.position;
+        }
 
-      if (start.kind === 'feature')
-      {
+        const start =
+          draft.start;
+
+        if (start.kind === 'feature')
+        {
+          return (
+            features.find(
+              (feature) =>
+                feature.id ===
+                  start.featureId
+            )?.position ?? null
+          );
+        }
+
         return (
-          features.find(
-            (feature) =>
-              feature.id ===
-              start.featureId
+          network.terminals.find(
+            (terminal) =>
+              terminal.id ===
+                start.terminalId
           )?.position ?? null
         );
-      }
-
-      return (
-        network.terminals.find(
-          (terminal) =>
-            terminal.id ===
-              start.terminalId
-        )?.position ?? null
-      );
-    [
-      authoring.draft,
-      features,
-      network.terminals,
-    ]
-  );
+      },
+      [
+        authoring.draft,
+        features,
+        network.terminals,
+      ]
+    );
 
   const crossesExistingPath =
     useCallback(
