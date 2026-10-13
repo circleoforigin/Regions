@@ -13,27 +13,6 @@ import {
 } from '../events/LocationEvents';
 import { regionsSpatialQueryDefinitions } from './RegionsSpatialCapabilities';
 
-const progressTimeCommandDefinition: CommandDefinition = {
-  id: 'Regions.ProgressTime',
-  label: 'Progress Time',
-  description:
-    'Prospects elapsed simulation time for stationary Pieces.',
-  input: [
-    {
-      key: 'startTime',
-      label: 'Start Time',
-      type: 'number',
-      required: true,
-    },
-    {
-      key: 'duration',
-      label: 'Duration',
-      type: 'number',
-      required: true,
-    },
-  ],
-};
-
 const continueProgressTimeCommandDefinition:
   CommandDefinition = {
     id: 'Regions.ContinueProgressTime',
@@ -257,7 +236,6 @@ export const regionsEventDefinitions:
   ];
 
 export const regionsCommandDefinitions = [
-  progressTimeCommandDefinition,
   continueProgressTimeCommandDefinition,
   travelCommandDefinition,
   continueTravelCommandDefinition,

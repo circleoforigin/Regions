@@ -1351,131 +1351,160 @@ const distanceFromLegStart =
 
 useEffect(() =>
 {
-  const unregisterProgressTime =
-    moduleEventBus.registerRequestHandler(
-      'Regions.ProgressTime',
-      async (message) =>
+  const unsubscribe =
+    moduleEventBus.subscribe(
+      'Simulation.TimeProspected',
+      (message) =>
       {
-        const payload =
-          message.payload as
-            | {
-                startTime?: number;
-                duration?: number;
-              }
-            | undefined;
-
-        if (
-          !activeProject ||
-          typeof payload?.startTime !== 'number' ||
-          typeof payload.duration !== 'number' ||
-          payload.duration <= 0
-        )
+        void (async () =>
         {
-          return {
-            accepted: false,
-            prospectedCount: 0,
-          };
-        }
+          const payload =
+            message.payload as
+              | {
+                  startTime?: number;
+                  endTime?: number;
+                  duration?: number;
+                }
+              | undefined;
 
-        const endTime =
-          payload.startTime +
-          payload.duration;
-
-        const spatialPieces =
-          activeProject.pieces.filter(
-            (piece) =>
-              resolveSpatialPiece(
-                piece.id,
-                activeProject.pieces
-              )?.id === piece.id
-          );
-
-        let prospectedCount = 0;
-
-        for (const piece of spatialPieces)
-        {
-          const map =
-            activeMap?.id === piece.mapId
-              ? activeMap
-              : pendingMaps.find(
-                  (candidate) =>
-                    candidate.id === piece.mapId
-                ) ??
-                projectMaps.find(
-                  (candidate) =>
-                    candidate.id === piece.mapId
-                ) ??
-                await mapRepository.loadMap(
-                  piece.mapId
-                );
-
-          if (!map)
+          if (
+            typeof payload?.startTime !== 'number' ||
+            typeof payload.endTime !== 'number' ||
+            typeof payload.duration !== 'number'
+          )
           {
-            continue;
+            return;
           }
 
-          const location =
-            await resolvePieceLocation(
-              map,
-              activeProject,
-              piece
-            );
-
-          moduleEventBus.emit(
-            'Regions.TimeProspected',
+          try
+          {
+            if (activeProject)
             {
-              pieceId: piece.id,
-              mapId: piece.mapId,
-              areaId: location.area?.id,
+              const spatialPieces =
+                activeProject.pieces.filter(
+                  (piece) =>
+                    resolveSpatialPiece(
+                      piece.id,
+                      activeProject.pieces
+                    )?.id === piece.id
+                );
 
-              startTime:
-                payload.startTime,
+              for (const piece of spatialPieces)
+              {
+                const map =
+                  activeMap?.id === piece.mapId
+                    ? activeMap
+                    : pendingMaps.find(
+                        (candidate) =>
+                          candidate.id === piece.mapId
+                      ) ??
+                      projectMaps.find(
+                        (candidate) =>
+                          candidate.id === piece.mapId
+                      ) ??
+                      await mapRepository.loadMap(
+                        piece.mapId
+                      );
 
-              endTime,
-              duration:
-                payload.duration,
-
-              piece,
-              area: location.area,
-            }
-          );
-
-          await moduleEventBus.request(
-            'occurrences.submit',
-            {
-              pieceId: piece.id,
-              occurrences: [
+                if (!map)
                 {
-                  id: crypto.randomUUID(),
-                  sourceModuleId: 'regions',
-                  simulationTime:
-                    endTime,
-                  pieceId: piece.id,
-                  entityId: null,
-                  sectorId: null,
-                  reaction: 'none',
-                },
-              ],
+                  continue;
+                }
+
+                const location =
+                  await resolvePieceLocation(
+                    map,
+                    activeProject,
+                    piece
+                  );
+
+                moduleEventBus.emit(
+                  'Regions.TimeProspected',
+                  {
+                    pieceId: piece.id,
+                    mapId: piece.mapId,
+                    areaId: location.area?.id,
+
+                    startTime:
+                      payload.startTime,
+
+                    endTime:
+                      payload.endTime,
+
+                    duration:
+                      payload.duration,
+
+                    piece,
+                    area: location.area,
+                  }
+                );
+
+                await moduleEventBus.request(
+                  'occurrences.submit',
+                  {
+                    pieceId: piece.id,
+
+                    occurrences: [
+                      {
+                        id: crypto.randomUUID(),
+                        sourceModuleId: 'regions',
+                        simulationTime:
+                          payload.endTime,
+                        pieceId: piece.id,
+                        entityId: null,
+                        sectorId: null,
+                        reaction: 'none',
+                      },
+                    ],
+                  }
+                );
+              }
             }
-          );
+          }
+          catch (error)
+          {
+            console.error(
+              '[Regions] Stationary prospecting failed.',
+              error
+            );
+          }
+          finally
+          {
+            await moduleEventBus.request(
+              'occurrences.submit',
+              {
+                pieceId: null,
 
-          prospectedCount += 1;
-        }
-
-        return {
-          accepted:
-            prospectedCount > 0,
-          prospectedCount,
-          startTime:
-            payload.startTime,
-          endTime,
-        };
+                occurrences: [
+                  {
+                    id: crypto.randomUUID(),
+                    sourceModuleId: 'regions',
+                    simulationTime:
+                      payload.endTime,
+                    pieceId: null,
+                    entityId: null,
+                    sectorId: null,
+                    reaction: 'none',
+                  },
+                ],
+              }
+            );
+          }
+        })().catch(
+          (error: unknown) =>
+          {
+            console.error(
+              '[Regions] Unable to complete global time prospect.',
+              error
+            );
+          }
+        );
       }
     );
 
   return () =>
   {
-    unregisterProgressTime();
+    unsubscribe();
   };
 }, [
   activeProject,
