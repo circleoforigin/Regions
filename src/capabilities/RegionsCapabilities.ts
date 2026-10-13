@@ -13,6 +13,27 @@ import {
 } from '../events/LocationEvents';
 import { regionsSpatialQueryDefinitions } from './RegionsSpatialCapabilities';
 
+const progressTimeCommandDefinition: CommandDefinition = {
+  id: 'Regions.ProgressTime',
+  label: 'Progress Time',
+  description:
+    'Prospects elapsed simulation time for stationary Pieces.',
+  input: [
+    {
+      key: 'startTime',
+      label: 'Start Time',
+      type: 'number',
+      required: true,
+    },
+    {
+      key: 'duration',
+      label: 'Duration',
+      type: 'number',
+      required: true,
+    },
+  ],
+};
+
 const travelCommandDefinition: CommandDefinition = {
   id: 'Regions.Travel',
   label: 'Travel',
@@ -99,6 +120,45 @@ const commitTravelPositionCommandDefinition:
     ],
   };
 
+const timeProspectedEventDefinition: EventDefinition = {
+  id: 'Regions.TimeProspected',
+  label: 'Time Prospected',
+  description:
+    'Describes prospective elapsed time for a stationary Piece so other systems can generate events during the interval.',
+  fields: [
+    {
+      key: 'pieceId',
+      label: 'Piece ID',
+      type: 'string',
+    },
+    {
+      key: 'mapId',
+      label: 'Map ID',
+      type: 'string',
+    },
+    {
+      key: 'areaId',
+      label: 'Area ID',
+      type: 'string',
+    },
+    {
+      key: 'startTime',
+      label: 'Start Time',
+      type: 'number',
+    },
+    {
+      key: 'endTime',
+      label: 'End Time',
+      type: 'number',
+    },
+    {
+      key: 'duration',
+      label: 'Duration',
+      type: 'number',
+    },
+  ],
+};
+
 const travelLegProspectedEventDefinition: EventDefinition = {
   id: 'Regions.TravelLegProspected',
   label: 'Travel Leg Prospected',
@@ -162,11 +222,13 @@ export const regionsEventDefinitions:
   EventDefinition[] = [
     ...locationEventDefinitions,
     emitImageEventDefinition,
+    timeProspectedEventDefinition,
     travelLegProspectedEventDefinition,
     ...projectEventDefinitions,
   ];
 
 export const regionsCommandDefinitions = [
+  progressTimeCommandDefinition,
   travelCommandDefinition,
   continueTravelCommandDefinition,
   commitTravelPositionCommandDefinition,

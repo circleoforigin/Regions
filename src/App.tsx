@@ -1349,6 +1349,125 @@ const distanceFromLegStart =
   return true;
 };
 
+useEffect(() =>
+{
+  const unregisterProgressTime =
+    moduleEventBus.registerRequestHandler(
+      'Regions.ProgressTime',
+      async (message) =>
+      {
+        const payload =
+          message.payload as
+            | {
+                startTime?: number;
+                duration?: number;
+              }
+            | undefined;
+
+        if (
+          !activeProject ||
+          typeof payload?.startTime !== 'number' ||
+          typeof payload.duration !== 'number' ||
+          payload.duration <= 0
+        )
+        {
+          return {
+            accepted: false,
+            prospectedCount: 0,
+          };
+        }
+
+        const endTime =
+          payload.startTime +
+          payload.duration;
+
+        const spatialPieces =
+          activeProject.pieces.filter(
+            (piece) =>
+              resolveSpatialPiece(
+                piece.id,
+                activeProject.pieces
+              )?.id === piece.id
+          );
+
+        let prospectedCount = 0;
+
+        for (const piece of spatialPieces)
+        {
+          const map =
+            activeMap?.id === piece.mapId
+              ? activeMap
+              : pendingMaps.find(
+                  (candidate) =>
+                    candidate.id === piece.mapId
+                ) ??
+                projectMaps.find(
+                  (candidate) =>
+                    candidate.id === piece.mapId
+                ) ??
+                await mapRepository.loadMap(
+                  piece.mapId
+                );
+
+          if (!map)
+          {
+            continue;
+          }
+
+          const location =
+            await resolvePieceLocation(
+              map,
+              activeProject,
+              piece
+            );
+
+          moduleEventBus.emit(
+            'Regions.TimeProspected',
+            {
+              pieceId: piece.id,
+              mapId: piece.mapId,
+              areaId: location.area?.id,
+
+              startTime:
+                payload.startTime,
+
+              endTime,
+              duration:
+                payload.duration,
+
+              piece,
+              area: location.area,
+            }
+          );
+
+          prospectedCount += 1;
+        }
+
+        return {
+          accepted:
+            prospectedCount > 0,
+          prospectedCount,
+          startTime:
+            payload.startTime,
+          endTime,
+        };
+      }
+    );
+
+  return () =>
+  {
+    unregisterProgressTime();
+  };
+}, [
+  activeProject,
+  activeMap,
+  projectMaps,
+  pendingMaps,
+  activeSections,
+  activeSectionEdges,
+  activeSectionNodes,
+]);
+
  useEffect(() =>
 {
   const unregisterTravel =
