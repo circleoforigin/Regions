@@ -1440,6 +1440,25 @@ useEffect(() =>
             }
           );
 
+          await moduleEventBus.request(
+            'occurrences.submit',
+            {
+              pieceId: piece.id,
+              occurrences: [
+                {
+                  id: crypto.randomUUID(),
+                  sourceModuleId: 'regions',
+                  simulationTime:
+                    endTime,
+                  pieceId: piece.id,
+                  entityId: null,
+                  sectorId: null,
+                  reaction: 'none',
+                },
+              ],
+            }
+          );
+
           prospectedCount += 1;
         }
 
@@ -1577,6 +1596,25 @@ useEffect(() =>
 
             piece,
             area: location.area,
+          }
+        );
+
+        await moduleEventBus.request(
+          'occurrences.submit',
+          {
+            pieceId: piece.id,
+            occurrences: [
+              {
+                id: crypto.randomUUID(),
+                sourceModuleId: 'regions',
+                simulationTime:
+                  payload.targetTime,
+                pieceId: piece.id,
+                entityId: null,
+                sectorId: null,
+                reaction: 'none',
+              },
+            ],
           }
         );
 
