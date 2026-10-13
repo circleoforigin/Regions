@@ -34,6 +34,35 @@ const progressTimeCommandDefinition: CommandDefinition = {
   ],
 };
 
+const continueProgressTimeCommandDefinition:
+  CommandDefinition = {
+    id: 'Regions.ContinueProgressTime',
+    label: 'Continue Progress Time',
+    description:
+      'Continues prospective elapsed time for a stationary Piece after an Occurrence breakpoint.',
+    input: [
+      {
+        key: 'pieceId',
+        label: 'Piece ID',
+        type: 'string',
+        required: true,
+      },
+      {
+        key: 'startTime',
+        label: 'Start Time',
+        type: 'number',
+        required: true,
+      },
+      {
+        key: 'targetTime',
+        label: 'Target Time',
+        type: 'number',
+        required: true,
+      },
+    ],
+  };
+
+
 const travelCommandDefinition: CommandDefinition = {
   id: 'Regions.Travel',
   label: 'Travel',
@@ -229,6 +258,7 @@ export const regionsEventDefinitions:
 
 export const regionsCommandDefinitions = [
   progressTimeCommandDefinition,
+  continueProgressTimeCommandDefinition,
   travelCommandDefinition,
   continueTravelCommandDefinition,
   commitTravelPositionCommandDefinition,

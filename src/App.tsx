@@ -1468,7 +1468,144 @@ useEffect(() =>
   activeSectionNodes,
 ]);
 
- useEffect(() =>
+useEffect(() =>
+{
+  const unregisterContinueProgressTime =
+    moduleEventBus.registerRequestHandler(
+      'Regions.ContinueProgressTime',
+      async (message) =>
+      {
+        const payload =
+          message.payload as
+            | {
+                pieceId?: string;
+                startTime?: number;
+                targetTime?: number;
+              }
+            | undefined;
+
+        if (
+          !activeProject ||
+          !payload?.pieceId ||
+          typeof payload.startTime !== 'number' ||
+          typeof payload.targetTime !== 'number' ||
+          payload.targetTime <= payload.startTime
+        )
+        {
+          return {
+            accepted: false,
+          };
+        }
+
+        const piece =
+          activeProject.pieces.find(
+            (candidate) =>
+              candidate.id ===
+              payload.pieceId
+          );
+
+        if (!piece)
+        {
+          return {
+            accepted: false,
+          };
+        }
+
+        const spatialPiece =
+          resolveSpatialPiece(
+            piece.id,
+            activeProject.pieces
+          );
+
+        if (
+          !spatialPiece ||
+          spatialPiece.id !== piece.id
+        )
+        {
+          return {
+            accepted: false,
+          };
+        }
+
+        const map =
+          activeMap?.id === piece.mapId
+            ? activeMap
+            : pendingMaps.find(
+                (candidate) =>
+                  candidate.id === piece.mapId
+              ) ??
+              projectMaps.find(
+                (candidate) =>
+                  candidate.id === piece.mapId
+              ) ??
+              await mapRepository.loadMap(
+                piece.mapId
+              );
+
+        if (!map)
+        {
+          return {
+            accepted: false,
+          };
+        }
+
+        const location =
+          await resolvePieceLocation(
+            map,
+            activeProject,
+            piece
+          );
+
+        const duration =
+          payload.targetTime -
+          payload.startTime;
+
+        moduleEventBus.emit(
+          'Regions.TimeProspected',
+          {
+            pieceId: piece.id,
+            mapId: piece.mapId,
+            areaId: location.area?.id,
+
+            startTime:
+              payload.startTime,
+
+            endTime:
+              payload.targetTime,
+
+            duration,
+
+            piece,
+            area: location.area,
+          }
+        );
+
+        return {
+          accepted: true,
+          pieceId: piece.id,
+          startTime:
+            payload.startTime,
+          endTime:
+            payload.targetTime,
+        };
+      }
+    );
+
+  return () =>
+  {
+    unregisterContinueProgressTime();
+  };
+}, [
+  activeProject,
+  activeMap,
+  projectMaps,
+  pendingMaps,
+  activeSections,
+  activeSectionEdges,
+  activeSectionNodes,
+]);
+
+useEffect(() =>
 {
   const unregisterTravel =
     moduleEventBus.registerRequestHandler(
