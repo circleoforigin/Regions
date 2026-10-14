@@ -125,11 +125,6 @@ const commitTravelPositionCommandDefinition:
   type: 'number',
   required: true,
 },
-{
-  key: 'consumeRoute',
-  label: 'Consume Route',
-  type: 'boolean',
-},
     ],
   };
 

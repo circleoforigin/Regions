@@ -1958,7 +1958,6 @@ useEffect(() =>
                 pieceId?: string;
                 routeLegId?: string;
                 distanceFromLegStart?: number;
-                consumeRoute?: boolean;
               }
             | undefined;
 
@@ -2040,8 +2039,6 @@ let routes = currentProject.routes;
 
 let routeComplete = false;
 
-if (payload.consumeRoute)
-{
   const advancedRoute =
     advanceRouteToPosition(
       route,
@@ -2050,6 +2047,13 @@ if (payload.consumeRoute)
       payload.distanceFromLegStart,
       resolved.position
     );
+
+    const routeLegComplete =
+  payload.distanceFromLegStart >=
+    legProfile.distance.value;
+
+const remainingRouteLegId =
+  getRouteLegs(advancedRoute)[0]?.id;
 
   routes =
     advancedRoute.nodes.length > 1
@@ -2066,8 +2070,8 @@ if (payload.consumeRoute)
               route.id
         );
 
-  routeComplete = advancedRoute.nodes.length <= 1;
-}
+  routeComplete = advancedRoute.nodes.length <= 1;     
+
 
         const committedProject = {
           ...currentProject,
@@ -2157,6 +2161,8 @@ return {
   mapId: resolved.mapId,
   position: resolved.position,
   routeComplete,
+  routeLegComplete,
+  remainingRouteLegId,
 };
       }
     );
