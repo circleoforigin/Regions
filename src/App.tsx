@@ -46,13 +46,13 @@ import type {
 } from '@settingforge/module-sdk';
 import { useStationaryTimeSimulation } from './simulation/useStationaryTimeSimulation';
 import GlobalMediaSlotsDialog from './components/GlobalMediaSlotsDialog';
-
+import { commitRouteTravelPosition } from './routes/RouteTravelCommit';
 import { modulePresence } from './host/ModulePresence';
 import { moduleEventBus } from './host/ModuleBus';
 import MenuBar from './components/MenuBar'
 import MapViewport from './components/MapViewport';
 import MapScaleCalibrationDialog from './maps/MapScaleCalibrationDialog';
-
+import { useRegionsSpatialQueries } from './capabilities/useRegionsSpatialQueries';
 import type { MapScalePoint } from './maps/MapScaleCalibration';
 import JournalViewPanel from './integrations/journal/JournalViewPanel';
 import type {
@@ -64,7 +64,6 @@ import type { Project } from './models/Project';
 import type { Map as RegionMap } from './models/Map';
 import type { Feature } from './models/Feature';
 import type { PathSegment } from './models/Path';
-import { pathSegmentRepository } from './paths/PathSegmentRepository';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
 import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
@@ -72,9 +71,6 @@ import type {
   Route,
   RouteLegProfile,
 } from './models/Route';
-import { getRouteLegs } from './models/Route';
-import { resolveRouteTravelPosition } from './routes/RouteTravelPosition';
-import { advanceRouteToPosition } from './routes/RouteProgress';
 
 import {
   findContainingParty,
@@ -620,6 +616,11 @@ const pendingProjectActionRef =
     loadedSectionsMapId.current,
 
   getPreferredAreaId,
+});
+
+useRegionsSpatialQueries({
+  activeProject,
+  activeMap,
 });
 
 useTravelSimulation({
@@ -1251,112 +1252,30 @@ useEffect(() =>
           return;
         }
 
-        const route =
-          currentProject.routes.find(
-            (candidate) =>
-              candidate.pieceId ===
-              payload.pieceId
-          );
-
-        if (!route)
-        {
-          throw new Error(
-            `Piece "${payload.pieceId}" has no Route.`
-          );
-        }
-
-        const routeLeg =
-          getRouteLegs(route).find(
-            (candidate) =>
-              candidate.id ===
-              payload.routeLegId
-          );
-
-        if (!routeLeg)
-        {
-          throw new Error(
-            `Route Leg "${payload.routeLegId}" was not found.`
-          );
-        }
-
-        const legProfile =
-          route.legProfiles?.find(
-            (candidate) =>
-              candidate.legId ===
-              routeLeg.id
-          );
-
-        if (!legProfile)
-        {
-          throw new Error(
-            `Route Leg "${routeLeg.id}" has no compiled profile.`
-          );
-        }
-
-        const resolved =
-          resolveRouteTravelPosition(
-            legProfile,
-            payload.distanceFromLegStart
-          );
-
-        const completedBoundary =
-          routeLeg.end.kind === 'boundary' &&
-          payload.distanceFromLegStart >=
-            legProfile.distance.value
-            ? routeLeg.end
-            : null;
-
-       const pieces =
-  movePartyAndMembers(
-    currentProject.pieces,
+const commit =
+  commitRouteTravelPosition(
+    currentProject,
     payload.pieceId,
-    resolved.mapId,
-    resolved.position
+    payload.routeLegId,
+    payload.distanceFromLegStart
   );
 
-let routes = currentProject.routes;
+const {
+  project: committedProject,
+  routeLeg,
+  legProfile,
+  resolved,
+  routeComplete,
+  routeLegComplete,
+  remainingRouteLegId,
+} = commit;
 
-let routeComplete = false;
-
-  const advancedRoute =
-    advanceRouteToPosition(
-      route,
-      routeLeg,
-      legProfile,
-      payload.distanceFromLegStart,
-      resolved.position
-    );
-
-    const routeLegComplete =
+const completedBoundary =
+  routeLeg.end.kind === 'boundary' &&
   payload.distanceFromLegStart >=
-    legProfile.distance.value;
-
-const remainingRouteLegId =
-  getRouteLegs(advancedRoute)[0]?.id;
-
-  routes =
-    advancedRoute.nodes.length > 1
-      ? currentProject.routes.map(
-          (candidate) =>
-            candidate.id ===
-              route.id
-              ? advancedRoute
-              : candidate
-        )
-      : currentProject.routes.filter(
-          (candidate) =>
-            candidate.id !==
-              route.id
-        );
-
-  routeComplete = advancedRoute.nodes.length <= 1;     
-
-
-        const committedProject = {
-          ...currentProject,
-          pieces,
-          routes,
-        };
+    legProfile.distance.value
+    ? routeLeg.end
+    : null;
 
         activeProjectRef.current = committedProject;
 
@@ -1463,165 +1382,6 @@ return {
   }, []);
 
   useEffect(() => {
-    const unregisterGetPiecePosition =
-  moduleEventBus.registerRequestHandler(
-    'Regions.GetPiecePosition',
-    (request) => {
-      const payload =
-        request.payload as
-          | {
-              pieceId?: string;
-            }
-          | undefined;
-
-      if (!payload?.pieceId) {
-        throw new Error(
-          'Regions.GetPiecePosition requires pieceId.'
-        );
-      }
-
-      if (!activeProject) {
-        throw new Error(
-          'No Regions Project is active.'
-        );
-      }
-
-      const piece =
-        activeProject.pieces.find(
-          (candidate) =>
-            candidate.id ===
-            payload.pieceId
-        );
-
-      if (!piece) {
-        throw new Error(
-          `Piece "${payload.pieceId}" was not found.`
-        );
-      }
-
-      const spatialPiece =
-        resolveSpatialPiece(
-          piece.id,
-          activeProject.pieces
-        ) ?? piece;
-
-      return {
-        pieceId: spatialPiece.id,
-        mapId: spatialPiece.mapId,
-        position: {
-          ...spatialPiece.position,
-        },
-      };
-    }
-  );
-
-const unregisterGetFeaturePosition =
-  moduleEventBus.registerRequestHandler(
-    'Regions.GetFeaturePosition',
-    async (request) => {
-      const payload =
-        request.payload as
-          | {
-              featureId?: string;
-            }
-          | undefined;
-
-      if (!payload?.featureId) {
-        throw new Error(
-          'Regions.GetFeaturePosition requires featureId.'
-        );
-      }
-
-      if (!activeProject) {
-        throw new Error(
-          'No Regions Project is active.'
-        );
-      }
-
-      const maps =
-        await mapRepository.loadMaps();
-
-      for (const map of maps) {
-        if (
-          !map.featureIds.includes(
-            payload.featureId
-          )
-        ) {
-          continue;
-        }
-
-        const feature =
-          await featureRepository.loadFeature(
-            payload.featureId
-          );
-
-        if (!feature) {
-          break;
-        }
-
-        return {
-          featureId: feature.id,
-          mapId: map.id,
-          position: {
-            ...feature.position,
-          },
-        };
-      }
-
-      throw new Error(
-        `Feature "${payload.featureId}" was not found.`
-      );
-    }
-  );
-
-const unregisterGetMapScale =
-  moduleEventBus.registerRequestHandler(
-    'Regions.GetMapScale',
-    async (request) => {
-      const payload =
-        request.payload as
-          | {
-              mapId?: string;
-            }
-          | undefined;
-
-      if (!payload?.mapId) {
-        throw new Error(
-          'Regions.GetMapScale requires mapId.'
-        );
-      }
-
-      const map =
-        activeMap?.id === payload.mapId
-          ? activeMap
-          : await mapRepository.loadMap(
-              payload.mapId
-            );
-
-      if (!map) {
-        throw new Error(
-          `Map "${payload.mapId}" was not found.`
-        );
-      }
-
-      const distanceScale =
-        map.imageRegistration
-          ?.distanceScale;
-
-      return {
-        mapId: map.id,
-        calibrated:
-          distanceScale !== undefined,
-
-        distanceScale:
-          distanceScale
-            ? {
-                ...distanceScale,
-              }
-            : undefined,
-      };
-    }
-  );
     const unregisterList =
     moduleEventBus.registerRequestHandler(
       'project.list',
@@ -1885,9 +1645,6 @@ const unregisterGetMapScale =
   unregisterLoad();
   unregisterSave();
   unregisterClose();
-  unregisterGetMapScale();
-  unregisterGetFeaturePosition();
-  unregisterGetPiecePosition();
 };
 }, [activeProject, projectDirty]);  
 

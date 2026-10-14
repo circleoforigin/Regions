@@ -6,7 +6,6 @@ import { isValidAlignment, transformBoundaryPoint } from '../sections/BoundaryTr
 import { getInteractionModePermissions } from '../interaction/InteractionModePermissions';
 import DistanceMeasurementOverlay from '../interaction/distance/DistanceMeasurementOverlay';
 import { useDistanceMeasurement } from '../interaction/distance/useDistanceMeasurement';
-import type { DistanceAnchor } from '../interaction/distance/DistanceMeasurement';
 import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceAnchors';
 import type { Feature } from '../models/Feature';
 import type { InteractionMode } from '../interaction/InteractionMode';
