@@ -1,5 +1,5 @@
 
-
+import { useTravelSimulation } from './simulation/useTravelSimulation';
 import RulesetInteractionPanel from './rules/RulesetInteractionPanel';
 import { useRulesetInteraction } from './rules/useRulesetInteraction';
 import type { RulesetExtensionData } from './models/RulesetExtensionData';
@@ -71,12 +71,11 @@ import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
 import type {
   Route,
   RouteLegProfile,
-  RouteLeg,
 } from './models/Route';
 import { getRouteLegs } from './models/Route';
 import { resolveRouteTravelPosition } from './routes/RouteTravelPosition';
 import { advanceRouteToPosition } from './routes/RouteProgress';
-import { generateTravelOccurrences } from './occurrences/TravelOccurrenceGenerator';
+
 import {
   findContainingParty,
   getPartyMembers,
@@ -277,6 +276,32 @@ function App()
 
   const activeProjectId = activeProject?.id ?? null;
   const activeMapId = activeMap?.id ?? null;
+
+  const removeInvalidRoutes =
+  useCallback(
+    (
+      validRoutes: Route[]
+    ) =>
+    {
+      setActiveProject(
+        (current) =>
+        {
+          if (!current)
+          {
+            return current;
+          }
+
+          return {
+            ...current,
+            routes: validRoutes,
+          };
+        }
+      );
+
+      markProjectDirty();
+    },
+    []
+  );
   
   const getPreferredAreaId =
   useCallback(
@@ -595,6 +620,13 @@ const pendingProjectActionRef =
     loadedSectionsMapId.current,
 
   getPreferredAreaId,
+});
+
+useTravelSimulation({
+  activeProject,
+  projectFeatures,
+  pieceRulesetInteraction,
+  removeInvalidRoutes,
 });
 
   const [pendingFeatures, setPendingFeatures] =
@@ -1189,198 +1221,6 @@ void moduleEventBus
   modulePresence.stop();
 };
   }, []);
-
-const prospectRouteLeg = async (
-  route: Route,
-  routeLeg: RouteLeg,
-  startTime: number,
-  distanceOverride?: number,
-  distanceFromLegStartOverride?: number
-) =>
-{
-  if (!activeProject)
-  {
-    return false;
-  }
-
-  const spatialPiece =
-    activeProject.pieces.find(
-      (piece) =>
-        piece.id === route.pieceId
-    );
-
-  if (!spatialPiece)
-  {
-    throw new Error(
-      `Route "${route.id}" has no Piece.`
-    );
-  }
-
-  const legProfile =
-    route.legProfiles?.find(
-      (profile) =>
-        profile.legId === routeLeg.id
-    );
-
-  if (!legProfile)
-  {
-    throw new Error(
-      `Route Leg "${routeLeg.id}" has no compiled profile.`
-    );
-  }
-
-  const endpointFeature =
-    legProfile.endpoint?.featureId
-      ? projectFeatures.find(
-          (feature) =>
-            feature.id ===
-            legProfile.endpoint?.featureId
-        )
-      : undefined;
-
-  const paceField =
-    pieceRulesetInteraction
-      ?.interaction.fields.find(
-        (field) =>
-          field.id === 'pace'
-      );
-
-  const rulesetData =
-    spatialPiece.rulesetData;
-
-  const storedPace =
-    rulesetData &&
-    rulesetData.rulesetId ===
-      pieceRulesetInteraction?.rulesetId &&
-    rulesetData.schemaId ===
-      pieceRulesetInteraction?.interaction.schemaId
-      ? rulesetData.values.pace
-      : undefined;
-
-  const pace =
-    typeof storedPace === 'string'
-      ? storedPace
-      : typeof paceField?.defaultValue === 'string'
-        ? paceField.defaultValue
-        : undefined;
-
-  if (!pace)
-  {
-    throw new Error(
-      `Piece "${spatialPiece.id}" requires a Ruleset-defined Pace.`
-    );
-  }
-
-  const distance =
-    distanceOverride !== undefined
-      ? {
-          value: distanceOverride,
-          unit: legProfile.distance.unit,
-        }
-      : legProfile.distance;
-
-const distanceFromLegStart =
-  distanceFromLegStartOverride !== undefined
-    ? distanceFromLegStartOverride
-    : distanceOverride !== undefined
-      ? Math.max(
-          0,
-          legProfile.distance.value -
-            distanceOverride
-        )
-      : 0;
-
-
-  const result =
-    await moduleEventBus.request<{
-      duration: number;
-      speedMph: number;
-    }>(
-      'rules.executeFunction',
-      {
-        functionId: 'TravelTime',
-        input: {
-          distance,
-          pace,
-          entityIds: spatialPiece.entityIds,
-
-          area: legProfile.area
-            ? {
-                rulesetData:
-                  legProfile.area.rulesetData ?? null,
-              }
-            : null,
-
-          path: legProfile.path
-            ? {
-                type: legProfile.path.type,
-                rulesetData:
-                  legProfile.path.rulesetData ?? null,
-              }
-            : null,
-        },
-      }
-    );
-
-  const endTime =
-    startTime + result.duration;
-
-  moduleEventBus.emit(
-    'Regions.TravelLegProspected',
-    {
-      pieceId: spatialPiece.id,
-      routeId: route.id,
-      routeLegId: routeLeg.id,
-      startTime,
-      endTime,
-      duration: result.duration,
-      speedMph: result.speedMph,
-      distance,
-      startDistanceFromLegStart:
-        distanceFromLegStart,
-      endDistanceFromLegStart:
-        distanceFromLegStart +
-        distance.value,
-      pace,
-      endpoint: legProfile.endpoint,
-      piece: spatialPiece,
-      route,
-      routeLeg,
-    }
-  );
-
-  const routeLegs = getRouteLegs(route);
-
-  const isRouteEnd =
-    routeLeg.index ===
-      routeLegs.length - 1; 
-
-  const occurrences =
-    generateTravelOccurrences({
-      pieceId: spatialPiece.id,
-      pieceName: spatialPiece.name,
-      endpointFeatureName:
-        endpointFeature?.name,
-      routeLeg,
-      legProfile,
-      isRouteEnd,
-      startTime,
-      endTime,
-      duration: result.duration,
-      distanceFromLegStart,
-    });
-    
-  await moduleEventBus.request(
-    'occurrences.submit',
-    {
-      pieceId: spatialPiece.id,
-      occurrences,
-    }
-  );
-
-
-  return true;
-};
 
 useEffect(() =>
 {
