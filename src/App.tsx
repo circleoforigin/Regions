@@ -2059,22 +2059,21 @@ useEffect(() =>
                   route.id
               );
 
+        const routeComplete =  advancedRoute.nodes.length <= 1;
+
         const committedProject = {
           ...currentProject,
           pieces,
           routes,
         };
 
-        activeProjectRef.current =
-          committedProject;
+        activeProjectRef.current = committedProject;
 
-        setActiveProject(
-          committedProject
-        );
+        setActiveProject(committedProject);
 
         markProjectDirty();
 
-                if (completedBoundary)
+        if (completedBoundary)
         {
           const childMap =
             activeMap?.id ===
@@ -2144,12 +2143,13 @@ useEffect(() =>
           );
         }
 
-        return {
-          accepted: true,
-          pieceId: payload.pieceId,
-          mapId: resolved.mapId,
-          position: resolved.position,
-        };
+return {
+  accepted: true,
+  pieceId: payload.pieceId,
+  mapId: resolved.mapId,
+  position: resolved.position,
+  routeComplete,
+};
       }
     );
 
