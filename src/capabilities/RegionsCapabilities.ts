@@ -119,12 +119,17 @@ const commitTravelPositionCommandDefinition:
         type: 'string',
         required: true,
       },
-      {
-        key: 'distanceFromLegStart',
-        label: 'Distance From Leg Start',
-        type: 'number',
-        required: true,
-      },
+{
+  key: 'distanceFromLegStart',
+  label: 'Distance From Leg Start',
+  type: 'number',
+  required: true,
+},
+{
+  key: 'consumeRoute',
+  label: 'Consume Route',
+  type: 'boolean',
+},
     ],
   };
 

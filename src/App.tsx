@@ -1358,14 +1358,14 @@ useEffect(() =>
       {
         void (async () =>
         {
-          const payload =
-            message.payload as
-              | {
-                  startTime?: number;
-                  endTime?: number;
-                  duration?: number;
-                }
-              | undefined;
+const payload =
+  message.payload as
+    | {
+        startTime?: number;
+        endTime?: number;
+        duration?: number;
+      }
+    | undefined;
 
           if (
             typeof payload?.startTime !== 'number' ||
@@ -1958,6 +1958,7 @@ useEffect(() =>
                 pieceId?: string;
                 routeLegId?: string;
                 distanceFromLegStart?: number;
+                consumeRoute?: boolean;
               }
             | undefined;
 
@@ -2027,39 +2028,46 @@ useEffect(() =>
             ? routeLeg.end
             : null;
 
-        const advancedRoute =
-          advanceRouteToPosition(
-            route,
-            routeLeg,
-            legProfile,
-            payload.distanceFromLegStart,
-            resolved.position
-          );
+       const pieces =
+  movePartyAndMembers(
+    currentProject.pieces,
+    payload.pieceId,
+    resolved.mapId,
+    resolved.position
+  );
 
-               const pieces =
-          movePartyAndMembers(
-            currentProject.pieces,
-            payload.pieceId,
-            resolved.mapId,
-            resolved.position
-          );
+let routes = currentProject.routes;
 
-        const routes =
-          advancedRoute.nodes.length > 1
-            ? currentProject.routes.map(
-                (candidate) =>
-                  candidate.id ===
-                    route.id
-                    ? advancedRoute
-                    : candidate
-              )
-            : currentProject.routes.filter(
-                (candidate) =>
-                  candidate.id !==
-                  route.id
-              );
+let routeComplete = false;
 
-        const routeComplete =  advancedRoute.nodes.length <= 1;
+if (payload.consumeRoute)
+{
+  const advancedRoute =
+    advanceRouteToPosition(
+      route,
+      routeLeg,
+      legProfile,
+      payload.distanceFromLegStart,
+      resolved.position
+    );
+
+  routes =
+    advancedRoute.nodes.length > 1
+      ? currentProject.routes.map(
+          (candidate) =>
+            candidate.id ===
+              route.id
+              ? advancedRoute
+              : candidate
+        )
+      : currentProject.routes.filter(
+          (candidate) =>
+            candidate.id !==
+              route.id
+        );
+
+  routeComplete = advancedRoute.nodes.length <= 1;
+}
 
         const committedProject = {
           ...currentProject,
