@@ -1,3 +1,5 @@
+
+
 import RulesetInteractionPanel from './rules/RulesetInteractionPanel';
 import { useRulesetInteraction } from './rules/useRulesetInteraction';
 import type { RulesetExtensionData } from './models/RulesetExtensionData';
@@ -16,6 +18,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useCallback,
 } from 'react';
 import { resolvePathDockPosition } from './paths/PathGeometry';
 import {
@@ -26,7 +29,7 @@ import {
   type JournalPageCandidate,
   type JournalSectionSummary,
 } from './integrations/journal/JournalIntegration';
-
+import { resolvePieceLocation as resolvePieceLocationData } from './locations/PieceLocationResolver';
 import './App.css';
 import type {
   ProjectCreateRequest,
@@ -41,7 +44,7 @@ import type {
   ProjectRenameRequest,
   ProjectRenameResponse,
 } from '@settingforge/module-sdk';
-
+import { useStationaryTimeSimulation } from './simulation/useStationaryTimeSimulation';
 import GlobalMediaSlotsDialog from './components/GlobalMediaSlotsDialog';
 
 import { modulePresence } from './host/ModulePresence';
@@ -275,6 +278,21 @@ function App()
   const activeProjectId = activeProject?.id ?? null;
   const activeMapId = activeMap?.id ?? null;
   
+  const getPreferredAreaId =
+  useCallback(
+    (
+      projectId: string,
+      pieceId: string,
+      mapId: string
+    ) =>
+    {
+      return pieceAreaContexts.current.get(
+        `${projectId}:${pieceId}:${mapId}`
+      );
+    },
+    []
+  ); 
+
   function handlePathNetworkChange(
   network: PathNetwork
 ) {
@@ -563,6 +581,21 @@ const pendingProjectActionRef =
     useState<PendingArrivalIntent | null>(null);
 
   const [pendingMaps, setPendingMaps] = useState<RegionMap[]>([]);
+
+ useStationaryTimeSimulation({
+  activeProject,
+  activeMap,
+  projectMaps,
+  pendingMaps,
+  activeSections,
+  activeSectionEdges,
+  activeSectionNodes,
+
+  loadedSectionsMapId:
+    loadedSectionsMapId.current,
+
+  getPreferredAreaId,
+});
 
   const [pendingFeatures, setPendingFeatures] =
     useState<Feature[]>([]);
@@ -1348,329 +1381,6 @@ const distanceFromLegStart =
 
   return true;
 };
-
-useEffect(() =>
-{
-  const unsubscribe =
-    moduleEventBus.subscribe(
-      'Simulation.TimeProspected',
-      (message) =>
-      {
-        void (async () =>
-        {
-const payload =
-  message.payload as
-    | {
-        startTime?: number;
-        endTime?: number;
-        duration?: number;
-      }
-    | undefined;
-
-          if (
-            typeof payload?.startTime !== 'number' ||
-            typeof payload.endTime !== 'number' ||
-            typeof payload.duration !== 'number'
-          )
-          {
-            return;
-          }
-
-          try
-          {
-            if (activeProject)
-            {
-              const spatialPieces =
-                activeProject.pieces.filter(
-                  (piece) =>
-                    resolveSpatialPiece(
-                      piece.id,
-                      activeProject.pieces
-                    )?.id === piece.id
-                );
-
-              for (const piece of spatialPieces)
-              {
-                const map =
-                  activeMap?.id === piece.mapId
-                    ? activeMap
-                    : pendingMaps.find(
-                        (candidate) =>
-                          candidate.id === piece.mapId
-                      ) ??
-                      projectMaps.find(
-                        (candidate) =>
-                          candidate.id === piece.mapId
-                      ) ??
-                      await mapRepository.loadMap(
-                        piece.mapId
-                      );
-
-                if (!map)
-                {
-                  continue;
-                }
-
-                const location =
-                  await resolvePieceLocation(
-                    map,
-                    activeProject,
-                    piece
-                  );
-
-                moduleEventBus.emit(
-                  'Regions.TimeProspected',
-                  {
-                    pieceId: piece.id,
-                    mapId: piece.mapId,
-                    areaId: location.area?.id,
-
-                    startTime:
-                      payload.startTime,
-
-                    endTime:
-                      payload.endTime,
-
-                    duration:
-                      payload.duration,
-
-                    piece,
-                    area: location.area,
-                  }
-                );
-
-                await moduleEventBus.request(
-                  'occurrences.submit',
-                  {
-                    pieceId: piece.id,
-
-                    occurrences: [
-                      {
-                        id: crypto.randomUUID(),
-                        sourceModuleId: 'regions',
-                        simulationTime:
-                          payload.endTime,
-                        pieceId: piece.id,
-                        entityId: null,
-                        sectorId: null,
-                        reaction: 'none',
-                      },
-                    ],
-                  }
-                );
-              }
-            }
-          }
-          catch (error)
-          {
-            console.error(
-              '[Regions] Stationary prospecting failed.',
-              error
-            );
-          }
-          finally
-          {
-            await moduleEventBus.request(
-              'occurrences.submit',
-              {
-                pieceId: null,
-
-                occurrences: [
-                  {
-                    id: crypto.randomUUID(),
-                    sourceModuleId: 'regions',
-                    simulationTime:
-                      payload.endTime,
-                    pieceId: null,
-                    entityId: null,
-                    sectorId: null,
-                    reaction: 'none',
-                  },
-                ],
-              }
-            );
-          }
-        })().catch(
-          (error: unknown) =>
-          {
-            console.error(
-              '[Regions] Unable to complete global time prospect.',
-              error
-            );
-          }
-        );
-      }
-    );
-
-  return () =>
-  {
-    unsubscribe();
-  };
-}, [
-  activeProject,
-  activeMap,
-  projectMaps,
-  pendingMaps,
-  activeSections,
-  activeSectionEdges,
-  activeSectionNodes,
-]);
-
-useEffect(() =>
-{
-  const unregisterContinueProgressTime =
-    moduleEventBus.registerRequestHandler(
-      'Regions.ContinueProgressTime',
-      async (message) =>
-      {
-        const payload =
-          message.payload as
-            | {
-                pieceId?: string;
-                startTime?: number;
-                targetTime?: number;
-              }
-            | undefined;
-
-        if (
-          !activeProject ||
-          !payload?.pieceId ||
-          typeof payload.startTime !== 'number' ||
-          typeof payload.targetTime !== 'number' ||
-          payload.targetTime <= payload.startTime
-        )
-        {
-          return {
-            accepted: false,
-          };
-        }
-
-        const piece =
-          activeProject.pieces.find(
-            (candidate) =>
-              candidate.id ===
-              payload.pieceId
-          );
-
-        if (!piece)
-        {
-          return {
-            accepted: false,
-          };
-        }
-
-        const spatialPiece =
-          resolveSpatialPiece(
-            piece.id,
-            activeProject.pieces
-          );
-
-        if (
-          !spatialPiece ||
-          spatialPiece.id !== piece.id
-        )
-        {
-          return {
-            accepted: false,
-          };
-        }
-
-        const map =
-          activeMap?.id === piece.mapId
-            ? activeMap
-            : pendingMaps.find(
-                (candidate) =>
-                  candidate.id === piece.mapId
-              ) ??
-              projectMaps.find(
-                (candidate) =>
-                  candidate.id === piece.mapId
-              ) ??
-              await mapRepository.loadMap(
-                piece.mapId
-              );
-
-        if (!map)
-        {
-          return {
-            accepted: false,
-          };
-        }
-
-        const location =
-          await resolvePieceLocation(
-            map,
-            activeProject,
-            piece
-          );
-
-        const duration =
-          payload.targetTime -
-          payload.startTime;
-
-        moduleEventBus.emit(
-          'Regions.TimeProspected',
-          {
-            pieceId: piece.id,
-            mapId: piece.mapId,
-            areaId: location.area?.id,
-
-            startTime:
-              payload.startTime,
-
-            endTime:
-              payload.targetTime,
-
-            duration,
-
-            piece,
-            area: location.area,
-          }
-        );
-
-        await moduleEventBus.request(
-          'occurrences.submit',
-          {
-            pieceId: piece.id,
-            occurrences: [
-              {
-                id: crypto.randomUUID(),
-                sourceModuleId: 'regions',
-                simulationTime:
-                  payload.targetTime,
-                pieceId: piece.id,
-                entityId: null,
-                sectorId: null,
-                reaction: 'none',
-              },
-            ],
-          }
-        );
-
-        return {
-          accepted: true,
-          pieceId: piece.id,
-          startTime:
-            payload.startTime,
-          endTime:
-            payload.targetTime,
-        };
-      }
-    );
-
-  return () =>
-  {
-    unregisterContinueProgressTime();
-  };
-}, [
-  activeProject,
-  activeMap,
-  projectMaps,
-  pendingMaps,
-  activeSections,
-  activeSectionEdges,
-  activeSectionNodes,
-]);
 
 useEffect(() =>
 {
@@ -3295,37 +3005,38 @@ async function commitPieceParentExit(
 }
 
 async function resolvePieceLocation(
-  map: RegionMap, project: Project, piece: Piece, resolvedArea?: { area: Section | undefined }
-): Promise<{ context: LocationContext; area: Section | undefined; resourceMap: RegionMap }> {
-  let area = resolvedArea?.area;
-  if (!resolvedArea) {
-    const preferredAreaId = pieceAreaContexts.current.get(`${project.id}:${piece.id}:${map.id}`);
-    if (map.id === activeMap?.id && loadedSectionsMapId.current === map.id) {
-      area = resolveArea(map.id, piece.position, activeSections, activeSectionEdges,
-        activeSectionNodes, preferredAreaId);
-    } else {
-      const sections = await sectionRepository.loadSections(map.sectionIds ?? []);
-      const edges = await sectionEdgeRepository.loadEdges(sections.flatMap((section) => section.edgeIds));
-      const nodes = await sectionNodeRepository.loadNodes(
-        [...new Set(edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId]))]);
-      area = resolveArea(map.id, piece.position, sections, edges, nodes, preferredAreaId);
-    }
+  map: RegionMap,
+  project: Project,
+  piece: Piece,
+  resolvedArea?: {
+    area: Section | undefined;
   }
-  let resourceMap = map;
-  if (area?.targetMapId) {
-    const linkedMap = pendingMaps.find((item) => item.id === area.targetMapId)
-      ?? projectMaps.find((item) => item.id === area.targetMapId)
-      ?? await mapRepository.loadMap(area.targetMapId);
-    if (!linkedMap) throw new Error('The Area’s linked Location settings could not be loaded.');
-    resourceMap = linkedMap;
-  }
-  const typeId = area && !area.targetMapId ? area.featureTypeId : resourceMap.featureTypeId;
-  return { area, resourceMap, context: {
-    contextKind: area ? 'area' : 'map',
-    locationId: area?.id ?? map.id,
-    locationName: area?.name ?? map.name,
-    locationType: project.featureTypes.find((type) => type.id === typeId)?.name ?? '',
-  } };
+)
+{
+  return resolvePieceLocationData(
+    map,
+    project,
+    piece,
+    {
+      activeMapId:
+        activeMap?.id ?? null,
+
+      loadedSectionsMapId:
+        loadedSectionsMapId.current,
+
+      activeSections,
+      activeSectionEdges,
+      activeSectionNodes,
+      pendingMaps,
+      projectMaps,
+
+      preferredAreaId:
+        pieceAreaContexts.current.get(
+          `${project.id}:${piece.id}:${map.id}`
+        ),
+    },
+    resolvedArea
+  );
 }
 
 function emitMapImages(map: RegionMap, project: Project, area?: Section) {
