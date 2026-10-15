@@ -68,6 +68,7 @@ import {
   findAreaReturnPath,
   validateAreaSegment,
   validateAreaNodeMove,
+  constrainAreaNodeMove,
 } from '../sections/AreaDrawing';
 import { useProximityDismiss } from '../hooks/useProximityDismiss';
 import type {
@@ -5288,11 +5289,37 @@ if (sectionMode === 'area')
 
 function handleSectionNodePointerMove(
   event: React.PointerEvent<HTMLButtonElement>
-) {
-  if (movingSectionNode?.pointerId !== event.pointerId) return;
-  const point = screenToMap(event.clientX, event.clientY);
-  if (!point) return;
-  setMovingSectionNode({ ...movingSectionNode, position: point });
+)
+{
+  if (movingSectionNode?.pointerId !== event.pointerId)
+  {
+    return;
+  }
+
+  const point = screenToMap(
+    event.clientX,
+    event.clientY
+  );
+
+  if (!point)
+  {
+    return;
+  }
+
+  const constrained = constrainAreaNodeMove(
+    movingSectionNode.nodeId,
+    movingSectionNode.position,
+    point,
+    sectionEdges,
+    sectionNodes,
+    scale,
+    sections
+  );
+
+  setMovingSectionNode({
+    ...movingSectionNode,
+    position: constrained,
+  });
 }
 
 function handleSectionNodePointerUp(

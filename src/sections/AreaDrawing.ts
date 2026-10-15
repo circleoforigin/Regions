@@ -320,3 +320,63 @@ return Math.hypot(
 
   return undefined;
 }
+
+export function constrainAreaNodeMove(
+  nodeId: string,
+  from: SectionNode['position'],
+  to: SectionNode['position'],
+  edges: SectionEdge[],
+  nodes: SectionNode[],
+  scale: number,
+  sections: Section[]
+): SectionNode['position']
+{
+  const distance = Math.hypot(
+    to.x - from.x,
+    to.y - from.y
+  );
+
+  if (distance === 0)
+  {
+    return from;
+  }
+
+  // Sample the movement in small screen-space increments.
+  // This prevents fast pointer movement from jumping across
+  // an invalid position.
+
+  const steps = Math.max(
+    1,
+    Math.ceil(distance * scale / 2)
+  );
+
+  let lastValid = from;
+
+  for (let step = 1; step <= steps; step++)
+  {
+    const fraction = step / steps;
+
+    const candidate = {
+      x: from.x + (to.x - from.x) * fraction,
+      y: from.y + (to.y - from.y) * fraction,
+    };
+
+    const error = validateAreaNodeMove(
+      nodeId,
+      candidate,
+      edges,
+      nodes,
+      scale,
+      sections
+    );
+
+    if (error)
+    {
+      break;
+    }
+
+    lastValid = candidate;
+  }
+
+  return lastValid;
+}
