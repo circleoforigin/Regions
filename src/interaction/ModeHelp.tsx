@@ -64,12 +64,52 @@ const HELP: Partial<
 interface ModeHelpProps {
   mode: InteractionMode;
   routeActive?: boolean;
+  areaActive?: boolean;
 }
 
 export default function ModeHelp({
   mode,
   routeActive = false,
+  areaActive = false,
 }: ModeHelpProps) {
+      const areaRows: HelpRow[] = [
+    {
+      input: 'Shift + Left Click',
+      action: 'Start Area',
+    },
+    {
+      input: 'Shift + Left Click Node',
+      action: 'Start Attached Area',
+    },
+    {
+      input: 'Left Click',
+      action: 'Add Boundary Node',
+    },
+    {
+      input: 'Left Click Origin',
+      action: 'Complete Area',
+    },
+    {
+      input: 'Left Click Edge',
+      action: 'Insert Boundary Node',
+    },
+    {
+      input: 'Drag Node',
+      action: 'Adjust Boundary',
+    },
+    {
+      input: 'Right Click Node',
+      action: 'Delete Node',
+    },
+    {
+      input: 'Right Click Draft Origin',
+      action: 'Cancel Area',
+    },
+    {
+      input: 'Right Click Area Icon',
+      action: 'Area Options',
+    },
+  ];
   const routeRows: HelpRow[] = [
     {
       input: 'Left Click',
@@ -98,9 +138,11 @@ export default function ModeHelp({
   ];
 
   const rows =
-    routeActive
-      ? routeRows
-      : HELP[mode];
+    areaActive
+      ? areaRows
+      : routeActive
+        ? routeRows
+        : HELP[mode];
 
   if (!rows || rows.length === 0) {
     return null;
@@ -109,9 +151,11 @@ export default function ModeHelp({
   return (
     <div className="mode-help">
       <div className="mode-help-title">
-        {routeActive
-            ? 'ROUTE'
-            : mode.toUpperCase()}
+{areaActive
+  ? 'AREA'
+  : routeActive
+    ? 'ROUTE'
+    : mode.toUpperCase()}
       </div>
 
       {rows.map((row) => (

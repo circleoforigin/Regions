@@ -10,6 +10,7 @@ import type {
 
 interface MapKeyProps {
   mapName: string;
+  hasDistanceScale: boolean;
   mapTypeId?: string;
   featureTypes: FeatureTypeDefinition[];
   side: 'left' | 'right';
@@ -28,6 +29,7 @@ interface MapKeyProps {
 
 function MapKey({
   mapName,
+  hasDistanceScale,
   mapTypeId,
   featureTypes,
   side,
@@ -338,6 +340,15 @@ function MapKey({
       </div>
     )}
   </div>
+
+  {!hasDistanceScale && (
+    <div
+      className="map-key-scale-warning"
+      role="status"
+    >
+      MAP SCALE NOT SET
+    </div>
+  )}
 </>
     </aside>
   );

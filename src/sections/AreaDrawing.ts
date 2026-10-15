@@ -63,3 +63,82 @@ export function findAreaReturnPath(
     }
   }
 }
+
+export function validateAreaNodeMove(
+  nodeId: string,
+  position: SectionNode['position'],
+  edges: SectionEdge[],
+  nodes: SectionNode[],
+  scale: number
+): string | undefined
+{
+  const movedNodes = nodes.map((node) =>
+    node.id === nodeId
+      ? { ...node, position }
+      : node
+  );
+
+  const movingNode = movedNodes.find((node) =>
+    node.id === nodeId
+  );
+
+  if (!movingNode)
+  {
+    return 'The moving Area node could not be found.';
+  }
+
+  const NODE_COLLISION_RADIUS = 10;
+
+  const overlappingNode = movedNodes.find((node) =>
+  {
+    if (node.id === nodeId)
+    {
+      return false;
+    }
+
+return Math.hypot(
+  node.position.x - position.x,
+  node.position.y - position.y
+) * scale < NODE_COLLISION_RADIUS;
+  });
+
+  if (overlappingNode)
+  {
+    return 'Two Area nodes cannot occupy the same position.';
+  }
+
+  const connectedEdges = edges.filter((edge) =>
+    edge.startNodeId === nodeId ||
+    edge.endNodeId === nodeId
+  );
+
+  for (const edge of connectedEdges)
+  {
+    const start = movedNodes.find((node) =>
+      node.id === edge.startNodeId
+    );
+
+    const end = movedNodes.find((node) =>
+      node.id === edge.endNodeId
+    );
+
+    if (!start || !end)
+    {
+      return 'An Area edge references a missing node.';
+    }
+
+    const error = validateAreaSegment(
+      start,
+      end,
+      edges,
+      movedNodes
+    );
+
+    if (error)
+    {
+      return error;
+    }
+  }
+
+  return undefined;
+}

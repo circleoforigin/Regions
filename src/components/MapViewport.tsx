@@ -64,7 +64,11 @@ import {
   pointToSegmentDistance,
   findFirstPolygonBoundaryIntersection,
 } from '../sections/SectionGeometry';
-import { findAreaReturnPath, validateAreaSegment } from '../sections/AreaDrawing';
+import {
+  findAreaReturnPath,
+  validateAreaSegment,
+  validateAreaNodeMove,
+} from '../sections/AreaDrawing';
 import { useProximityDismiss } from '../hooks/useProximityDismiss';
 import type {
   Map as PathMap,
@@ -662,6 +666,14 @@ useEffect(() => {
   setPathDragPreview(null);
 }, [interactionMode]);
 
+useEffect(() =>
+{
+  if (sectionMode !== 'area')
+  {
+    setHoveredAreaEdgeId(null);
+  }
+}, [sectionMode]);
+
 useEffect(() => {
   if (interactionMode === 'explore') {
     return;
@@ -906,6 +918,8 @@ const displayedRoutes =
   } | null>(null);
   const [sectionPointer, setSectionPointer] =
     useState<SectionPoint | null>(null);
+  const [hoveredAreaEdgeId, setHoveredAreaEdgeId] =
+    useState<string | null>(null);
   const [sectionContextMenu, setSectionContextMenu] = useState<{
     kind: 'node' | 'edge' | 'area';
     id: string;
@@ -3341,6 +3355,12 @@ dispatch({
 
   const rect = viewport.getBoundingClientRect();
 
+  if (sectionMode === 'area')
+  {
+    setSectionContextMenu(null);
+    return;
+  }
+
   const edge = editableEdges.find((candidate) => {
     const start = displayedSectionNodes.find((node) => {
       return node.id === candidate.startNodeId;
@@ -3682,25 +3702,123 @@ dispatch({
       dispatch({ type: 'featureMove.cancel' });
       return;
     }
-    if (event.button === 0 && movingSectionNode) {
-      const point = screenToMap(event.clientX, event.clientY);
-      if (!point || !isPointInsideMap(point)) return;
-      onUpdateSectionData?.(
-        sections,
-        sectionNodes.map((node) => node.id === movingSectionNode.nodeId
-          ? { ...node, position: point }
-          : node),
-        sectionEdges
-      );
-      setMovingSectionNode(null);
-      return;
-    }
+if (event.button === 0 && movingSectionNode)
+{
+  const point = screenToMap(
+    event.clientX,
+    event.clientY
+  );
+
+  if (!point || !isPointInsideMap(point))
+  {
+    setMovingSectionNode(null);
+    return;
+  }
+
+  const error = validateAreaNodeMove(
+    movingSectionNode.nodeId,
+    point,
+    sectionEdges,
+    sectionNodes,
+    scale
+  );
+
+  if (error)
+  {
+    onSectionError?.(error);
+    setMovingSectionNode(null);
+    return;
+  }
+
+  onUpdateSectionData?.(
+    sections,
+    sectionNodes.map((node) =>
+      node.id === movingSectionNode.nodeId
+        ? { ...node, position: point }
+        : node
+    ),
+    sectionEdges
+  );
+
+  setMovingSectionNode(null);
+  return;
+}
     const target = event.target;
     const mapBackground = target === event.currentTarget ||
       target instanceof HTMLImageElement;
-    if (event.button === 0 && sectionMode && mapBackground) {
-      const point = screenToMap(event.clientX, event.clientY);
-      if (!point || !isPointInsideMap(point)) return;
+    if (event.button === 0 && sectionMode && mapBackground)
+    {
+      const point =
+        screenToMap(event.clientX, event.clientY);
+
+      if (!point || !isPointInsideMap(point))
+      {
+        return;
+      }
+
+      if (sectionMode === 'area' && !sectionDraft)
+      {
+        const closest = editableEdges
+          .map((edge) =>
+          {
+            const owner =
+              getEditableSectionOwner(edge.id);
+
+            if (!owner || owner.kind !== 'area')
+            {
+              return null;
+            }
+
+            const start =
+              displayedSectionNodes.find(
+                (node) => node.id === edge.startNodeId
+              );
+
+            const end =
+              displayedSectionNodes.find(
+                (node) => node.id === edge.endNodeId
+              );
+
+            if (!start || !end)
+            {
+              return null;
+            }
+
+            return {
+              edge,
+              distance: pointToSegmentDistance(
+                point,
+                start.position,
+                end.position
+              ),
+              position: closestPointOnSegment(
+                point,
+                start.position,
+                end.position
+              ),
+            };
+          })
+          .filter(
+            (match): match is NonNullable<typeof match> =>
+              match !== null
+          )
+          .sort(
+            (a, b) => a.distance - b.distance
+          )[0];
+
+        if (closest && closest.distance <= 8 / scale)
+        {
+          event.preventDefault();
+
+          addNodeToEdge(
+            closest.edge.id,
+            closest.position
+          );
+
+          return;
+        }
+      }
+
       const boundary = sections.find((section) => {
         return section.kind === 'boundary';
       });
@@ -3738,8 +3856,17 @@ dispatch({
         }
         return;
       }
-      appendDraftNode(point);
-      return;
+if (
+  sectionMode === 'area' &&
+  !sectionDraft &&
+  !event.shiftKey
+)
+{
+  return;
+}
+
+appendDraftNode(point);
+return;
     }
 
     if (event.button !== 0 && event.button !== 1) return;
@@ -3855,11 +3982,78 @@ if (distanceInteractionActive)
 }
     if (sectionMode || movingSectionNode)
     {
-      const point = screenToMap(event.clientX, event.clientY);
+      const point =
+        screenToMap(event.clientX, event.clientY);
+
       setSectionPointer(point);
-      if (point && movingSectionNode) 
+
+      if (point && movingSectionNode)
       {
-        setMovingSectionNode({ ...movingSectionNode, position: point });
+        setMovingSectionNode({
+          ...movingSectionNode,
+          position: point,
+        });
+      }
+
+      if (
+        sectionMode === 'area' &&
+        !sectionDraft &&
+        !movingSectionNode &&
+        point
+      )
+      {
+        const closest = editableEdges
+          .map((edge) =>
+          {
+            const owner =
+              getEditableSectionOwner(edge.id);
+
+            if (!owner || owner.kind !== 'area')
+            {
+              return null;
+            }
+
+            const start =
+              displayedSectionNodes.find(
+                (node) => node.id === edge.startNodeId
+              );
+
+            const end =
+              displayedSectionNodes.find(
+                (node) => node.id === edge.endNodeId
+              );
+
+            if (!start || !end)
+            {
+              return null;
+            }
+
+            return {
+              id: edge.id,
+              distance: pointToSegmentDistance(
+                point,
+                start.position,
+                end.position
+              ),
+            };
+          })
+          .filter(
+            (match): match is NonNullable<typeof match> =>
+              match !== null
+          )
+          .sort(
+            (a, b) => a.distance - b.distance
+          )[0];
+
+        setHoveredAreaEdgeId(
+          closest && closest.distance <= 8 / scale
+            ? closest.id
+            : null
+        );
+      }
+      else
+      {
+        setHoveredAreaEdgeId(null);
       }
     }
     if (pendingArrivalPlacement)
@@ -5041,20 +5235,48 @@ function handleSectionNodePointerDown(
 
     return;
   }
-  if (event.shiftKey) {
-    event.preventDefault();
-    deleteSectionNode(node.id);
-    return;
-  }
-  if (!event.ctrlKey) {
-    if (sectionMode === 'area') {
-      event.preventDefault();
-      appendDraftNode(node.position, node);
-    }
-    return;
-  }
+
+if (sectionMode === 'area')
+{
   event.preventDefault();
-  event.currentTarget.setPointerCapture(event.pointerId);
+
+  if (sectionDraft)
+  {
+    appendDraftNode(node.position, node);
+    return;
+  }
+
+  if (event.shiftKey)
+  {
+    appendDraftNode(node.position, node);
+    return;
+  }
+
+  event.currentTarget.setPointerCapture(
+    event.pointerId
+  );
+
+  setMovingSectionNode({
+    nodeId: node.id,
+    original: node.position,
+    position: node.position,
+    pointerId: event.pointerId,
+  });
+
+  return;
+}
+
+  if (!event.ctrlKey)
+  {
+    return;
+  }
+
+  event.preventDefault();
+
+  event.currentTarget.setPointerCapture(
+    event.pointerId
+  );
+
   setMovingSectionNode({
     nodeId: node.id,
     original: node.position,
@@ -5077,6 +5299,22 @@ function handleSectionNodePointerUp(
 ) {
   if (movingSectionNode?.pointerId !== event.pointerId) return;
   releasePointerCaptureSafely(event.currentTarget, event.pointerId);
+  
+  const error = validateAreaNodeMove(
+    movingSectionNode.nodeId,
+    movingSectionNode.position,
+    sectionEdges,
+    sectionNodes,
+    scale
+  );
+
+  if (error)
+  {
+    onSectionError?.(error);
+    setMovingSectionNode(null);
+    return;
+  }
+
   onUpdateSectionData?.(
     sections,
     sectionNodes.map((node) => node.id === movingSectionNode.nodeId
@@ -5156,10 +5394,11 @@ function saveSectionProperties() {
       onContextMenu={handleContextMenu}
     >
       
-      <ModeHelp
-        mode={interactionMode}
-        routeActive={routePieceId !== null}
-      />
+<ModeHelp
+  mode={interactionMode}
+  routeActive={routePieceId !== null}
+  areaActive={sectionMode === 'area'}
+/>
       
       <img
   className="map-viewport-image"
@@ -5583,6 +5822,69 @@ onDistanceTerminalClick={(
             stroke={section.color}
             clipPath={`url(#${clipId})`}
           />
+                    {sectionMode === 'area' &&
+            !sectionDraft &&
+            section.edgeIds.includes(
+              hoveredAreaEdgeId ?? ''
+            ) &&
+            (() =>
+            {
+              const edge = sectionEdges.find(
+                (candidate) =>
+                  candidate.id === hoveredAreaEdgeId
+              );
+
+              if (!edge)
+              {
+                return null;
+              }
+
+              const start = displayedSectionNodes.find(
+                (node) => node.id === edge.startNodeId
+              );
+
+              const end = displayedSectionNodes.find(
+                (node) => node.id === edge.endNodeId
+              );
+
+              if (!start || !end)
+              {
+                return null;
+              }
+
+              const a = mapToScreen(
+                start.position.x,
+                start.position.y
+              );
+
+              const b = mapToScreen(
+                end.position.x,
+                end.position.y
+              );
+
+              return (
+<g pointerEvents="none">
+  <line
+    x1={a.x}
+    y1={a.y}
+    x2={b.x}
+    y2={b.y}
+    stroke="#000000"
+    strokeWidth={12}
+    strokeLinecap="round"
+  />
+  <line
+    x1={a.x}
+    y1={a.y}
+    x2={b.x}
+    y2={b.y}
+    stroke="#39ff14"
+    strokeWidth={8}
+    strokeLinecap="round"
+  />
+</g>
+              );
+            })()}
         </g>
       );
     }
@@ -5694,20 +5996,35 @@ onDistanceTerminalClick={(
       onPointerUp={handleSectionNodePointerUp}
       onPointerCancel={cancelSectionNodeMove}
       onLostPointerCapture={cancelSectionNodeMove}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const viewport = viewportRef.current;
-        if (!viewport) return;
-        const rect = viewport.getBoundingClientRect();
-        setSectionContextMenu({
-          kind: 'node',
-          id: node.id,
-          x: event.clientX - rect.left,
-          y: event.clientY - rect.top,
-          point: node.position,
-        });
-      }}
+       onContextMenu={(event) =>
+       {
+         event.preventDefault();
+         event.stopPropagation();
+
+         if (sectionMode === 'area')
+         {
+           deleteSectionNode(node.id);
+           return;
+         }
+
+         const viewport = viewportRef.current;
+
+         if (!viewport)
+         {
+           return;
+         }
+
+         const rect =
+           viewport.getBoundingClientRect();
+
+         setSectionContextMenu({
+           kind: 'node',
+           id: node.id,
+           x: event.clientX - rect.left,
+           y: event.clientY - rect.top,
+           point: node.position,
+         });
+       }}
     />
   );
 })}
@@ -5725,22 +6042,42 @@ onDistanceTerminalClick={(
         closable ? 'closable' : '',
       ].filter(Boolean).join(' ')}
       style={{ left: position.x, top: position.y }}
-      onPointerDown={(event) => {
+      onPointerDown={(event) =>
+      {
         event.stopPropagation();
-        if (!event.shiftKey) return;
+      }}
+      onContextMenu={(event) =>
+      {
         event.preventDefault();
-        if (index === 0) {
+        event.stopPropagation();
+
+        if (index === 0)
+        {
           setSectionDraft(null);
+          setSectionPointer(null);
           return;
         }
-        const nodes = sectionDraft.nodes.filter((item) => item.id !== node.id);
-        const edges = nodes.slice(1).map((item, itemIndex) => ({
-          id: crypto.randomUUID(),
-          mapId: item.mapId,
-          startNodeId: nodes[itemIndex].id,
-          endNodeId: item.id,
-        }));
-        setSectionDraft({ ...sectionDraft, nodes, edges });
+
+        const nodes =
+          sectionDraft.nodes.filter(
+            (item) => item.id !== node.id
+          );
+
+        const edges =
+          nodes.slice(1).map(
+            (item, itemIndex) => ({
+              id: crypto.randomUUID(),
+              mapId: item.mapId,
+              startNodeId: nodes[itemIndex].id,
+              endNodeId: item.id,
+            })
+          );
+
+        setSectionDraft({
+          ...sectionDraft,
+          nodes,
+          edges,
+        });
       }}
       onClick={() => {
         if (closable) completeSectionDraft();
@@ -7263,6 +7600,7 @@ onDescriptionChange={(
 
     <MapKey
       mapName={mapName}
+      hasDistanceScale={imageRegistration?.distanceScale !== undefined}
       mapTypeId={mapTypeId}
       parentName={parentMapName}
       parentMapId={parentMapId}

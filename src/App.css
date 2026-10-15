@@ -315,7 +315,7 @@
   width: 100%;
   height: 100%;
 
-  cursor: pointer;
+  cursor: default;
   overflow: hidden;
   user-select: none;
   touch-action: none;
@@ -1205,7 +1205,7 @@
 }
 
 .map-key-type {
-  margin-top: 5px;
+  margin-top: 0px;
 
   color: #aaaaaa;
 
@@ -1342,7 +1342,7 @@
 .map-key-parent-row {
   width: 100%;
   min-height: 18px;
-  margin-top: 3px;
+  margin-top: 0px;
   text-align: center;
 }
 
@@ -1406,8 +1406,46 @@ button.map-key-parent:hover {
 
 .map-key-parent-separator {
   height: 1px;
-  margin: 4px 0;
+  margin: 2px 0;
   background: #505050;
+}
+
+.map-key-scale-warning {
+  margin-top: 2px;
+  padding: 0px 12px;
+
+  color: #ff3030;
+  background: rgba(255, 0, 0, 0.12);
+
+  border: 1px solid #ff3030;
+  border-radius: 4px;
+
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-align: center;
+
+  animation: map-key-scale-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes map-key-scale-pulse {
+  0%, 100% {
+    color: #ff3030;
+    background: rgba(255, 0, 0, 0.12);
+    box-shadow: 0 0 2px rgba(255, 0, 0, 0.3);
+  }
+
+  50% {
+    color: #ffffff;
+    background: rgba(255, 0, 0, 0.85);
+    box-shadow: 0 0 12px rgba(255, 0, 0, 0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-key-scale-warning {
+    animation: none;
+  }
 }
 
 .delete-map-dialog {
@@ -1534,8 +1572,18 @@ button.map-key-parent:hover {
 
 .section-geometry-layer line {
   stroke: #dddddd;
-  stroke-width: 2;
+  stroke-width: 3;
   vector-effect: non-scaling-stroke;
+}
+
+.section-geometry-layer line[stroke="#000000"] {
+  stroke: #000000;
+  stroke-width: 4px;
+}
+
+.section-geometry-layer line[stroke="#39ff14"] {
+  stroke: #ffffff;
+  stroke-width: 2px;
 }
 
 .section-geometry-layer .section-preview-edge {
@@ -1575,7 +1623,7 @@ button.map-key-parent:hover {
 }
 
 .map-viewport.section-drawing {
-  cursor: crosshair;
+  cursor: default;
 }
 
 .section-context-menu {

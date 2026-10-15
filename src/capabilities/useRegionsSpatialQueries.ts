@@ -23,6 +23,54 @@ export function useRegionsSpatialQueries(
 
   useEffect(() =>
   {
+        const unregisterGetPieceAppearance =
+      moduleEventBus.registerRequestHandler(
+        'Regions.GetPieceAppearance',
+        (request) =>
+        {
+          const payload =
+            request.payload as
+              | {
+                  pieceId?: string;
+                }
+              | undefined;
+
+          if (!payload?.pieceId)
+          {
+            throw new Error(
+              'Regions.GetPieceAppearance requires pieceId.'
+            );
+          }
+
+          if (!activeProject)
+          {
+            throw new Error(
+              'No Regions Project is active.'
+            );
+          }
+
+          const piece =
+            activeProject.pieces.find(
+              (candidate) =>
+                candidate.id === payload.pieceId
+            );
+
+          if (!piece)
+          {
+            throw new Error(
+              `Piece "${payload.pieceId}" was not found.`
+            );
+          }
+
+          return {
+            pieceId: piece.id,
+            fillColor: piece.appearance.fillColor,
+            borderColor: piece.appearance.borderColor,
+          };
+        }
+      );
+
+
     const unregisterGetPiecePosition =
       moduleEventBus.registerRequestHandler(
         'Regions.GetPiecePosition',
@@ -204,6 +252,7 @@ export function useRegionsSpatialQueries(
     {
       unregisterGetMapScale();
       unregisterGetFeaturePosition();
+      unregisterGetPieceAppearance();
       unregisterGetPiecePosition();
     };
   }, [
