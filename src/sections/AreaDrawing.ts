@@ -1,4 +1,8 @@
-import type { SectionEdge, SectionNode } from '../models/Section';
+import type {
+  Section,
+  SectionEdge,
+  SectionNode,
+} from '../models/Section';
 import { pointToSegmentDistance } from './SectionGeometry';
 
 const EPS = 0.000001;
@@ -64,12 +68,152 @@ export function findAreaReturnPath(
   }
 }
 
+export function validateAreaPolygon(
+  section: Section,
+  edges: SectionEdge[],
+  nodes: SectionNode[]
+): string | undefined
+{
+  if (section.kind !== 'area')
+  {
+    return undefined;
+  }
+
+  const edgeMap = new Map(
+    edges.map((edge) => [edge.id, edge])
+  );
+
+  const nodeMap = new Map(
+    nodes.map((node) => [node.id, node])
+  );
+
+  const sectionEdges = section.edgeIds.map((id) =>
+    edgeMap.get(id)
+  );
+
+  if (
+    sectionEdges.length < 3 ||
+    sectionEdges.some((edge) => !edge)
+  )
+  {
+    return 'An Area requires at least three valid edges.';
+  }
+
+  const adjacency = new Map<string, string[]>();
+
+  for (const edge of sectionEdges)
+  {
+    if (!edge)
+    {
+      continue;
+    }
+
+    for (const [from, to] of [
+      [edge.startNodeId, edge.endNodeId],
+      [edge.endNodeId, edge.startNodeId],
+    ])
+    {
+      const neighbors = adjacency.get(from) ?? [];
+      neighbors.push(to);
+      adjacency.set(from, neighbors);
+    }
+  }
+
+  if (
+    adjacency.size < 3 ||
+    [...adjacency.values()].some(
+      (neighbors) => neighbors.length !== 2
+    )
+  )
+  {
+    return 'An Area must form a closed polygon.';
+  }
+
+  const origin = adjacency.keys().next().value;
+
+  if (!origin)
+  {
+    return 'An Area has no valid origin.';
+  }
+
+  const orderedIds: string[] = [];
+  let previous: string | undefined;
+  let current: string = origin;
+
+  do
+  {
+    if (orderedIds.includes(current))
+    {
+      return 'An Area boundary contains an invalid loop.';
+    }
+
+    orderedIds.push(current);
+
+    const neighbors = adjacency.get(current);
+
+    if (!neighbors)
+    {
+      return 'An Area boundary is disconnected.';
+    }
+
+    const next: string | undefined =
+      neighbors.find((id) => id !== previous);
+
+    if (!next)
+    {
+      return 'An Area boundary cannot be completed.';
+    }
+
+    previous = current;
+    current = next;
+  }
+  while (
+    current !== origin &&
+    orderedIds.length <= adjacency.size
+  );
+
+  if (
+    current !== origin ||
+    orderedIds.length !== adjacency.size
+  )
+  {
+    return 'An Area boundary must form one closed loop.';
+  }
+
+  const polygon = orderedIds.map((id) =>
+    nodeMap.get(id)?.position
+  );
+
+  if (polygon.some((point) => !point))
+  {
+    return 'An Area contains a missing node.';
+  }
+
+  let twiceArea = 0;
+
+  for (let index = 0; index < polygon.length; index++)
+  {
+    const a = polygon[index]!;
+    const b = polygon[(index + 1) % polygon.length]!;
+
+    twiceArea += a.x * b.y - b.x * a.y;
+  }
+
+  if (Math.abs(twiceArea) <= 0.000001)
+  {
+    return 'An Area cannot collapse to zero surface area.';
+  }
+
+  return undefined;
+}
+
 export function validateAreaNodeMove(
   nodeId: string,
   position: SectionNode['position'],
   edges: SectionEdge[],
   nodes: SectionNode[],
-  scale: number
+  scale: number,
+  sections: Section[]
 ): string | undefined
 {
   const movedNodes = nodes.map((node) =>
@@ -130,6 +274,40 @@ return Math.hypot(
     const error = validateAreaSegment(
       start,
       end,
+      edges,
+      movedNodes
+    );
+
+    if (error)
+    {
+      return error;
+    }
+  }
+
+  const affectedAreas = sections.filter((section) =>
+  {
+    if (section.kind !== 'area')
+    {
+      return false;
+    }
+
+    return section.edgeIds.some((edgeId) =>
+    {
+      const edge = edges.find((item) =>
+        item.id === edgeId
+      );
+
+      return (
+        edge?.startNodeId === nodeId ||
+        edge?.endNodeId === nodeId
+      );
+    });
+  });
+
+  for (const area of affectedAreas)
+  {
+    const error = validateAreaPolygon(
+      area,
       edges,
       movedNodes
     );

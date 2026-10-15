@@ -3720,7 +3720,8 @@ if (event.button === 0 && movingSectionNode)
     point,
     sectionEdges,
     sectionNodes,
-    scale
+    scale,
+    sections
   );
 
   if (error)
@@ -5305,7 +5306,8 @@ function handleSectionNodePointerUp(
     movingSectionNode.position,
     sectionEdges,
     sectionNodes,
-    scale
+    scale,
+    sections
   );
 
   if (error)
