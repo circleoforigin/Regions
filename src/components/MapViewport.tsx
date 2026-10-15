@@ -60,6 +60,8 @@ import {
   getAreaLabelPosition,
   getSectionPolygon,
   getSectionNodeIds,
+  getTerritoryOwner,
+  getAreaContainmentHierarchy,
   closestPointOnSegment,
   pointToSegmentDistance,
   findFirstPolygonBoundaryIntersection,
@@ -991,6 +993,7 @@ const displayedRoutes =
   }
 
   const visibleSections = sections.filter(isSectionVisible);
+  
   const editableSections = sections.filter((section) => {
     return !section.locked && sectionMode !== null && section.kind === sectionMode;
   });
@@ -1014,6 +1017,11 @@ const displayedRoutes =
     if (movingSectionNode?.nodeId !== node.id) return node;
     return { ...node, position: movingSectionNode.position };
   });
+  const areaContainment = getAreaContainmentHierarchy(
+    sections,
+    sectionEdges,
+    displayedSectionNodes
+  );
 
   function getAreaControlPosition(
   section: Section
@@ -3555,6 +3563,65 @@ dispatch({
   return boundaryCrossing;
 }
 
+  function handleExploreAreaClick(
+    event: React.MouseEvent<HTMLDivElement>
+  ): void
+  {
+    if (
+      interactionMode !== 'explore' ||
+      state.editingMode !== null ||
+      pendingArrivalPlacement ||
+      sectionDraft ||
+      routePieceId !== null
+    )
+    {
+      return;
+    }
+
+    // Only handle clicks on the map background.
+    // Other map objects retain their own interactions.
+    if (
+      event.target !== event.currentTarget &&
+      !(event.target instanceof HTMLImageElement)
+    )
+    {
+      return;
+    }
+
+    const point = screenToMap(
+      event.clientX,
+      event.clientY
+    );
+
+    if (
+      !point ||
+      !isPointInsideMap(point)
+    )
+    {
+      return;
+    }
+
+    const area = getTerritoryOwner(
+      point,
+      visibleSections,
+      sectionEdges,
+      displayedSectionNodes
+    );
+
+    if (!area)
+    {
+      return;
+    }
+
+    setSelectedPathSegment(null);
+    setSelectedPieceId(null);
+
+    dispatch({
+      type: 'feature.select',
+      featureId: area.id,
+    });
+  }
+
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>)
   {
     if (
@@ -3705,12 +3772,9 @@ dispatch({
     }
 if (event.button === 0 && movingSectionNode)
 {
-  const point = screenToMap(
-    event.clientX,
-    event.clientY
-  );
+  const point = movingSectionNode.position;
 
-  if (!point || !isPointInsideMap(point))
+  if (!isPointInsideMap(point))
   {
     setMovingSectionNode(null);
     return;
@@ -3991,9 +4055,19 @@ if (distanceInteractionActive)
 
       if (point && movingSectionNode)
       {
+        const constrained = constrainAreaNodeMove(
+          movingSectionNode.nodeId,
+          movingSectionNode.position,
+          point,
+          sectionEdges,
+          sectionNodes,
+          scale,
+          sections
+        );
+
         setMovingSectionNode({
           ...movingSectionNode,
-          position: point,
+          position: constrained,
         });
       }
 
@@ -5396,6 +5470,7 @@ function saveSectionProperties() {
       onWheel={
         handleWheel
       }
+      onClick={handleExploreAreaClick}
       onPointerDown={
         handlePointerDown
       }
@@ -5823,7 +5898,16 @@ onDistanceTerminalClick={(
   />
 )}
 
-<svg className="section-geometry-layer" aria-hidden="true">
+<svg
+  className="section-geometry-layer"
+  aria-hidden="true"
+  style={{
+    pointerEvents:
+      interactionMode === 'explore'
+        ? 'none'
+        : undefined,
+  }}
+>
   {visibleSections.map((section) => {
     const points = getSectionPolygon(section, sectionEdges, displayedSectionNodes)
       .map((point) => mapToScreen(point.x, point.y));
@@ -5837,12 +5921,61 @@ onDistanceTerminalClick={(
               <polygon points={polygonPoints} />
             </clipPath>
           </defs>
-          <polygon
-            className="section-geometry section-area"
-            points={polygonPoints}
-            fill={section.color}
-            stroke="none"
-          />
+          {(() =>
+          {
+            const containment = areaContainment.find(
+              (item) => item.areaId === section.id
+            );
+
+            const childPaths = (
+              containment?.childIds ?? []
+            ).map((childId) =>
+            {
+              const child = sections.find(
+                (item) => item.id === childId
+              );
+
+              if (!child)
+              {
+                return '';
+              }
+
+              const childPoints = getSectionPolygon(
+                child,
+                sectionEdges,
+                displayedSectionNodes
+              ).map((point) =>
+                mapToScreen(point.x, point.y)
+              );
+
+              if (childPoints.length < 3)
+              {
+                return '';
+              }
+
+              return (
+                `M ${childPoints.map(
+                  (point) => `${point.x} ${point.y}`
+                ).join(' L ')} Z`
+              );
+            });
+
+            const outerPath =
+              `M ${points.map(
+                (point) => `${point.x} ${point.y}`
+              ).join(' L ')} Z`;
+
+            return (
+              <path
+                className="section-geometry section-area"
+                d={[outerPath, ...childPaths].join(' ')}
+                fill={section.color}
+                fillOpacity={0.25}
+                fillRule="evenodd"
+                stroke="none"
+              />
+            );
+          })()}
           {/* Keep the inner half of a 4px stroke: a 2px line centered 1px inside.
               Points are in screen coordinates, so the inset stays fixed on zoom. */}
           <polygon

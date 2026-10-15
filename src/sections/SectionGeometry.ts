@@ -278,6 +278,259 @@ export function isPointInPolygon(
   return inside;
 }
 
+/**
+ * Returns the unsigned surface area of a polygon.
+ */
+export function getPolygonArea(
+  polygon: SectionPoint[]
+): number
+{
+  if (polygon.length < 3)
+  {
+    return 0;
+  }
+
+  let twiceArea = 0;
+
+  for (let index = 0; index < polygon.length; index++)
+  {
+    const a = polygon[index];
+    const b = polygon[(index + 1) % polygon.length];
+
+    twiceArea +=
+      a.x * b.y -
+      b.x * a.y;
+  }
+
+  return Math.abs(twiceArea) / 2;
+}
+
+/**
+ * Determines whether one polygon is completely contained
+ * inside another polygon.
+ *
+ * This assumes Area boundaries do not intersect, as enforced
+ * by the Area drawing system.
+ */
+export function isPolygonContained(
+  inner: SectionPoint[],
+  outer: SectionPoint[]
+): boolean
+{
+  if (
+    inner.length < 3 ||
+    outer.length < 3
+  )
+  {
+    return false;
+  }
+
+  const innerArea = getPolygonArea(inner);
+  const outerArea = getPolygonArea(outer);
+
+  if (
+    innerArea <= 0 ||
+    innerArea >= outerArea
+  )
+  {
+    return false;
+  }
+
+  // Every vertex must lie inside or on the outer polygon.
+  if (!inner.every((point) =>
+    isPointInPolygon(point, outer)
+  ))
+  {
+    return false;
+  }
+
+  // Every inner edge must remain within the outer polygon.
+  // Checking only vertices is insufficient for concave shapes.
+
+  for (let index = 0; index < inner.length; index++)
+  {
+    const start = inner[index];
+    const end = inner[(index + 1) % inner.length];
+
+    const intersections = findPolygonBoundaryIntersections(
+      start,
+      end,
+      outer
+    );
+
+    const fractions = [
+      0,
+      ...intersections.map((item) => item.fraction),
+      1,
+    ]
+      .sort((a, b) => a - b)
+      .filter((fraction, index, values) =>
+        index === 0 ||
+        Math.abs(fraction - values[index - 1]) > 0.000001
+      );
+
+    for (let segment = 0; segment < fractions.length - 1; segment++)
+    {
+      const midpointFraction =
+        (fractions[segment] + fractions[segment + 1]) / 2;
+
+      const midpoint: SectionPoint = {
+        x: start.x +
+          (end.x - start.x) * midpointFraction,
+
+        y: start.y +
+          (end.y - start.y) * midpointFraction,
+      };
+
+      if (!isPointInPolygon(midpoint, outer))
+      {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Finds the Area that owns a geographic position.
+ *
+ * When multiple Areas contain the position, the smallest
+ * enclosing polygon takes precedence.
+ *
+ * This allows nested Areas to subtract territory from
+ * their enclosing Areas without modifying their geometry.
+ */
+export function getTerritoryOwner(
+  point: SectionPoint,
+  sections: Section[],
+  edges: SectionEdge[],
+  nodes: SectionNode[]
+): Section | undefined
+{
+  const containingAreas = sections
+    .filter((section) =>
+      section.kind === 'area'
+    )
+    .map((section) =>
+    {
+      const polygon = getSectionPolygon(
+        section,
+        edges,
+        nodes
+      );
+
+      return {
+        section,
+        polygon,
+        area: getPolygonArea(polygon),
+      };
+    })
+    .filter(({ polygon }) =>
+      isPointInPolygon(point, polygon)
+    );
+
+  if (containingAreas.length === 0)
+  {
+    return undefined;
+  }
+
+  containingAreas.sort(
+    (a, b) => a.area - b.area
+  );
+
+  return containingAreas[0].section;
+}
+
+export interface AreaContainment
+{
+  areaId: string;
+  parentId?: string;
+  childIds: string[];
+}
+
+/**
+ * Builds geographic containment relationships.
+ *
+ * Relationships are derived from geometry and are never
+ * stored as permanent dependencies between Areas.
+ */
+export function getAreaContainmentHierarchy(
+  sections: Section[],
+  edges: SectionEdge[],
+  nodes: SectionNode[]
+): AreaContainment[]
+{
+  const areas = sections
+    .filter((section) => section.kind === 'area')
+    .map((section) =>
+    {
+      const polygon = getSectionPolygon(
+        section,
+        edges,
+        nodes
+      );
+
+      return {
+        section,
+        polygon,
+        size: getPolygonArea(polygon),
+      };
+    })
+    .filter((area) =>
+      area.polygon.length >= 3 &&
+      area.size > 0
+    );
+
+  const hierarchy: AreaContainment[] = areas.map(
+    ({ section }) => ({
+      areaId: section.id,
+      parentId: undefined,
+      childIds: [],
+    })
+  );
+
+  for (const inner of areas)
+  {
+    const containers = areas
+      .filter((outer) =>
+        outer.section.id !== inner.section.id &&
+        isPolygonContained(
+          inner.polygon,
+          outer.polygon
+        )
+      )
+      .sort((a, b) => a.size - b.size);
+
+    const parent = containers[0];
+
+    if (!parent)
+    {
+      continue;
+    }
+
+    const entry = hierarchy.find(
+      (item) => item.areaId === inner.section.id
+    );
+
+    if (entry)
+    {
+      entry.parentId = parent.section.id;
+    }
+
+    const parentEntry = hierarchy.find(
+      (item) => item.areaId === parent.section.id
+    );
+
+    if (parentEntry)
+    {
+      parentEntry.childIds.push(inner.section.id);
+    }
+  }
+
+  return hierarchy;
+}
+
 /** Pick an interior point with room around it, including for concave Areas. */
 export function getAreaLabelPosition(polygon: SectionPoint[]): SectionPoint | undefined {
   if (polygon.length < 3) return;

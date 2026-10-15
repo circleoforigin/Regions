@@ -304,7 +304,7 @@ return Math.hypot(
     });
   });
 
-  for (const area of affectedAreas)
+    for (const area of affectedAreas)
   {
     const error = validateAreaPolygon(
       area,
@@ -315,6 +315,50 @@ return Math.hypot(
     if (error)
     {
       return error;
+    }
+
+    const areaEdges = area.edgeIds
+      .map((id) => edges.find((edge) => edge.id === id))
+      .filter((edge): edge is SectionEdge => Boolean(edge));
+
+    const calculateSignedArea = (
+      candidateNodes: SectionNode[]
+    ): number =>
+    {
+      const nodeMap = new Map(
+        candidateNodes.map((node) => [node.id, node])
+      );
+
+      let signedArea = 0;
+
+      for (const edge of areaEdges)
+      {
+        const start = nodeMap.get(edge.startNodeId);
+        const end = nodeMap.get(edge.endNodeId);
+
+        if (!start || !end)
+        {
+          continue;
+        }
+
+        signedArea +=
+          start.position.x * end.position.y -
+          end.position.x * start.position.y;
+      }
+
+      return signedArea / 2;
+    };
+
+    const originalArea = calculateSignedArea(nodes);
+    const proposedArea = calculateSignedArea(movedNodes);
+
+    if (
+      Math.abs(originalArea) > 0.000001 &&
+      Math.abs(proposedArea) > 0.000001 &&
+      Math.sign(originalArea) !== Math.sign(proposedArea)
+    )
+    {
+      return 'Moving this node would invert an Area.';
     }
   }
 
