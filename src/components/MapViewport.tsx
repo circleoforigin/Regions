@@ -1130,7 +1130,7 @@ const selectedFeatureSecondaryActions =
     activeFeaturePopupTab,
     setActiveFeaturePopupTab,
   ] = useState<
-    'description' | 'ruleset' | null
+    'description' | 'ruleset' | 'settings' | null
   >(null);
 
   useEffect(() => {
@@ -1649,12 +1649,17 @@ function isPointInsideMap(point: Point): boolean {
     point.y >= minY && point.y <= maxY;
 }
 
-function isMovePositionValid(point: Point): boolean {
-  if (!isPointInsideMap(point)) return false;
-  const area = sections.find((section) => section.kind === 'area' && section.id === movingFeatureId);
-  if (area && !isPointInPolygon(point, getSectionPolygon(area, sectionEdges, displayedSectionNodes))) return false;
+function isMovePositionValid(point: Point): boolean
+{
+  if (!isPointInsideMap(point))
+  {
+    return false;
+  }
 
-  const proposed = mapToScreen(point.x, point.y);
+  const proposed = mapToScreen(
+    point.x,
+    point.y
+  );
   return visibleFeatures.every((feature) => {
     if (feature.id === movingFeatureId) return true;
     const other = mapToScreen(feature.position.x, feature.position.y);
@@ -3332,16 +3337,22 @@ if (interactionMode === 'distance')
 
   if (pendingArrivalPlacement) return;
   if (state.editingMode === 'move-feature') return;
-  setPieceContextMenu(null);
 
-dispatch({
-  type: 'feature.clearSelection',
-});
-setSelectedPieceId(null);
-setSelectedPathSegment(null);
-dispatch({
-  type: 'contextMenu.close',
-});
+  if (interactionMode !== 'explore')
+  {
+    setPieceContextMenu(null);
+
+    dispatch({
+      type: 'feature.clearSelection',
+    });
+
+    setSelectedPieceId(null);
+    setSelectedPathSegment(null);
+  }
+
+  dispatch({
+    type: 'contextMenu.close',
+  });
 
   const viewport = viewportRef.current;
 
@@ -3362,6 +3373,63 @@ dispatch({
   }
 
   if (!isPointInsideMap(point)) return;
+
+  if (
+    interactionMode === 'explore' &&
+    state.editingMode === 'browse' &&
+    !sectionDraft &&
+    routePieceId === null
+  )
+  {
+    // Explicit map objects retain their own interactions.
+    if (
+      event.target !== event.currentTarget &&
+      !(event.target instanceof HTMLImageElement)
+    )
+    {
+      return;
+    }
+
+    const area = getTerritoryOwner(
+      point,
+      visibleSections,
+      sectionEdges,
+      displayedSectionNodes
+    );
+
+    const action = resolveExploreSelection(
+      'right',
+      area?.id ?? null,
+      state.selectedFeatureId,
+      state.selectedFeatureId !== null ||
+        selectedPathSegment !== null
+    );
+
+    if (action.type === 'dismiss')
+    {
+      dispatch({
+        type: 'feature.clearSelection',
+      });
+
+      setSelectedPathSegment(null);
+      setSelectedPieceId(null);
+    }
+    else if (action.type === 'select')
+    {
+      setSelectedPathSegment(null);
+      setSelectedPieceId(null);
+
+      dispatch({
+        type: 'feature.select',
+        featureId: action.id,
+      });
+    }
+
+    setPieceContextMenu(null);
+    setSectionContextMenu(null);
+
+    return;
+  }
 
   const rect = viewport.getBoundingClientRect();
 
@@ -3623,6 +3691,14 @@ dispatch({
 
     if (action.type === 'dismiss')
     {
+      console.log(
+        '[Explore] Dismissing selection',
+        {
+          selectedId: state.selectedFeatureId,
+          clickedAreaId: area?.id,
+        }
+      );
+
       dispatch({
         type: 'feature.clearSelection',
       });
@@ -3630,6 +3706,15 @@ dispatch({
       setSelectedPathSegment(null);
       return;
     }
+
+    console.log(
+      '[Explore] Selecting Area',
+      {
+        selectedId: state.selectedFeatureId,
+        clickedAreaId: area?.id,
+        action,
+      }
+    );
 
     setSelectedPathSegment(null);
     setSelectedPieceId(null);
@@ -3777,15 +3862,42 @@ dispatch({
       onPendingArrivalCommit?.(point);
       return;
     }
-    if (event.button === 0 && state.editingMode === 'move-feature') {
-      const point = screenToMap(event.clientX, event.clientY);
-      if (!point || !movingFeatureId) return;
-      dispatch({ type: 'featureMove.preview', position: point });
-      if (!isMovePositionValid(point)) return;
+    if (
+      event.button === 0 &&
+      state.editingMode === 'move-feature'
+    )
+    {
+      const point = screenToMap(
+        event.clientX,
+        event.clientY
+      );
+
+      if (!point || !movingFeatureId)
+      {
+        return;
+      }
+
+      dispatch({
+        type: 'featureMove.preview',
+        position: point,
+      });
+
+      if (!isMovePositionValid(point))
+      {
+        return;
+      }
+
       suppressNextFeatureClickRef.current = true;
-      if (sections.some((area) => area.kind === 'area' && area.id === movingFeatureId)) updateAreaIdentity(movingFeatureId, { controlPosition: point });
-      else onFeatureMove?.(movingFeatureId, point);
-      dispatch({ type: 'featureMove.cancel' });
+
+      onFeatureMove?.(
+        movingFeatureId,
+        point
+      );
+
+      dispatch({
+        type: 'featureMove.cancel',
+      });
+
       return;
     }
 if (event.button === 0 && movingSectionNode)
@@ -3963,8 +4075,11 @@ return;
       saveSubtitle();
     }
 
-    dispatch({ type: 'feature.clearSelection' });
-    setSelectedPathSegment(null);
+    if (interactionMode !== 'explore')
+    {
+      dispatch({ type: 'feature.clearSelection' });
+      setSelectedPathSegment(null);
+    }
 
     dispatch({ type: 'contextMenu.close' });
     setPieceContextMenu(null);
@@ -6078,18 +6193,7 @@ onDistanceTerminalClick={(
       />
     );
   })}
-  {visibleSections.filter((section) => section.kind === 'area' && section.showName)
-    .map((section) => {
-      const position = getAreaControlPosition(section);
-      if (!position) return null;
-      const screen = mapToScreen(position.x, position.y);
-      return (
-        <text key={`label-${section.id}`} className="section-area-name"
-          x={screen.x} y={screen.y + 22} textAnchor="middle" dominantBaseline="central">
-          {section.name}
-        </text>
-      );
-    })}
+
   {sectionDraft?.edges.map((edge) => {
     const start = sectionDraft.nodes.find((node) => {
       return node.id === edge.startNodeId;
@@ -6112,43 +6216,6 @@ onDistanceTerminalClick={(
   })()}
 </svg>
 
-{visibleSections.filter((section) => section.kind === 'area').map((section) => {
-  const position = getAreaControlPosition(section);
-  if (!position) return null;
-  const screen = mapToScreen(position.x, position.y);
-  return (
-    <button
-      key={`control-${section.id}`}
-      type="button"
-      className={`area-control-node${movingFeatureId === section.id ? (isMovePositionValid(position) ? ' moving' : ' moving invalid') : ''}`}
-      aria-label={`${section.name} Area control`}
-      title={section.name}
-      style={{ left: screen.x, top: screen.y, backgroundColor: section.color }}
-      onPointerDown={(event) => {
-        if (state.editingMode !== 'move-feature') event.stopPropagation();
-      }}
-      onClick={(event) => {
-        event.stopPropagation();
-        if (suppressNextFeatureClickRef.current) { suppressNextFeatureClickRef.current = false; return; }
-        if (pendingArrivalPlacement || sectionDraft || state.editingMode === 'move-feature') return;
-        setSelectedPathSegment(null);
-        setSelectedPieceId(null);
-        dispatch({ 
-          type: 'feature.select', 
-          featureId: section.id,
-        });
-      }}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const rect = viewportRef.current?.getBoundingClientRect();
-        if (!rect || pendingArrivalPlacement) return;
-        setSectionContextMenu({ kind: 'area', id: section.id, point: position,
-          x: event.clientX - rect.left, y: event.clientY - rect.top });
-      }}
-    />
-  );
-})}
 {displayedSectionNodes.filter((node) => {
   return editableNodeIds.has(node.id);
 }).map((node) => {
@@ -7171,11 +7238,38 @@ onDescriptionChange={(
           : featureRulesetInteraction
       )?.rulesetName ?? 'Ruleset'}
     </button>
+
+        <button
+      type="button"
+      className={`path-popup-tab${
+        activeFeaturePopupTab === 'settings'
+          ? ' active'
+          : ''
+      }`}
+      aria-expanded={
+        activeFeaturePopupTab === 'settings'
+      }
+      onClick={() =>
+      {
+        setActiveFeaturePopupTab(
+          (current) =>
+            current === 'settings'
+              ? null
+              : 'settings'
+        );
+      }}
+    >
+      Settings
+    </button>
   </div>
 
   {activeFeaturePopupTab && (
     <div className="path-popup-extension">
-      {activeFeaturePopupTab ===
+      {activeFeaturePopupTab === 'settings' ? (
+        <div className="path-popup-ruleset-empty">
+          Settings
+        </div>
+      ) : activeFeaturePopupTab ===
       'description' ? (
         <RichTextEditor
           key={selectedFeature.id}
