@@ -45,6 +45,7 @@ import { useRegionsState } from '../state/RegionsStateContext';
 import { defaultLayerVisibility } from '../state/RegionsState';
 import MapKey from './MapKey';
 import RichTextEditor from './RichTextEditor';
+import SettingsPanel from './SettingsPanel';
 import type { RichTextDocument } from '../models/RichText';
 import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
 import { isPieceTracked, type Piece } from '../models/Piece';
@@ -491,6 +492,11 @@ function MapViewport({
   } = useRulesetInteraction(
     'Regions.PathSegment'
   );
+    const activeRulesetName =
+    areaRulesetInteraction?.rulesetName ??
+    featureRulesetInteraction?.rulesetName ??
+    pathRulesetInteraction?.rulesetName ??
+    'Ruleset';
   const interactionPermissions =
     getInteractionModePermissions(interactionMode);
     const pathInteraction =
@@ -678,12 +684,25 @@ useEffect(() =>
   }
 }, [sectionMode]);
 
-useEffect(() => {
-  if (interactionMode === 'explore') {
-    return;
-  }
+useEffect(() =>
+{
+  dispatch({
+    type: 'feature.clearSelection',
+  });
+
+  dispatch({
+    type: 'contextMenu.close',
+  });
 
   setSelectedPathSegment(null);
+  setSelectedPieceId(null);
+  setPieceContextMenu(null);
+  setSectionContextMenu(null);
+  setPathTerminalContextMenu(null);
+
+  setMediaAreaId(null);
+  setEditingSection(null);
+  setAlignmentDraft(null);
 }, [interactionMode]);
 
 useEffect(() => {
@@ -1024,7 +1043,7 @@ const displayedRoutes =
     displayedSectionNodes
   );
 
-  function getAreaControlPosition(
+ function getAreaControlPosition(
   section: Section
 )
 {
@@ -1035,27 +1054,9 @@ const displayedRoutes =
       displayedSectionNodes
     );
 
-  if (
-    state.editingMode === 'move-feature' &&
-    movingFeatureId === section.id &&
-    movingFeaturePreviewPosition
-  )
-  {
-    return movingFeaturePreviewPosition;
-  }
-
-  const position =
-    section.controlPosition;
-
-  return position &&
-    isPointInPolygon(
-      position,
-      polygon
-    )
-      ? position
-      : getAreaLabelPosition(
-          polygon
-        );
+  return getAreaLabelPosition(
+    polygon
+  );
 }
 
   const selectedArea = sections.find((section) => section.kind === 'area' &&
@@ -1175,9 +1176,6 @@ const selectedFeatureSecondaryActions =
     width: 300,
     height: 480,
   });
-  const contextTargetFeature = contextMenu?.kind === 'feature'
-    ? features.find((feature) => feature.id === contextMenu.targetId)
-    : undefined;
 
     const registeredWidth = imageSize.width * registration.scale;
 
@@ -3691,14 +3689,6 @@ if (interactionMode === 'distance')
 
     if (action.type === 'dismiss')
     {
-      console.log(
-        '[Explore] Dismissing selection',
-        {
-          selectedId: state.selectedFeatureId,
-          clickedAreaId: area?.id,
-        }
-      );
-
       dispatch({
         type: 'feature.clearSelection',
       });
@@ -3706,15 +3696,6 @@ if (interactionMode === 'distance')
       setSelectedPathSegment(null);
       return;
     }
-
-    console.log(
-      '[Explore] Selecting Area',
-      {
-        selectedId: state.selectedFeatureId,
-        clickedAreaId: area?.id,
-        action,
-      }
-    );
 
     setSelectedPathSegment(null);
     setSelectedPieceId(null);
@@ -6585,6 +6566,22 @@ onDistanceTerminalClick={(
   event.stopPropagation();
 
   if (
+  interactionMode === 'build' &&
+  event.button === 0
+)
+{
+  event.preventDefault();
+
+  dispatch({
+    type: 'featureMove.start',
+    featureId: feature.id,
+    position: feature.position,
+  });
+
+  return;
+}
+
+  if (
     interactionMode === 'path' &&
     event.button === 0 &&
     event.ctrlKey
@@ -6660,24 +6657,24 @@ onClick={(event) => {
           const point = screenToMap(event.clientX, event.clientY);
           if (!viewport || !point) return;
           const rect = viewport.getBoundingClientRect();
-          if (interactionMode === 'build') {
-  dispatch({
-    type: 'feature.clearSelection',
-  });
+          
+if (interactionMode === 'build')
+{
+  const objectType =
+    feature.type === 'location'
+      ? 'Location'
+      : 'Feature';
 
-  dispatch({
-    type: 'contextMenu.open',
-    menu: {
-      kind: 'feature',
-      targetId: feature.id,
-      screenX:
-        event.clientX - rect.left,
-      screenY:
-        event.clientY - rect.top,
-      mapX: point.x,
-      mapY: point.y,
-    },
-  });
+  if (
+    window.confirm(
+      `Delete ${objectType} "${feature.name}"?`
+    )
+  )
+  {
+    onDeleteFeature?.(feature);
+  }
+
+  return;
 }
         }}
       >
@@ -7232,11 +7229,7 @@ onDescriptionChange={(
         );
       }}
     >
-            {(
-        selectedArea
-          ? areaRulesetInteraction
-          : featureRulesetInteraction
-      )?.rulesetName ?? 'Ruleset'}
+  {activeRulesetName}
     </button>
 
         <button
@@ -7265,12 +7258,73 @@ onDescriptionChange={(
 
   {activeFeaturePopupTab && (
     <div className="path-popup-extension">
-      {activeFeaturePopupTab === 'settings' ? (
-        <div className="path-popup-ruleset-empty">
-          Settings
-        </div>
-      ) : activeFeaturePopupTab ===
-      'description' ? (
+{activeFeaturePopupTab === 'settings' ? (
+  <SettingsPanel
+    objectType={
+      selectedArea
+        ? 'area'
+        : 'feature'
+    }
+    color={selectedArea?.color}
+    onColorChange={
+      selectedArea
+        ? (color) =>
+          {
+            updateAreaIdentity(
+              selectedArea.id,
+              { color }
+            );
+          }
+        : undefined
+    }
+    showLabel={
+  selectedArea
+    ? Boolean(selectedArea.showName)
+    : selectedFeature.showLabel !== false
+}
+onShowLabelChange={
+  selectedArea
+    ? undefined
+    : (showLabel) =>
+      {
+        onShowLabelChange?.(
+          selectedFeature.id,
+          showLabel
+        );
+      }
+}
+onDelete={() =>
+{
+  if (selectedArea)
+  {
+    if (
+      window.confirm(
+        `Delete Area "${selectedArea.name}"?`
+      )
+    )
+    {
+      onDeleteSection?.(selectedArea.id);
+    }
+
+    return;
+  }
+
+  if (
+    window.confirm(
+      `Delete ${
+        selectedFeature.type === 'location'
+          ? 'Location'
+          : 'Feature'
+      } "${selectedFeature.name}"?`
+    )
+  )
+  {
+    onDeleteFeature?.(selectedFeature);
+  }
+}}
+  />
+) : activeFeaturePopupTab ===
+'description' ? (
         <RichTextEditor
           key={selectedFeature.id}
           value={
@@ -7359,33 +7413,15 @@ onDescriptionChange={(
   onClose={() => setMediaAreaId(null)} onSave={(mediaSlotOverrides) => {
     updateAreaIdentity(mediaArea.id, { mediaSlotOverrides }); setMediaAreaId(null);
   }} />}
-{sectionContextMenu && (
+{sectionContextMenu &&
+  sectionContextMenu.kind !== 'area' && (
   <div
     ref={sectionContextMenuRef}
     className="map-context-menu section-context-menu"
     style={{ left: sectionContextMenu.x, top: sectionContextMenu.y }}
     onPointerDown={(event) => event.stopPropagation()}
   >
-    {sectionContextMenu.kind === 'area' ? (() => {
-      const area = sections.find((item) => item.id === sectionContextMenu.id);
-      if (!area) return null;
-      return <>
-        <button type="button" onClick={() => {
-          dispatch({ type: 'featureMove.start', featureId: area.id, position: getAreaControlPosition(area)! });
-          setSectionContextMenu(null);
-        }}>Move</button>
-        <button type="button" role="menuitemcheckbox" aria-checked={Boolean(area.showName)} onClick={() => {
-          updateAreaIdentity(area.id, { showName: !area.showName }); setSectionContextMenu(null);
-        }}>Show Label<span className="map-context-check">{area.showName ? '✓' : ''}</span></button>
-        <label className="area-context-color">Color<input type="color" aria-label="Area color" value={area.color}
-          onChange={(event) => updateAreaIdentity(area.id, { color: event.target.value })} /></label>
-        <div className="map-context-separator" />
-        <button type="button" onClick={() => {
-          if (window.confirm(`Delete Area "${area.name}"?`)) onDeleteSection?.(area.id);
-          setSectionContextMenu(null);
-        }}>Delete</button>
-      </>;
-    })() : sectionContextMenu.kind === 'node' ? (
+    {sectionContextMenu.kind === 'node' ? (
       <>
         <button
           type="button"
@@ -7508,71 +7544,6 @@ onDescriptionChange={(
     >
       Add Connection...
     </button>
-      </>
-      ) : interactionPermissions.canAuthorFeatures ? (
-        <>
-        <button
-          type="button"
-          onClick={(event) => {
-            if (!contextMenu.targetId) return;
-            const pointerPosition = screenToMap(
-              event.clientX,
-              event.clientY
-            );
-            dispatch({
-              type: 'featureMove.start',
-              featureId: contextMenu.targetId,
-              position: pointerPosition ?? {
-                x: contextMenu.mapX,
-                y: contextMenu.mapY,
-              },
-            });
-          }}
-        >
-          Move
-        </button>
-
-        <button
-          type="button"
-          role="menuitemcheckbox"
-          aria-checked={contextTargetFeature?.showLabel !== false}
-          disabled={!contextTargetFeature}
-          onClick={() => {
-            if (!contextTargetFeature) return;
-            onShowLabelChange?.(
-              contextTargetFeature.id,
-              contextTargetFeature.showLabel === false
-            );
-            dispatch({ type: 'contextMenu.close' });
-          }}
-        >
-          Show Label
-          <span className="map-context-check">
-            {contextTargetFeature?.showLabel !== false ? '✓' : ''}
-          </span>
-        </button>
-
-        <div className="map-context-separator" />
-
-        <button
-  type="button"
-  disabled={!contextTargetFeature}
-  onClick={() => {
-    if (!contextTargetFeature) {
-      return;
-    }
-
-    onDeleteFeature?.(
-      contextTargetFeature
-    );
-
-    dispatch({
-      type: 'contextMenu.close',
-    });
-  }}
->
-  Delete
-</button>
       </>
     ) : null}
   </div>
