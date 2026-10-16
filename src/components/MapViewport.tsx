@@ -4,6 +4,7 @@ import type { GlobalMediaSlot, MediaSlotOverride } from '../models/MediaSlot';
 import type { BoundaryAlignment } from '../models/Map';
 import { isValidAlignment, transformBoundaryPoint } from '../sections/BoundaryTransform';
 import { getInteractionModePermissions } from '../interaction/InteractionModePermissions';
+import { resolveExploreSelection } from '../interaction/ExploreInteraction';
 import DistanceMeasurementOverlay from '../interaction/distance/DistanceMeasurementOverlay';
 import { useDistanceMeasurement } from '../interaction/distance/useDistanceMeasurement';
 import { resolveDistanceAnchors } from '../interaction/distance/resolveDistanceAnchors';
@@ -3569,7 +3570,7 @@ dispatch({
   {
     if (
       interactionMode !== 'explore' ||
-      state.editingMode !== null ||
+      state.editingMode !== 'browse' ||
       pendingArrivalPlacement ||
       sectionDraft ||
       routePieceId !== null
@@ -3578,8 +3579,7 @@ dispatch({
       return;
     }
 
-    // Only handle clicks on the map background.
-    // Other map objects retain their own interactions.
+    // Foreground objects handle their own clicks.
     if (
       event.target !== event.currentTarget &&
       !(event.target instanceof HTMLImageElement)
@@ -3593,10 +3593,7 @@ dispatch({
       event.clientY
     );
 
-    if (
-      !point ||
-      !isPointInsideMap(point)
-    )
+    if (!point || !isPointInsideMap(point))
     {
       return;
     }
@@ -3608,8 +3605,29 @@ dispatch({
       displayedSectionNodes
     );
 
-    if (!area)
+    const hasOpenDialog =
+      state.selectedFeatureId !== null ||
+      selectedPathSegment !== null;
+
+    const action = resolveExploreSelection(
+      'left',
+      area?.id ?? null,
+      state.selectedFeatureId,
+      hasOpenDialog
+    );
+
+    if (action.type === 'none')
     {
+      return;
+    }
+
+    if (action.type === 'dismiss')
+    {
+      dispatch({
+        type: 'feature.clearSelection',
+      });
+
+      setSelectedPathSegment(null);
       return;
     }
 
@@ -3618,7 +3636,7 @@ dispatch({
 
     dispatch({
       type: 'feature.select',
-      featureId: area.id,
+      featureId: action.id,
     });
   }
 
