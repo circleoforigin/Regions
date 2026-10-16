@@ -46,6 +46,8 @@ import { defaultLayerVisibility } from '../state/RegionsState';
 import MapKey from './MapKey';
 import RichTextEditor from './RichTextEditor';
 import SettingsPanel from './SettingsPanel';
+import GeographicTooltip from './GeographicTooltip';
+import { useGeographicTooltip } from '../hooks/useGeographicTooltip';
 import type { RichTextDocument } from '../models/RichText';
 import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
 import { isPieceTracked, type Piece } from '../models/Piece';
@@ -1013,7 +1015,7 @@ const displayedRoutes =
   }
 
   const visibleSections = sections.filter(isSectionVisible);
-  
+  const geographicTooltip = useGeographicTooltip(500);
   const editableSections = sections.filter((section) => {
     return !section.locked && sectionMode !== null && section.kind === sectionMode;
   });
@@ -4103,17 +4105,98 @@ return;
     event:
       React.PointerEvent<HTMLDivElement>
   ) {
-    trackEdgePointer(
-  event.clientX,
-  event.clientY
-);
+  trackEdgePointer(
+    event.clientX,
+    event.clientY
+  );
 
-if (interactionMode === 'path') {
-  const point =
-    screenToMap(
-      event.clientX,
-      event.clientY
+  if (
+  interactionMode === 'explore' &&
+  state.editingMode === 'browse' &&
+  !pendingArrivalPlacement &&
+  !sectionDraft &&
+  routePieceId === null
+)
+{
+  const point = screenToMap(
+    event.clientX,
+    event.clientY
+  );
+
+  const area =
+    point && isPointInsideMap(point)
+      ? getTerritoryOwner(
+          point,
+          visibleSections,
+          sectionEdges,
+          displayedSectionNodes
+        )
+      : null;
+
+  const zones =
+  point && isPointInsideMap(point)
+    ? visibleSections
+        .filter((section) =>
+        {
+          if (section.kind !== 'zone')
+          {
+            return false;
+          }
+
+          const polygon = getSectionPolygon(
+            section,
+            sectionEdges,
+            displayedSectionNodes
+          );
+
+          return isPointInPolygon(
+            point,
+            polygon
+          );
+        })
+        .map((section) => ({
+          id: section.id,
+          name: section.name,
+        }))
+    : [];
+
+    const territory =
+    point && isPointInsideMap(point)
+      ? getTerritoryOwner(
+          point,
+          visibleSections,
+          sectionEdges,
+          displayedSectionNodes
+        )
+      : null;
+
+  const viewport = viewportRef.current;
+
+  if (viewport)
+  {
+    const rect = viewport.getBoundingClientRect();
+
+    geographicTooltip.update(
+      area?.id ?? null,
+      area?.name ?? null,
+      zones,
+      territory?.name ?? null,
+      event.clientX - rect.left,
+      event.clientY - rect.top
     );
+  }
+}
+else
+{
+  geographicTooltip.dismiss();
+}
+
+  if (interactionMode === 'path') {
+    const point =
+      screenToMap(
+        event.clientX,
+        event.clientY
+      );
 
   setPathPointer(
     point &&
@@ -5604,6 +5687,7 @@ function saveSectionProperties() {
       onPointerLeave={() => {
         pointerInsideViewportRef.current = false;
         setDistancePointer(null);
+        geographicTooltip.dismiss();
         stopEdgeScrolling();
       }}
       onAuxClick={(event) => {
@@ -5617,6 +5701,16 @@ function saveSectionProperties() {
   routeActive={routePieceId !== null}
   areaActive={sectionMode === 'area'}
 />
+
+{geographicTooltip.tooltip && (
+  <GeographicTooltip
+    x={geographicTooltip.tooltip.x}
+    y={geographicTooltip.tooltip.y}
+    areaName={geographicTooltip.tooltip.areaName}
+    zones={geographicTooltip.tooltip.zones}
+    territoryName={geographicTooltip.tooltip.territoryName}
+  />
+)}
       
       <img
   className="map-viewport-image"
