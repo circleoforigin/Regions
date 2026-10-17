@@ -401,7 +401,7 @@ export function isPolygonContained(
  * This allows nested Areas to subtract territory from
  * their enclosing Areas without modifying their geometry.
  */
-export function getTerritoryOwner(
+export function getAreaOwner(
   point: SectionPoint,
   sections: Section[],
   edges: SectionEdge[],
@@ -440,6 +440,30 @@ export function getTerritoryOwner(
   );
 
   return containingAreas[0].section;
+}
+
+/**
+ * Finds the Territory that governs a geographic position.
+ *
+ * Territory ownership is not yet implemented.
+ *
+ * Unlike Areas, Territories will use their own
+ * ownership rules, which will be defined separately.
+ */
+export function getTerritoryOwner(
+  point: SectionPoint,
+  sections: Section[],
+  edges: SectionEdge[],
+  nodes: SectionNode[]
+): Section | undefined
+{
+  // Reserved for future Territory ownership logic.
+  void point;
+  void sections;
+  void edges;
+  void nodes;
+
+  return undefined;
 }
 
 export interface AreaContainment

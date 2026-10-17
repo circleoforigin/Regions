@@ -19,6 +19,7 @@ import type {
   RouteTraversalPoint,
 } from '../models/Route';
 import { routeNodesToDistanceAnchors } from '../navigation/RouteDistance';
+import { getRouteLegs } from '../models/Route';
 import {
   findFirstNavigationBoundaryCrossing,
   findNavigationAreaCrossings,
@@ -64,6 +65,7 @@ import {
   getAreaLabelPosition,
   getSectionPolygon,
   getSectionNodeIds,
+  getAreaOwner,
   getTerritoryOwner,
   getAreaContainmentHierarchy,
   closestPointOnSegment,
@@ -799,31 +801,118 @@ const displayedRoutes =
     )
     .map((route) =>
     {
-    const anchors =
-      resolveDistanceAnchors(
-        routeNodesToDistanceAnchors(
-          route.nodes
-        ),
-        features,
-        pieces,
-        pathNetwork.terminals
-      );
+      const anchors =
+        resolveDistanceAnchors(
+          routeNodesToDistanceAnchors(
+            route.nodes
+          ),
+          features,
+          pieces,
+          pathNetwork.terminals
+        );
 
-    const segments =
-      getDistanceSegmentsWithPaths(
+      const routeLegs =
+        getRouteLegs(route);
+
+      const hasTravelProgress =
+        route.nodes[0]?.id.startsWith(
+          `travel:${route.id}:`
+        ) ?? false;
+
+      const segments =
+        hasTravelProgress &&
+        route.legProfiles
+          ? routeLegs.flatMap(
+              (leg) =>
+              {
+                const profile =
+                  route.legProfiles?.find(
+                    (candidate) =>
+                      candidate.legId ===
+                      leg.id
+                  );
+
+                if (
+                  !profile ||
+                  profile.points.length < 2
+                )
+                {
+                  return [];
+                }
+
+                const points =
+                  profile.points.map(
+                    (point) => ({
+                      ...point.position,
+                    })
+                  );
+
+                const start =
+                  anchors[leg.index];
+
+                const end =
+                  anchors[leg.index + 1];
+
+                if (!start || !end)
+                {
+                  return [];
+                }
+
+                const mapDistance =
+                  points
+                    .slice(1)
+                    .reduce(
+                      (
+                        total,
+                        point,
+                        index
+                      ) =>
+                      {
+                        const previous =
+                          points[index];
+
+                        return (
+                          total +
+                          Math.hypot(
+                            point.x -
+                              previous.x,
+                            point.y -
+                              previous.y
+                          )
+                        );
+                      },
+                      0
+                    );
+
+                return [
+                  {
+                    start,
+                    end,
+                    mapDistance,
+                    kind: profile.path
+                      ? 'path' as const
+                      : 'straight' as const,
+                    points,
+                    pathSegmentId:
+                      profile.path?.id,
+                  },
+                ];
+              }
+            )
+          : getDistanceSegmentsWithPaths(
+              anchors,
+              resolvedPathSegments,
+              sections,
+              sectionEdges,
+              sectionNodes
+            );
+
+      return {
+        route,
         anchors,
-        resolvedPathSegments,
-        sections,
-        sectionEdges,
-        sectionNodes
-      );
-
-    return {
-      route,
-      anchors,
-      segments,
-    };
-  });
+        segments,
+      };
+    });
 
   const distanceSegments =
     getDistanceSegmentsWithPaths(
@@ -3390,7 +3479,7 @@ if (interactionMode === 'distance')
       return;
     }
 
-    const area = getTerritoryOwner(
+    const area = getAreaOwner(
       point,
       visibleSections,
       sectionEdges,
@@ -3666,7 +3755,7 @@ if (interactionMode === 'distance')
       return;
     }
 
-    const area = getTerritoryOwner(
+    const area = getAreaOwner(
       point,
       visibleSections,
       sectionEdges,
@@ -4110,14 +4199,35 @@ return;
     event.clientY
   );
 
+    const target = event.target;
+
+  const isOverDialog =
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        [
+          '.feature-popup',
+          '.path-popup',
+          '.area-popup',
+          '.map-context-menu',
+        ].join(', ')
+      )
+    );
+
+  if (isOverDialog)
+  {
+    geographicTooltip.dismiss();
+  }
+
   if (
-  interactionMode === 'explore' &&
-  state.editingMode === 'browse' &&
-  !pendingArrivalPlacement &&
-  !sectionDraft &&
-  routePieceId === null
-)
-{
+    !isOverDialog &&
+    interactionMode === 'explore' &&
+    state.editingMode === 'browse' &&
+    !pendingArrivalPlacement &&
+    !sectionDraft &&
+    routePieceId === null
+  )
+  {
   const point = screenToMap(
     event.clientX,
     event.clientY
@@ -4125,7 +4235,7 @@ return;
 
   const area =
     point && isPointInsideMap(point)
-      ? getTerritoryOwner(
+      ? getAreaOwner(
           point,
           visibleSections,
           sectionEdges,
@@ -4673,11 +4783,35 @@ if (!draggedRoute) {
       })()
     : pieceNodeTarget;
 
-    pieceDragRef.current = null;
-    piecePreviewRef.current = null;
-    setPiecePreview(null);
-    releasePointerCaptureSafely(event.currentTarget, event.pointerId);
-    if (!drag.moved) return;
+pieceDragRef.current = null;
+piecePreviewRef.current = null;
+setPiecePreview(null);
+
+releasePointerCaptureSafely(
+  event.currentTarget,
+  event.pointerId
+);
+
+if (!drag.moved)
+{
+  return;
+}
+
+const draggedPiece =
+  pieces.find(
+    (piece) =>
+      piece.id === drag.pieceId
+  );
+
+if (
+  draggedPiece &&
+  getPieceRoute(drag.pieceId)
+)
+{
+  onClearPieceRoute?.(
+    draggedPiece
+  );
+}
 
     const previewScreen = mapToScreen(preview.x, preview.y);
 
@@ -5668,6 +5802,10 @@ function saveSectionProperties() {
         handleWheel
       }
       onClick={handleExploreAreaClick}
+      onPointerDownCapture={() =>
+      {
+        geographicTooltip.dismiss();
+      }}
       onPointerDown={
         handlePointerDown
       }
@@ -7730,9 +7868,52 @@ onDelete={() =>
       );
     }
   } else {
-    distanceMeasurement.addPoint(
-      piece.position
-    );
+    const connectedLocation =
+      features.find((feature) =>
+      {
+        const isAtPiece =
+          Math.hypot(
+            feature.position.x -
+              piece.position.x,
+            feature.position.y -
+              piece.position.y
+          ) < 0.000001;
+
+        if (!isAtPiece)
+        {
+          return false;
+        }
+
+        return resolvedPathSegments.some(
+          (segment) =>
+            (
+              segment.segment.start.kind ===
+                'feature' &&
+              segment.segment.start.featureId ===
+                feature.id
+            ) ||
+            (
+              segment.segment.end.kind ===
+                'feature' &&
+              segment.segment.end.featureId ===
+                feature.id
+            )
+        );
+      });
+
+    if (connectedLocation)
+    {
+      distanceMeasurement.addFeature(
+        connectedLocation.id,
+        false
+      );
+    }
+    else
+    {
+      distanceMeasurement.addPoint(
+        piece.position
+      );
+    }
   }
 
   setPieceContextMenu(null);

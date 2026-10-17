@@ -20,11 +20,25 @@ export interface PieceAppearance {
   borderColor: string;
 }
 
-export interface PiecePathDock {
+export interface PiecePathDock
+{
   segmentId: string;
   legIndex: number;
   fraction: number;
 }
+
+export type PieceDock =
+  | {
+      kind: 'feature';
+      featureId: string;
+    }
+  | {
+      kind: 'terminal';
+      terminalId: string;
+    }
+  | ({
+      kind: 'path';
+    } & PiecePathDock);
 
 export interface Piece extends SpatialAnchor
 {
@@ -34,7 +48,19 @@ export interface Piece extends SpatialAnchor
   entityIds: string[];
   mapId: string;
   position: SpatialPoint;
+  /*
+   * The spatial object to which
+   * this Piece is currently docked.
+   */
+  dock?: PieceDock;
+
+  /*
+   * Legacy Path docking.
+   * Retained for existing saved Pieces
+   * until all consumers are migrated.
+   */
   pathDock?: PiecePathDock;
+
   appearance: PieceAppearance;
   tracked?: boolean;
   memberPieceIds?: string[];
@@ -81,19 +107,44 @@ export function movePartyAndMembers(
   spatialPieceId: string,
   mapId: string,
   position: Piece['position'],
-  pathDock?: PiecePathDock
-): Piece[] {
+  pathDock?: PiecePathDock,
+  dock?: PieceDock
+): Piece[]
+{
   const spatialPiece = pieces.find((piece) => piece.id === spatialPieceId);
   const memberIds = new Set(spatialPiece ? getPartyMemberIds(spatialPiece) : []);
   return pieces.map((piece) => {
-    if (piece.id === spatialPieceId) {
-  return {
-    ...piece,
-    mapId,
-    position,
-    pathDock,
-  };
-}
+    if (piece.id === spatialPieceId)
+    {
+      const resolvedDock: PieceDock | undefined =
+        dock ??
+        (
+          pathDock
+            ? {
+                kind: 'path',
+                ...pathDock,
+              }
+            : undefined
+        );
+
+      return {
+        ...piece,
+        mapId,
+        position,
+        pathDock:
+          resolvedDock?.kind === 'path'
+            ? {
+                segmentId:
+                  resolvedDock.segmentId,
+                legIndex:
+                  resolvedDock.legIndex,
+                fraction:
+                  resolvedDock.fraction,
+              }
+            : undefined,
+        dock: resolvedDock,
+      };
+    }
     return memberIds.has(piece.id) ? { ...piece, mapId } : piece;
   });
 }

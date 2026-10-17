@@ -4,7 +4,10 @@ import type {
   RouteLegProfile,
 } from '../models/Route';
 import { getRouteLegs } from '../models/Route';
-import { movePartyAndMembers } from '../models/Piece';
+import {
+  movePartyAndMembers,
+  type PieceDock,
+} from '../models/Piece';
 import {
   resolveRouteTravelPosition,
   type ResolvedRouteTravelPosition,
@@ -75,12 +78,42 @@ export function commitRouteTravelPosition(
       distanceFromLegStart
     );
 
+  const routeLegComplete =
+    distanceFromLegStart >=
+    legProfile.distance.value;
+
+  let arrivalDock: PieceDock | undefined;
+
+  if (routeLegComplete)
+  {
+    switch (routeLeg.end.kind)
+    {
+      case 'feature':
+        arrivalDock = {
+          kind: 'feature',
+          featureId:
+            routeLeg.end.featureId,
+        };
+        break;
+
+      case 'terminal':
+        arrivalDock = {
+          kind: 'terminal',
+          terminalId:
+            routeLeg.end.terminalId,
+        };
+        break;
+    }
+  }
+
   const pieces =
     movePartyAndMembers(
       project.pieces,
       pieceId,
       resolved.mapId,
-      resolved.position
+      resolved.position,
+      undefined,
+      arrivalDock
     );
 
   const advancedRoute =
@@ -91,10 +124,6 @@ export function commitRouteTravelPosition(
       distanceFromLegStart,
       resolved.position
     );
-
-  const routeLegComplete =
-    distanceFromLegStart >=
-    legProfile.distance.value;
 
   const remainingRouteLegId =
     getRouteLegs(
