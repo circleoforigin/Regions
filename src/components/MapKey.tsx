@@ -4,12 +4,18 @@ import {
   useState,
 } from 'react';
 
-import type {
-  FeatureTypeDefinition,
-} from '../models/FeatureTypeDefinition';
+import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
+import type { MapSimulationScale } from '../models/Map';
 
 interface MapKeyProps {
   mapName: string;
+
+  onAssignMapImage: () => void;
+  onCalibrateScale: () => void;
+  onManageMapMediaSlots: () => void;
+  mapMediaSlotsEnabled: boolean;
+  simulationScale: MapSimulationScale;
+  onSimulationScaleChange: (scale: MapSimulationScale) => void;
   hasDistanceScale: boolean;
   mapTypeId?: string;
   featureTypes: FeatureTypeDefinition[];
@@ -29,6 +35,13 @@ interface MapKeyProps {
 
 function MapKey({
   mapName,
+
+  onAssignMapImage,
+  onCalibrateScale,
+  onManageMapMediaSlots,
+  mapMediaSlotsEnabled,
+  simulationScale,
+  onSimulationScaleChange,
   hasDistanceScale,
   mapTypeId,
   featureTypes,
@@ -228,9 +241,64 @@ function MapKey({
             : 'map-key-ruleset-panel'
         }
         aria-hidden={!rulesetOpen}
-      >
-        <div className="map-key-ruleset-heading">
-          Map Ruleset Settings
+      >    
+      </div>
+
+      <div
+        id="map-key-settings-panel"
+        className={
+          settingsOpen
+            ? 'map-key-ruleset-panel open'
+            : 'map-key-ruleset-panel'
+        }
+        aria-hidden={!settingsOpen}
+      >    
+
+        <label
+          htmlFor="map-key-simulation-scale"
+          className="map-key-setting-label"
+        >
+          Simulation Scale
+        </label>
+
+        <select
+          id="map-key-simulation-scale"
+          className="map-key-setting-select"
+          value={simulationScale}
+          onChange={(event) => {
+            onSimulationScaleChange(
+              event.target.value as MapSimulationScale
+            );
+          }}
+        >
+          <option value="overworld">Overworld</option>
+          <option value="area">Area</option>
+          <option value="local">Local</option>
+          <option value="special">Special</option>
+        </select>
+
+        <div className="map-key-settings-actions">
+          <button
+            type="button"
+            onClick={onAssignMapImage}
+          >
+            Assign Map Image...
+          </button>
+
+          <button
+            type="button"
+            onClick={onCalibrateScale}
+          >
+            Calibrate Scale...
+          </button>
+
+          <button
+            type="button"
+            disabled={!mapMediaSlotsEnabled}
+            onClick={onManageMapMediaSlots}
+          >
+            Map Media Slots...
+          </button>
         </div>
       </div>
 

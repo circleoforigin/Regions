@@ -249,6 +249,15 @@ onMapMetadataChange?: (
   featureTypeId: string | undefined
 ) => void;
 
+onAssignMapImage?: () => void;
+onCalibrateScale?: () => void;
+onManageMapMediaSlots?: () => void;
+mapMediaSlotsEnabled?: boolean;
+
+  onMapSimulationScaleChange?: (
+    scale: NonNullable<RegionMap['simulationScale']>
+  ) => void;
+
 onFocusFeatureComplete?: () => void;
 
 onEnterFeature?: (feature: Feature) => void;
@@ -474,8 +483,13 @@ function MapViewport({
   onOpenAreaLocation,
   onUnlinkAreaLocation,
   onSectionError,
+  onMapSimulationScaleChange,
   onZoomStateChange,
   onMapMetadataChange,
+  onAssignMapImage,
+  onCalibrateScale,
+  onManageMapMediaSlots,
+  mapMediaSlotsEnabled = false,
 }: MapViewportProps, ref) {
   const { state, dispatch } = useRegionsState();
   const {
@@ -8187,6 +8201,14 @@ onDelete={() =>
 
     <MapKey
       mapName={mapName}
+      onAssignMapImage={() => onAssignMapImage?.()}
+      onCalibrateScale={() => onCalibrateScale?.()}
+      onManageMapMediaSlots={() => onManageMapMediaSlots?.()}
+      mapMediaSlotsEnabled={mapMediaSlotsEnabled}
+      simulationScale={map.simulationScale ?? 'overworld'}
+      onSimulationScaleChange={(scale) => {
+        onMapSimulationScaleChange?.(scale);
+      }}
       hasDistanceScale={imageRegistration?.distanceScale !== undefined}
       mapTypeId={mapTypeId}
       parentName={parentMapName}

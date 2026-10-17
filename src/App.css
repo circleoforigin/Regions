@@ -1252,6 +1252,69 @@
   font-weight: 600;
 }
 
+.map-key-setting-label {
+  display: block;
+  margin-top: -8px;
+  color: #aaaaaa;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.map-key-setting-select {
+  display: block;
+  width: 100%;
+  padding: 2px 8px;
+
+  box-sizing: border-box;
+
+  background: #303338;
+  color: #eeeeee;
+
+  border: 1px solid #4a4d52;
+  border-radius: 4px;
+
+  font: inherit;
+  font-size: 12px;
+
+  cursor: pointer;
+}
+
+.map-key-setting-select:focus {
+  outline: 1px solid #6b8fc4;
+}
+
+.map-key-settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 16px;
+}
+
+.map-key-settings-actions button {
+  width: 100%;
+  padding: 0px 10px;
+  background: #303338;
+  color: #eeeeee;
+
+  border: 1px solid #4a4d52;
+  border-radius: 4px;
+
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+
+  cursor: pointer;
+}
+
+.map-key-settings-actions button:hover:not(:disabled) {
+  background: #3c4046;
+}
+
+.map-key-settings-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .map-key-label {
   margin-top: 4px;
   line-height: 11px;

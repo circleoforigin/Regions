@@ -4079,6 +4079,22 @@ function handleMapMetadataChange(
   markProjectDirty();
 }
 
+function handleMapSimulationScaleChange(
+  scale: NonNullable<RegionMap['simulationScale']>
+) {
+  if (!activeMap || activeMap.simulationScale === scale) {
+    return;
+  }
+
+  setActiveMap({
+    ...activeMap,
+    simulationScale: scale,
+    updatedAt: new Date(),
+  });
+
+  markProjectDirty();
+}
+
 function updateFeatureEverywhere(
   featureId: string,
   update: (feature: Feature) => Feature
@@ -7001,6 +7017,21 @@ mapMediaSlotsEnabled={
         featureTypes={activeProject.featureTypes}
         locationMapMetadata={locationMapMetadata}
         onMapMetadataChange={handleMapMetadataChange}
+        onMapSimulationScaleChange={handleMapSimulationScaleChange}
+        onAssignMapImage={() => {
+          assignMapInputRef.current?.click();
+        }}
+        onCalibrateScale={handleOpenScaleCalibration}
+        onManageMapMediaSlots={() => {
+          setShowMapMediaSlotsDialog(true);
+        }}
+        mapMediaSlotsEnabled={Boolean(
+          activeProject &&
+          activeMap &&
+          areGlobalMediaSlotsComplete(
+            activeProject.globalMediaSlots
+          )
+        )}
         focusFeatureId={pendingFocusFeatureId}
         onFocusFeatureComplete={() => setPendingFocusFeatureId(null)}
         onEnterFeature={(feature) => void handleEnterFeature(feature)}
