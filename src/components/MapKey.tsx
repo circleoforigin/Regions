@@ -44,8 +44,12 @@ function MapKey({
   const [editing, setEditing] =
     useState(false);
 
-  const [rulesetOpen, setRulesetOpen] =
-    useState(false);
+  const [activeTab, setActiveTab] =
+    useState<'settings' | 'ruleset' | null>(null);
+
+  const rulesetOpen = activeTab === 'ruleset';
+
+  const settingsOpen = activeTab === 'settings';
 
   const [typeMenuOpen, setTypeMenuOpen] =
     useState(false);
@@ -176,6 +180,27 @@ function MapKey({
         <button
           type="button"
           className={
+            settingsOpen
+              ? 'map-key-tab active'
+              : 'map-key-tab'
+          }
+          aria-expanded={settingsOpen}
+          aria-controls="map-key-settings-panel"
+          onClick={() => {
+            setActiveTab(
+              (current) =>
+                current === 'settings'
+                  ? null
+                  : 'settings'
+            );
+          }}
+        >
+          Settings
+        </button>
+
+        <button
+          type="button"
+          className={
             rulesetOpen
               ? 'map-key-tab active'
               : 'map-key-tab'
@@ -183,8 +208,11 @@ function MapKey({
           aria-expanded={rulesetOpen}
           aria-controls="map-key-ruleset-panel"
           onClick={() => {
-            setRulesetOpen(
-              (current) => !current
+            setActiveTab(
+              (current) =>
+                current === 'ruleset'
+                  ? null
+                  : 'ruleset'
             );
           }}
         >
@@ -192,16 +220,19 @@ function MapKey({
         </button>
       </div>
 
-      {rulesetOpen && (
-        <div
-          id="map-key-ruleset-panel"
-          className="map-key-ruleset-panel"
-        >
-          <div className="map-key-ruleset-heading">
-            Map Ruleset Settings
-          </div>
+      <div
+        id="map-key-ruleset-panel"
+        className={
+          rulesetOpen
+            ? 'map-key-ruleset-panel open'
+            : 'map-key-ruleset-panel'
+        }
+        aria-hidden={!rulesetOpen}
+      >
+        <div className="map-key-ruleset-heading">
+          Map Ruleset Settings
         </div>
-      )}
+      </div>
 
       <>
   {editing && editTarget === 'name' ? (
