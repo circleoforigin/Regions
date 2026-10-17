@@ -2819,10 +2819,20 @@ for (
     continue;
   }
 
-    let mapDistanceFromStart = 0;
+  let mapDistanceFromStart = 0;
 
   const points: RouteLegProfile['points'] =
     [];
+
+  const resolvedTravelPath =
+    segment.kind === 'path' &&
+    segment.pathSegmentId
+      ? resolvedPathSegments.find(
+          (candidate) =>
+            candidate.segment.id ===
+            segment.pathSegmentId
+        )
+      : undefined;
 
   const addTraversalPoint = (
     position: {
@@ -2846,6 +2856,33 @@ for (
         OVERWORLD_SECTOR_RESOLUTION
       );
 
+    const pathProjection =
+      resolvedTravelPath
+        ? projectPointOntoPathDock(
+            resolvedTravelPath,
+            position
+          )
+        : undefined;
+
+    const pathDock =
+      resolvedTravelPath &&
+      pathProjection &&
+      Math.hypot(
+        pathProjection.position.x -
+          position.x,
+        pathProjection.position.y -
+          position.y
+      ) < 0.000001
+        ? {
+            segmentId:
+              resolvedTravelPath.segment.id,
+            legIndex:
+              pathProjection.legIndex,
+            fraction:
+              pathProjection.fraction,
+          }
+        : undefined;
+
     points.push({
       mapId,
       position,
@@ -2858,6 +2895,9 @@ for (
           value: 0,
           unit: distance.unit,
         },
+      ...(pathDock
+        ? { pathDock }
+        : {}),
       ...(spatialContext
         ? { spatialContext }
         : {}),
@@ -7836,38 +7876,65 @@ onDelete={() =>
 
   distanceMeasurement.clear();
 
-  if (piece.pathDock) {
+  const dock =
+    piece.dock ??
+    (
+      piece.pathDock
+        ? {
+            kind: 'path' as const,
+            ...piece.pathDock,
+          }
+        : undefined
+    );
+
+  if (dock?.kind === 'feature')
+  {
+    distanceMeasurement.addFeature(
+      dock.featureId,
+      false
+    );
+  }
+  else if (dock?.kind === 'terminal')
+  {
+    distanceMeasurement.addTerminal(
+      dock.terminalId,
+      false
+    );
+  }
+  else if (dock?.kind === 'path')
+  {
     const segment =
       resolvedPathSegments.find(
         (candidate) =>
           candidate.segment.id ===
-          piece.pathDock?.segmentId
+          dock.segmentId
       );
 
-    if (segment) {
-      const position =
-        resolvePathDockPosition(
-          piece.pathDock,
-          segment
-        );
+    const position =
+      segment
+        ? resolvePathDockPosition(
+            dock,
+            segment
+          )
+        : null;
 
-      if (position) {
-        distanceMeasurement.addPath(
-          segment.segment.id,
-          position,
-          false
-        );
-      } else {
-        distanceMeasurement.addPoint(
-          piece.position
-        );
-      }
-    } else {
+    if (segment && position)
+    {
+      distanceMeasurement.addPath(
+        segment.segment.id,
+        position,
+        false
+      );
+    }
+    else
+    {
       distanceMeasurement.addPoint(
         piece.position
       );
     }
-  } else {
+  }
+  else
+  {
     const connectedLocation =
       features.find((feature) =>
       {

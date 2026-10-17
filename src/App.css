@@ -1145,10 +1145,10 @@
   bottom: 16px;
 
   width: 180px;
-  aspect-ratio: 3 / 2;
+  min-height: 92px;
 
   box-sizing: border-box;
-  padding: 12px 16px;
+  padding: 7px 12px;
 
   display: flex;
   flex-direction: column;
@@ -1163,8 +1163,75 @@
   z-index: 12;
 }
 
+/* Map Key expandable settings */
+
+.map-key-tabs {
+  position: absolute;
+  bottom: 100%;
+  left: -1px;
+
+  display: flex;
+  align-items: flex-end;
+}
+
+.map-key-tab {
+  padding: 0px 12px;
+
+  border: 1px solid #3a3a3a;
+  border-bottom: none;
+  border-radius: 5px 5px 0 0;
+
+  background: #202225;
+  color: #a8a8a8;
+
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+
+  cursor: pointer;
+}
+
+.map-key-tab:hover,
+.map-key-tab.active {
+  color: #eeeeee;
+  background: #303338;
+}
+
+.map-key-ruleset-panel {
+  position: absolute;
+
+  bottom: calc(100% + 25px);
+  left: -1px;
+
+  width: 260px;
+  min-height: 100px;
+
+  box-sizing: border-box;
+  padding: 12px;
+
+  background: #202225;
+  color: #eeeeee;
+
+  border: 1px solid #3a3a3a;
+
+  box-shadow:
+    0 -6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.map-key-right .map-key-ruleset-panel {
+  left: auto;
+  right: -1px;
+}
+
+.map-key-ruleset-heading {
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .map-key-label {
-  margin-top: -5px;
+  margin-top: 4px;
+  line-height: 11px;
 
   color: #6f7378;
 
@@ -1331,18 +1398,21 @@
 
 .map-key-name,
 .map-key-name-input {
-  min-height: 22px;
+  min-height: 18px;
+  line-height: 18px;
 }
 
 .map-key-type,
 .map-key-type-editor {
-  min-height: 18px;
+  min-height: 15px;
+  line-height: 15px;
 }
 
 .map-key-parent-row {
   width: 100%;
-  min-height: 18px;
+  min-height: 14px;
   margin-top: 0px;
+  line-height: 14px;
   text-align: center;
 }
 

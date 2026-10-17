@@ -10,6 +10,7 @@ export interface ResolvedRouteTravelPosition
 {
   mapId: string;
   position: SpatialPoint;
+  pathDock?: RouteTraversalPoint['pathDock'];
 }
 
 export function resolveRouteTravelPosition(
@@ -97,6 +98,30 @@ export function resolveRouteTravelPosition(
         )
       );
 
+    const pathDock =
+      previous.pathDock &&
+      current.pathDock &&
+      previous.pathDock.segmentId ===
+        current.pathDock.segmentId &&
+      previous.pathDock.legIndex ===
+        current.pathDock.legIndex
+        ? {
+            segmentId:
+              previous.pathDock.segmentId,
+
+            legIndex:
+              previous.pathDock.legIndex,
+
+            fraction:
+              previous.pathDock.fraction +
+              (
+                current.pathDock.fraction -
+                previous.pathDock.fraction
+              ) *
+                progress,
+          }
+        : undefined;
+
     return {
       mapId: current.mapId,
 
@@ -117,6 +142,10 @@ export function resolveRouteTravelPosition(
           ) *
           progress,
       },
+
+      ...(pathDock
+        ? { pathDock }
+        : {}),
     };
   }
 
@@ -137,5 +166,13 @@ function resolvePoint(
     position: {
       ...point.position,
     },
+
+    ...(point.pathDock
+      ? {
+          pathDock: {
+            ...point.pathDock,
+          },
+        }
+      : {}),
   };
 }

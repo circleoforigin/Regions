@@ -106,14 +106,25 @@ export function commitRouteTravelPosition(
     }
   }
 
+  const resolvedDock: PieceDock | undefined =
+    arrivalDock ??
+    (
+      resolved.pathDock
+        ? {
+            kind: 'path',
+            ...resolved.pathDock,
+          }
+        : undefined
+    );
+
   const pieces =
     movePartyAndMembers(
       project.pieces,
       pieceId,
       resolved.mapId,
       resolved.position,
-      undefined,
-      arrivalDock
+      resolved.pathDock,
+      resolvedDock
     );
 
   const advancedRoute =

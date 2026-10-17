@@ -48,7 +48,24 @@ export interface RouteTraversalPoint
   mapId: string;
   position: SpatialPoint;
   distanceFromLegStart: PhysicalDistance;
+
+  /*
+   * Precise docking information for
+   * a traversal point on a Path.
+   *
+   * This identifies the actual Path
+   * segment and position along its
+   * geometry, independently of
+   * RouteLeg boundaries.
+   */
+  pathDock?: {
+    segmentId: string;
+    legIndex: number;
+    fraction: number;
+  };
+
   spatialContext?: SpatialContext;
+
   sectorCrossing?: {
     from: SectorAddress;
     to: SectorAddress;

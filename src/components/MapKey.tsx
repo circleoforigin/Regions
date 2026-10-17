@@ -44,8 +44,12 @@ function MapKey({
   const [editing, setEditing] =
     useState(false);
 
+  const [rulesetOpen, setRulesetOpen] =
+    useState(false);
+
   const [typeMenuOpen, setTypeMenuOpen] =
     useState(false);
+
   const [parentMenuOpen, setParentMenuOpen] = useState(false);
 
   const [editTarget, setEditTarget] =
@@ -168,6 +172,37 @@ function MapKey({
     save();
   }}
 >
+      <div className="map-key-tabs">
+        <button
+          type="button"
+          className={
+            rulesetOpen
+              ? 'map-key-tab active'
+              : 'map-key-tab'
+          }
+          aria-expanded={rulesetOpen}
+          aria-controls="map-key-ruleset-panel"
+          onClick={() => {
+            setRulesetOpen(
+              (current) => !current
+            );
+          }}
+        >
+          Ruleset
+        </button>
+      </div>
+
+      {rulesetOpen && (
+        <div
+          id="map-key-ruleset-panel"
+          className="map-key-ruleset-panel"
+        >
+          <div className="map-key-ruleset-heading">
+            Map Ruleset Settings
+          </div>
+        </div>
+      )}
+
       <>
   {editing && editTarget === 'name' ? (
     <input

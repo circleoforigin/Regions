@@ -215,7 +215,24 @@ export function getDistanceSegmentsWithPaths(
 
                     if (terminalAnchor)
                     {
-                        pathLegAnchors.push(terminalAnchor);
+                        pathLegAnchors.push(
+                            terminalAnchor
+                        );
+                    }
+                    else
+                    {
+                        pathLegAnchors.push({
+                            anchor: {
+                                id: crypto.randomUUID(),
+                                kind: 'path',
+                                segmentId:
+                                    leg.segmentId,
+                                position,
+                                usePathFromPrevious:
+                                    true,
+                            },
+                            position,
+                        });
                     }
                 }
 
@@ -424,13 +441,19 @@ result.push({
               splitEnd.position,
           };
 
+const splitPathSegmentId =
+  routeLegSegmentIds[
+    splitStart.segmentIndex
+  ] ?? pathSegmentId;
+
 result.push({
   start: startAnchor,
   end: endAnchor,
   mapDistance,
   kind: 'path',
   points,
-  pathSegmentId,
+  pathSegmentId:
+    splitPathSegmentId,
 });
   }
 
