@@ -7,8 +7,19 @@ import {
 import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
 import type { MapSimulationScale } from '../models/Map';
 
+import type { ActiveRulesetInteraction } from '../rules/RulesetInteraction';
+
+import type { RulesetExtensionData } from '../models/RulesetExtensionData';
+
 interface MapKeyProps {
   mapName: string;
+
+  rulesetInteraction: ActiveRulesetInteraction | null;
+  rulesetLoading: boolean;
+  rulesetData?: RulesetExtensionData;
+  onRulesetDataChange: (
+    value: RulesetExtensionData
+  ) => void;
 
   onAssignMapImage: () => void;
   onCalibrateScale: () => void;
@@ -36,6 +47,10 @@ interface MapKeyProps {
 function MapKey({
   mapName,
 
+  rulesetInteraction,
+  rulesetLoading,
+  rulesetData,
+  onRulesetDataChange,
   onAssignMapImage,
   onCalibrateScale,
   onManageMapMediaSlots,
@@ -59,6 +74,36 @@ function MapKey({
 
   const [activeTab, setActiveTab] =
     useState<'settings' | 'ruleset' | null>(null);
+
+  const mapKeyRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    function handleOutsidePointerDown(event: PointerEvent) {
+      const target = event.target;
+
+      if (
+        target instanceof Node &&
+        mapKeyRef.current &&
+        !mapKeyRef.current.contains(target)
+      ) {
+        setActiveTab(null);
+      }
+    }
+
+    document.addEventListener(
+      'pointerdown',
+      handleOutsidePointerDown,
+      true
+    );
+
+    return () => {
+      document.removeEventListener(
+        'pointerdown',
+        handleOutsidePointerDown,
+        true
+      );
+    };
+  }, []);
 
   const rulesetOpen = activeTab === 'ruleset';
 
@@ -161,6 +206,7 @@ function MapKey({
 
   return (
     <aside
+  ref={mapKeyRef}
   className={sideClass}
   aria-label="Map key"
   onPointerDown={(event) => {

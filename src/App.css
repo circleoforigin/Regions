@@ -1165,6 +1165,21 @@
 
 /* Map Key expandable settings */
 
+.map-key::before {
+  content: '';
+  position: absolute;
+
+  top: -1px;
+  left: 0;
+  right: 0;
+
+  height: 1px;
+  background: #62666d;
+
+  pointer-events: none;
+  z-index: 1;
+}
+
 .map-key-tabs {
   position: absolute;
   bottom: 100%;

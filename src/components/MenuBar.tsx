@@ -328,43 +328,6 @@ function MenuBar({
 
             <div className="dropdown-separator" />
 
-            <button
-              type="button"
-              className="dropdown-item"
-              onClick={() => {
-                closeMenus();
-                onAssignMapImage();
-              }}
-            >
-              Assign Map Image...
-            </button>
-
-                        <button
-              type="button"
-              className="dropdown-item"
-              disabled={!mapActive}
-              onClick={() => {
-                closeMenus();
-                onCalibrateScale();
-              }}
-            >
-              Calibrate Scale...
-            </button>
-
-            <button
-              type="button"
-              className="dropdown-item"
-              disabled={
-                !mapMediaSlotsEnabled
-              }
-              onClick={() => {
-                closeMenus();
-                onManageMapMediaSlots();
-              }}
-            >
-              Map Media Slots...
-            </button>
-
             <div
               className="dropdown-submenu-host"
               onPointerEnter={() => setLayersMenuOpen(true)}

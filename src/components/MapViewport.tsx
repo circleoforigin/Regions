@@ -493,11 +493,19 @@ function MapViewport({
 }: MapViewportProps, ref) {
   const { state, dispatch } = useRegionsState();
   const {
+    interaction: mapRulesetInteraction,
+    loading: mapRulesetLoading,
+  } = useRulesetInteraction(
+    'Regions.Map'
+  );
+
+  const {
     interaction: featureRulesetInteraction,
     loading: featureRulesetLoading,
   } = useRulesetInteraction(
     'Regions.Feature'
   );
+
   const {
     interaction: areaRulesetInteraction,
     loading: areaRulesetLoading,
@@ -8201,6 +8209,13 @@ onDelete={() =>
 
     <MapKey
       mapName={mapName}
+      rulesetInteraction={mapRulesetInteraction}
+      rulesetLoading={mapRulesetLoading}
+      rulesetData={map.rulesetData}
+      onRulesetDataChange={(value) => {
+        // Persistence will be connected in the next step.
+        void value;
+      }}
       onAssignMapImage={() => onAssignMapImage?.()}
       onCalibrateScale={() => onCalibrateScale?.()}
       onManageMapMediaSlots={() => onManageMapMediaSlots?.()}
