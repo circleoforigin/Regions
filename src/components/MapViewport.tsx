@@ -6951,7 +6951,6 @@ onClick={(event) => {
           const viewport = viewportRef.current;
           const point = screenToMap(event.clientX, event.clientY);
           if (!viewport || !point) return;
-          const rect = viewport.getBoundingClientRect();
           
 if (interactionMode === 'build')
 {
