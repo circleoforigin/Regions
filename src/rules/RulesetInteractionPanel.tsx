@@ -149,6 +149,7 @@ export default function RulesetInteractionPanel({
             <label
               key={field.id}
               className="ruleset-interaction-field"
+              title={field.description || undefined}
             >
               <span className="ruleset-interaction-label">
                 {field.label}

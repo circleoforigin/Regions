@@ -79,13 +79,9 @@ import {
   constrainAreaNodeMove,
 } from '../sections/AreaDrawing';
 import { useProximityDismiss } from '../hooks/useProximityDismiss';
-import type {
-  Map as PathMap,
-} from '../models/Map';
+import type { Map as PathMap } from '../models/Map';
 
-import type {
-  PathSegment,
-} from '../models/Path';
+import type { PathSegment } from '../models/Path';
 
 import {
   savePathSegment,
@@ -256,6 +252,10 @@ mapMediaSlotsEnabled?: boolean;
 
   onMapSimulationScaleChange?: (
     scale: NonNullable<RegionMap['simulationScale']>
+  ) => void;
+
+  onMapRulesetDataChange?: (
+    rulesetData: RulesetExtensionData
   ) => void;
 
 onFocusFeatureComplete?: () => void;
@@ -484,6 +484,7 @@ function MapViewport({
   onUnlinkAreaLocation,
   onSectionError,
   onMapSimulationScaleChange,
+  onMapRulesetDataChange,
   onZoomStateChange,
   onMapMetadataChange,
   onAssignMapImage,
@@ -8213,8 +8214,7 @@ onDelete={() =>
       rulesetLoading={mapRulesetLoading}
       rulesetData={map.rulesetData}
       onRulesetDataChange={(value) => {
-        // Persistence will be connected in the next step.
-        void value;
+        onMapRulesetDataChange?.(value);
       }}
       onAssignMapImage={() => onAssignMapImage?.()}
       onCalibrateScale={() => onCalibrateScale?.()}

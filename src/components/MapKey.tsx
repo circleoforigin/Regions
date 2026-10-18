@@ -8,8 +8,17 @@ import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
 import type { MapSimulationScale } from '../models/Map';
 
 import type { ActiveRulesetInteraction } from '../rules/RulesetInteraction';
-
 import type { RulesetExtensionData } from '../models/RulesetExtensionData';
+import RulesetInteractionPanel from '../rules/RulesetInteractionPanel';
+
+function defaultCountsTowardDailyTravel(
+  scale: MapSimulationScale
+): boolean {
+  return (
+    scale === 'overworld' ||
+    scale === 'area'
+  );
+}
 
 interface MapKeyProps {
   mapName: string;
@@ -106,8 +115,21 @@ function MapKey({
   }, []);
 
   const rulesetOpen = activeTab === 'ruleset';
-
   const settingsOpen = activeTab === 'settings';
+
+  const dailyTravelDefault =
+    defaultCountsTowardDailyTravel(simulationScale);
+
+  const dailyTravelOverride =
+    rulesetData?.rulesetId === rulesetInteraction?.rulesetId &&
+    rulesetData?.schemaId === rulesetInteraction?.interaction.schemaId
+      ? rulesetData?.values.countsTowardDailyTravel
+      : undefined;
+
+  const countsTowardDailyTravel =
+    typeof dailyTravelOverride === 'boolean'
+      ? dailyTravelOverride
+      : dailyTravelDefault;
 
   const [typeMenuOpen, setTypeMenuOpen] =
     useState(false);
@@ -287,7 +309,61 @@ function MapKey({
             : 'map-key-ruleset-panel'
         }
         aria-hidden={!rulesetOpen}
-      >    
+      >
+        {rulesetLoading ? (
+          <div className="map-key-ruleset-heading">
+            Loading Ruleset...
+          </div>
+        ) : rulesetInteraction ? (
+          <RulesetInteractionPanel
+            rulesetId={rulesetInteraction.rulesetId}
+            interaction={rulesetInteraction.interaction}
+value={
+  rulesetInteraction
+    ? {
+        rulesetId: rulesetInteraction.rulesetId,
+        schemaId: rulesetInteraction.interaction.schemaId,
+        values: {
+          ...(rulesetData?.rulesetId === rulesetInteraction.rulesetId &&
+          rulesetData?.schemaId === rulesetInteraction.interaction.schemaId
+            ? rulesetData.values
+            : {}),
+          countsTowardDailyTravel,
+        },
+      }
+    : rulesetData
+}
+            onChange={onRulesetDataChange}
+          />
+          {typeof dailyTravelOverride === 'boolean' && (
+  <button
+    type="button"
+    title="Remove the override and follow the map's Simulation Scale."
+    onClick={() => {
+      if (!rulesetInteraction || !rulesetData) {
+        return;
+      }
+
+      const nextValues = {
+        ...rulesetData.values,
+      };
+
+      delete nextValues.countsTowardDailyTravel;
+
+      onRulesetDataChange({
+        ...rulesetData,
+        values: nextValues,
+      });
+    }}
+  >
+    Inherit Default
+  </button>
+)}
+        ) : (
+          <div className="map-key-ruleset-heading">
+            No Map Ruleset settings available.
+          </div>
+        )}
       </div>
 
       <div

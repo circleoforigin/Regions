@@ -4095,6 +4095,22 @@ function handleMapSimulationScaleChange(
   markProjectDirty();
 }
 
+function handleMapRulesetDataChange(
+  rulesetData: RulesetExtensionData
+) {
+  if (!activeMap) {
+    return;
+  }
+
+  setActiveMap({
+    ...activeMap,
+    rulesetData,
+    updatedAt: new Date(),
+  });
+
+  markProjectDirty();
+}
+
 function updateFeatureEverywhere(
   featureId: string,
   update: (feature: Feature) => Feature
@@ -7018,6 +7034,7 @@ mapMediaSlotsEnabled={
         locationMapMetadata={locationMapMetadata}
         onMapMetadataChange={handleMapMetadataChange}
         onMapSimulationScaleChange={handleMapSimulationScaleChange}
+        onMapRulesetDataChange={handleMapRulesetDataChange}
         onAssignMapImage={() => {
           assignMapInputRef.current?.click();
         }}
