@@ -315,6 +315,7 @@ function MapKey({
             Loading Ruleset...
           </div>
         ) : rulesetInteraction ? (
+          <>
           <RulesetInteractionPanel
             rulesetId={rulesetInteraction.rulesetId}
             interaction={rulesetInteraction.interaction}
@@ -359,6 +360,7 @@ value={
     Inherit Default
   </button>
 )}
+</>
         ) : (
           <div className="map-key-ruleset-heading">
             No Map Ruleset settings available.
