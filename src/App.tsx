@@ -53,6 +53,7 @@ import type { Feature } from './models/Feature';
 import type { PathSegment } from './models/Path';
 import type { RichTextDocument } from './models/RichText';
 import type { FeatureTypeDefinition } from './models/FeatureTypeDefinition';
+import { featureTypePresets } from './structure/FeatureTypePresets';
 import type { Piece, PieceShape, PiecePathDock } from './models/Piece';
 import type {
   Route,
@@ -4565,6 +4566,51 @@ function handleAddFeatureType(name: string): boolean {
   return true;
 }
 
+function handleAddFeatureTypePreset(
+  presetId: string
+): boolean {
+  if (!activeProject) return false;
+
+  const preset = featureTypePresets.find(
+    (item) => item.presetId === presetId
+  );
+
+  if (!preset) return false;
+
+  const alreadyIncluded =
+    activeProject.featureTypes.some(
+      (type) => type.presetId === presetId
+    );
+
+  if (
+    alreadyIncluded ||
+    featureTypeNameExists(preset.name)
+  ) {
+    return false;
+  }
+
+  const featureType: FeatureTypeDefinition = {
+    id: crypto.randomUUID(),
+    name: preset.name,
+    presetId: preset.presetId,
+    properties: preset.properties
+      ? { ...preset.properties }
+      : {},
+  };
+
+  setActiveProject({
+    ...activeProject,
+    featureTypes: [
+      ...activeProject.featureTypes,
+      featureType,
+    ],
+  });
+
+  markProjectDirty();
+
+  return true;
+}
+
 function handleRenameFeatureType(id: string, name: string): boolean {
   if (!activeProject || featureTypeNameExists(name, id)) return false;
   const current = activeProject.featureTypes.find((type) => type.id === id);
@@ -6257,13 +6303,14 @@ mapMediaSlotsEnabled={
   )}
 
 {showFeatureTypesDialog && activeProject && (
-  <FeatureTypesDialog
-    featureTypes={activeProject.featureTypes}
-    onAdd={handleAddFeatureType}
-    onRename={handleRenameFeatureType}
-    onDelete={handleDeleteFeatureType}
-    onClose={() => setShowFeatureTypesDialog(false)}
-  />
+<FeatureTypesDialog
+  featureTypes={activeProject.featureTypes}
+  onAdd={handleAddFeatureType}
+  onAddPreset={handleAddFeatureTypePreset}
+  onRename={handleRenameFeatureType}
+  onDelete={handleDeleteFeatureType}
+  onClose={() => setShowFeatureTypesDialog(false)}
+/>
 )}
 
 {showNewFeatureDialog && (
