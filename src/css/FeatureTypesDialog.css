@@ -10,6 +10,12 @@
   );
 }
 
+.feature-types-dialog .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
 .structure-dialog {
   width: min(
     680px,
