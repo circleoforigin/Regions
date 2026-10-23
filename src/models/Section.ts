@@ -1,8 +1,8 @@
 import type { Feature } from './Feature';
 import type { MediaSlotOverride } from './MediaSlot';
-import type {
-  RulesetExtensionData,
-} from './RulesetExtensionData';
+import type { RulesetExtensionData } from './RulesetExtensionData';
+import type { ExposureLevel } from './ExposureLevel';
+
 export type SectionKind = 'area' | 'zone' | 'border' | 'boundary';
 
 export interface SectionPoint {
@@ -37,6 +37,7 @@ export interface Section {
   featureTypeId?: string;
   journalPageId?: string;
   mediaSlotOverrides?: MediaSlotOverride[];
+  exposureLevel?: ExposureLevel;
   /*
   * Optional data defined by the active
   * Ruleset. Regions persists this data

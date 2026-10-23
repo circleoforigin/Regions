@@ -4096,6 +4096,25 @@ function handleMapSimulationScaleChange(
   markProjectDirty();
 }
 
+function handleMapExposureLevelChange(
+  exposureLevel: NonNullable<RegionMap['exposureLevel']>
+)
+{
+  if (!activeMap ||
+      activeMap.exposureLevel === exposureLevel)
+  {
+    return;
+  }
+
+  setActiveMap({
+    ...activeMap,
+    exposureLevel,
+    updatedAt: new Date(),
+  });
+
+  markProjectDirty();
+}
+
 function handleMapRulesetDataChange(
   rulesetData: RulesetExtensionData
 ) {

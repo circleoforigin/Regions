@@ -1,9 +1,6 @@
-import type {
-  MediaSlotOverride,
-} from './MediaSlot';
-import type {
-  RulesetExtensionData,
-} from './RulesetExtensionData';
+import type { MediaSlotOverride } from './MediaSlot';
+import type { RulesetExtensionData } from './RulesetExtensionData';
+import type { ExposureLevel } from './ExposureLevel';
 
 export type MapDistanceUnit =
   | 'feet'
@@ -58,8 +55,7 @@ export interface Map {
    */
   imageFileId?: string;
 
-  imageRegistration?:
-    MapImageRegistration;
+  imageRegistration?: MapImageRegistration;
 
   /*
    * Optional overrides for the
@@ -68,8 +64,7 @@ export interface Map {
    * A missing slot means:
    * fall back to Global.
    */
-  mediaSlotOverrides?:
-    MediaSlotOverride[];
+  mediaSlotOverrides?: MediaSlotOverride[];
 
   parentMapId?: string;
   parentLocationId?: string;
@@ -80,6 +75,8 @@ export interface Map {
 
   pathTerminalIds?: string[];
   pathSegmentIds?: string[];
+
+  exposureLevel?: ExposureLevel;
 
   /*
   * Optional data defined by the active

@@ -6,7 +6,7 @@ import {
 
 import type { FeatureTypeDefinition } from '../models/FeatureTypeDefinition';
 import type { MapSimulationScale } from '../models/Map';
-
+import type { ExposureLevel } from '../models/ExposureLevel';
 import type { ActiveRulesetInteraction } from '../rules/RulesetInteraction';
 import type { RulesetExtensionData } from '../models/RulesetExtensionData';
 import RulesetInteractionPanel from '../rules/RulesetInteractionPanel';
@@ -36,6 +36,10 @@ interface MapKeyProps {
   mapMediaSlotsEnabled: boolean;
   simulationScale: MapSimulationScale;
   onSimulationScaleChange: (scale: MapSimulationScale) => void;
+  exposureLevel: ExposureLevel;
+  onExposureLevelChange: (
+    value: ExposureLevel
+  ) => void;
   hasDistanceScale: boolean;
   mapTypeId?: string;
   featureTypes: FeatureTypeDefinition[];
@@ -66,6 +70,8 @@ function MapKey({
   mapMediaSlotsEnabled,
   simulationScale,
   onSimulationScaleChange,
+  exposureLevel,
+  onExposureLevelChange,
   hasDistanceScale,
   mapTypeId,
   featureTypes,
@@ -400,6 +406,29 @@ value={
           <option value="local">Local</option>
           <option value="special">Special</option>
         </select>
+
+        <label
+  htmlFor="map-key-exposure-level"
+  className="map-key-setting-label"
+>
+  Exposure Level
+</label>
+
+<select
+  id="map-key-exposure-level"
+  className="map-key-setting-select"
+  value={exposureLevel}
+  onChange={(event) =>
+  {
+    onExposureLevelChange(
+      Number(event.target.value) as ExposureLevel
+    );
+  }}
+>
+  <option value={0}>Fully</option>
+  <option value={1}>Partial</option>
+  <option value={2}>Protected</option>
+</select>
 
         <div className="map-key-settings-actions">
           <button
