@@ -40,6 +40,12 @@ interface MapKeyProps {
   onExposureLevelChange: (
     value: ExposureLevel
   ) => void;
+  canBurn: boolean;
+  canFlood: boolean;
+  onEnvironmentChange: (
+    property: 'canBurn' | 'canFlood',
+    value: boolean
+  ) => void;
   hasDistanceScale: boolean;
   mapTypeId?: string;
   featureTypes: FeatureTypeDefinition[];
@@ -72,6 +78,9 @@ function MapKey({
   onSimulationScaleChange,
   exposureLevel,
   onExposureLevelChange,
+  canBurn,
+  canFlood,
+  onEnvironmentChange,
   hasDistanceScale,
   mapTypeId,
   featureTypes,
@@ -429,6 +438,36 @@ value={
   <option value={1}>Partial</option>
   <option value={2}>Protected</option>
 </select>
+
+<label className="map-key-setting-label">
+  <input
+    type="checkbox"
+    checked={canBurn}
+    onChange={(event) =>
+    {
+      onEnvironmentChange(
+        'canBurn',
+        event.target.checked
+      );
+    }}
+  />
+  Can Burn
+</label>
+
+<label className="map-key-setting-label">
+  <input
+    type="checkbox"
+    checked={canFlood}
+    onChange={(event) =>
+    {
+      onEnvironmentChange(
+        'canFlood',
+        event.target.checked
+      );
+    }}
+  />
+  Can Flood
+</label>
 
         <div className="map-key-settings-actions">
           <button

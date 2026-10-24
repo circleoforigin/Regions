@@ -4115,6 +4115,26 @@ function handleMapExposureLevelChange(
   markProjectDirty();
 }
 
+function handleMapEnvironmentChange(
+  property: 'canBurn' | 'canFlood',
+  value: boolean
+)
+{
+  if (!activeMap ||
+      activeMap[property] === value)
+  {
+    return;
+  }
+
+  setActiveMap({
+    ...activeMap,
+    [property]: value,
+    updatedAt: new Date(),
+  });
+
+  markProjectDirty();
+}
+
 function handleMapRulesetDataChange(
   rulesetData: RulesetExtensionData
 ) {
@@ -7101,6 +7121,7 @@ mapMediaSlotsEnabled={
         onMapMetadataChange={handleMapMetadataChange}
         onMapSimulationScaleChange={handleMapSimulationScaleChange}
         onMapExposureLevelChange={handleMapExposureLevelChange}
+        onMapEnvironmentChange={handleMapEnvironmentChange}
         onMapRulesetDataChange={handleMapRulesetDataChange}
         onAssignMapImage={() => {
           assignMapInputRef.current?.click();

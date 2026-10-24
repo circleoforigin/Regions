@@ -246,6 +246,11 @@ mapMediaSlotsEnabled?: boolean;
     exposureLevel: ExposureLevel
   ) => void;
 
+  onMapEnvironmentChange?: (
+    property: 'canBurn' | 'canFlood',
+    value: boolean
+  ) => void;
+
   onMapRulesetDataChange?: (
     rulesetData: RulesetExtensionData
   ) => void;
@@ -477,6 +482,7 @@ function MapViewport({
   onSectionError,
   onMapSimulationScaleChange,
   onMapExposureLevelChange,
+  onMapEnvironmentChange,
   onMapRulesetDataChange,
   onZoomStateChange,
   onMapMetadataChange,
@@ -7546,42 +7552,23 @@ onDescriptionChange={(
   {activeFeaturePopupTab && (
     <div className="path-popup-extension">
 {activeFeaturePopupTab === 'settings' ? (
-    {selectedArea && (
-      <label className="ruleset-interaction-field">
-        <span className="ruleset-interaction-label">
-          Exposure Level
-        </span>
-
-        <select
-          value={selectedArea.exposureLevel ?? ''}
-          onChange={(event) =>
-          {
-            const value = event.target.value;
-
-            updateAreaIdentity(
-              selectedArea.id,
-              {
-                exposureLevel:
-                  value === ''
-                    ? undefined
-                    : Number(value) as ExposureLevel,
-              }
-            );
-          }}
-        >
-          <option value="">Inherit from Map</option>
-          <option value="0">Fully</option>
-          <option value="1">Partial</option>
-          <option value="2">Protected</option>
-        </select>
-      </label>
-    )}
-
     <SettingsPanel
     objectType={
       selectedArea
         ? 'area'
         : 'feature'
+    }
+    exposureLevel={selectedArea?.exposureLevel}
+    onExposureLevelChange={
+      selectedArea
+        ? (exposureLevel) =>
+          {
+            updateAreaIdentity(
+              selectedArea.id,
+              { exposureLevel }
+            );
+          }
+        : undefined
     }
     color={selectedArea?.color}
     onColorChange={
@@ -8245,6 +8232,15 @@ onDelete={() =>
       simulationScale={map.simulationScale ?? 'overworld'}
       onSimulationScaleChange={(scale) => {
         onMapSimulationScaleChange?.(scale);
+      }}
+      canBurn={map.canBurn ?? false}
+      canFlood={map.canFlood ?? false}
+      onEnvironmentChange={(property, value) =>
+      {
+        onMapEnvironmentChange?.(
+          property,
+          value
+        );
       }}
       exposureLevel={map.exposureLevel ?? 0}
       onExposureLevelChange={(exposureLevel) =>

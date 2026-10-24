@@ -38,6 +38,8 @@ export interface Section {
   journalPageId?: string;
   mediaSlotOverrides?: MediaSlotOverride[];
   exposureLevel?: ExposureLevel;
+  canBurn?: boolean;
+  canFlood?: boolean;
   /*
   * Optional data defined by the active
   * Ruleset. Regions persists this data

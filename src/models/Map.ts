@@ -77,6 +77,8 @@ export interface Map {
   pathSegmentIds?: string[];
 
   exposureLevel?: ExposureLevel;
+  canBurn?: boolean;
+  canFlood?: boolean;
 
   /*
   * Optional data defined by the active

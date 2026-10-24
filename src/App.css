@@ -1276,8 +1276,8 @@
 .map-key-setting-select {
   display: block;
   width: 100%;
-  padding: 2px 8px;
-
+  padding: 0px 8px;
+  height: 22px;
   box-sizing: border-box;
 
   background: #303338;
@@ -1308,10 +1308,9 @@
   padding: 0px 10px;
   background: #303338;
   color: #eeeeee;
-
+  height: 24px;
   border: 1px solid #4a4d52;
   border-radius: 4px;
-
   font: inherit;
   font-size: 12px;
   text-align: center;

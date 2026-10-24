@@ -11,3 +11,33 @@ export function resolveExposureLevel(
     map.exposureLevel ??
     0;
 }
+
+export interface ResolvedEnvironment
+{
+  exposureLevel: ExposureLevel;
+  canBurn: boolean;
+  canFlood: boolean;
+}
+
+export function resolveEnvironment(
+  map: Map,
+  area?: Section
+): ResolvedEnvironment
+{
+  return {
+    exposureLevel: resolveExposureLevel(
+      map,
+      area
+    ),
+
+    canBurn:
+      area?.canBurn ??
+      map.canBurn ??
+      false,
+
+    canFlood:
+      area?.canFlood ??
+      map.canFlood ??
+      false,
+  };
+}
