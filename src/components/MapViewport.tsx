@@ -80,36 +80,24 @@ import {
 } from '../sections/AreaDrawing';
 import { useProximityDismiss } from '../hooks/useProximityDismiss';
 import type { Map as PathMap } from '../models/Map';
-
 import type { PathSegment } from '../models/Path';
-
 import {
   savePathSegment,
   type PathNetwork,
 } from '../paths/PathNetwork';
-
-import {
-  usePathInteraction,
-} from '../paths/usePathInteraction';
-
+import { usePathInteraction } from '../paths/usePathInteraction';
 import {
   resolvePathSegments,
   resolvePathTerminal,
 } from '../paths/PathMapState';
-
 import {
-  projectPointOntoPathDock, resolvePathDockPosition
+  projectPointOntoPathDock,
+  resolvePathDockPosition,
 } from '../paths/PathGeometry';
-
-import {
-  getDistanceSegmentsWithPaths,
-} from '../interaction/distance/DistancePathRouting';
-
-import PathOverlay
-  from '../paths/PathOverlay';
-
-import PathSegmentPopup
-  from '../paths/PathSegmentPopup';
+import { getDistanceSegmentsWithPaths } from '../interaction/distance/DistancePathRouting';
+import PathOverlay from '../paths/PathOverlay';
+import PathSegmentPopup from '../paths/PathSegmentPopup';
+import type { ExposureLevel } from '../models/ExposureLevel';
 
 const OVERSCROLL_RATIO = 0.5;
 const FEATURE_MARKER_MIN_DISTANCE = 24;
@@ -252,6 +240,10 @@ mapMediaSlotsEnabled?: boolean;
 
   onMapSimulationScaleChange?: (
     scale: NonNullable<RegionMap['simulationScale']>
+  ) => void;
+
+  onMapExposureLevelChange?: (
+    exposureLevel: ExposureLevel
   ) => void;
 
   onMapRulesetDataChange?: (
@@ -484,6 +476,7 @@ function MapViewport({
   onUnlinkAreaLocation,
   onSectionError,
   onMapSimulationScaleChange,
+  onMapExposureLevelChange,
   onMapRulesetDataChange,
   onZoomStateChange,
   onMapMetadataChange,
@@ -7553,7 +7546,38 @@ onDescriptionChange={(
   {activeFeaturePopupTab && (
     <div className="path-popup-extension">
 {activeFeaturePopupTab === 'settings' ? (
-  <SettingsPanel
+    {selectedArea && (
+      <label className="ruleset-interaction-field">
+        <span className="ruleset-interaction-label">
+          Exposure Level
+        </span>
+
+        <select
+          value={selectedArea.exposureLevel ?? ''}
+          onChange={(event) =>
+          {
+            const value = event.target.value;
+
+            updateAreaIdentity(
+              selectedArea.id,
+              {
+                exposureLevel:
+                  value === ''
+                    ? undefined
+                    : Number(value) as ExposureLevel,
+              }
+            );
+          }}
+        >
+          <option value="">Inherit from Map</option>
+          <option value="0">Fully</option>
+          <option value="1">Partial</option>
+          <option value="2">Protected</option>
+        </select>
+      </label>
+    )}
+
+    <SettingsPanel
     objectType={
       selectedArea
         ? 'area'
@@ -7617,8 +7641,7 @@ onDelete={() =>
   }
 }}
   />
-) : activeFeaturePopupTab ===
-'description' ? (
+) : activeFeaturePopupTab === 'description' ? (
         <RichTextEditor
           key={selectedFeature.id}
           value={
@@ -8222,6 +8245,11 @@ onDelete={() =>
       simulationScale={map.simulationScale ?? 'overworld'}
       onSimulationScaleChange={(scale) => {
         onMapSimulationScaleChange?.(scale);
+      }}
+      exposureLevel={map.exposureLevel ?? 0}
+      onExposureLevelChange={(exposureLevel) =>
+      {
+        onMapExposureLevelChange?.(exposureLevel);
       }}
       hasDistanceScale={imageRegistration?.distanceScale !== undefined}
       mapTypeId={mapTypeId}

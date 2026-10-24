@@ -7100,6 +7100,7 @@ mapMediaSlotsEnabled={
         locationMapMetadata={locationMapMetadata}
         onMapMetadataChange={handleMapMetadataChange}
         onMapSimulationScaleChange={handleMapSimulationScaleChange}
+        onMapExposureLevelChange={handleMapExposureLevelChange}
         onMapRulesetDataChange={handleMapRulesetDataChange}
         onAssignMapImage={() => {
           assignMapInputRef.current?.click();
