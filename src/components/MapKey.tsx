@@ -439,7 +439,7 @@ value={
   <option value={2}>Protected</option>
 </select>
 
-<label className="map-key-setting-label">
+<label className="map-key-setting-checkbox">
   <input
     type="checkbox"
     checked={canBurn}
@@ -454,7 +454,7 @@ value={
   Can Burn
 </label>
 
-<label className="map-key-setting-label">
+<label className="map-key-setting-checkbox">
   <input
     type="checkbox"
     checked={canFlood}

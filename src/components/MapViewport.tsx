@@ -7570,6 +7570,19 @@ onDescriptionChange={(
           }
         : undefined
     }
+    canBurn={selectedArea?.canBurn}
+    canFlood={selectedArea?.canFlood}
+    onEnvironmentChange={
+      selectedArea
+        ? (property, value) =>
+          {
+            updateAreaIdentity(
+              selectedArea.id,
+              { [property]: value }
+            );
+          }
+        : undefined
+    }
     color={selectedArea?.color}
     onColorChange={
       selectedArea

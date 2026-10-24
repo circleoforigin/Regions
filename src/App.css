@@ -1273,6 +1273,27 @@
   font-weight: 600;
 }
 
+.map-key-environment-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 20px;
+  margin: 0;
+
+  color: #aaaaaa;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.map-key-environment-checkbox input[type='checkbox'] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
 .map-key-setting-select {
   display: block;
   width: 100%;
