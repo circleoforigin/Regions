@@ -4089,15 +4089,6 @@ function handleMapSimulationScaleChange(
     return;
   }
 
-  console.log(
-  '[Simulation Scale Change]',
-  {
-    mapId: activeMap.id,
-    previous: activeMap.simulationScale,
-    requested: scale,
-  }
-);
-
   setActiveMap({
     ...activeMap,
     simulationScale: scale,

@@ -45,7 +45,7 @@ export default function SectorGridOverlay({
   scale,
   pan,
 }: SectorGridOverlayProps)
-{
+{  
   const registeredWidth =
     imageSize.width * registration.scale;
 
@@ -168,11 +168,9 @@ export default function SectorGridOverlay({
     };
   };
 
-  const isAreaScale =
-    map.simulationScale === 'sprawl';
+  const isAreaScale =  map.simulationScale === 'sprawl';
 
-  const subdivisionSize =
-    sectorGridSize / 5;
+  const subdivisionSize = sectorGridSize / 5;
 
   return (
     <svg
@@ -206,6 +204,7 @@ export default function SectorGridOverlay({
                   fill="none"
                   stroke="rgba(255, 255, 255, 0.55)"
                   strokeWidth={1}
+                  strokeDasharray="6 6"
                 />
               );
             })}
