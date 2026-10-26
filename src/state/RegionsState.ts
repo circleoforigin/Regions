@@ -17,6 +17,7 @@ export interface RegionsLayerVisibility {
   zones: boolean;
   borders: boolean;
   boundary: boolean;
+  sectorGrid: boolean;
 }
 
 export type RegionsLayer = keyof RegionsLayerVisibility;
@@ -29,6 +30,7 @@ export const defaultLayerVisibility: RegionsLayerVisibility = {
   zones: true,
   borders: true,
   boundary: true,
+  sectorGrid: false,
 };
 
 export type RegionsEditingMode =

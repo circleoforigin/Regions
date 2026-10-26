@@ -7,9 +7,12 @@ export function resolveExposureLevel(
   area?: Section
 ): ExposureLevel
 {
-  return area?.exposureLevel ??
-    map.exposureLevel ??
-    0;
+  if (area)
+  {
+    return area.exposureLevel ?? 0;
+  }
+
+  return map.exposureLevel ?? 0;
 }
 
 export interface ResolvedEnvironment
@@ -24,20 +27,18 @@ export function resolveEnvironment(
   area?: Section
 ): ResolvedEnvironment
 {
+  if (area)
+  {
+    return {
+      exposureLevel: area.exposureLevel ?? 0,
+      canBurn: area.canBurn ?? false,
+      canFlood: area.canFlood ?? false,
+    };
+  }
+
   return {
-    exposureLevel: resolveExposureLevel(
-      map,
-      area
-    ),
-
-    canBurn:
-      area?.canBurn ??
-      map.canBurn ??
-      false,
-
-    canFlood:
-      area?.canFlood ??
-      map.canFlood ??
-      false,
+    exposureLevel: map.exposureLevel ?? 0,
+    canBurn: map.canBurn ?? false,
+    canFlood: map.canFlood ?? false,
   };
 }

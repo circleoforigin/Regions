@@ -21,6 +21,7 @@ const LAYER_OPTIONS: { id: RegionsLayer; label: string }[] = [
   { id: 'zones', label: 'Zones' },
   { id: 'borders', label: 'Borders' },
   { id: 'boundary', label: 'Boundary' },
+  { id: 'sectorGrid', label: 'Sector Grid' },
 ];
 
 interface MenuBarProps {

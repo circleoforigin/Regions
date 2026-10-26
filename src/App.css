@@ -1257,7 +1257,7 @@
 
 .map-key-right .map-key-ruleset-panel {
   left: auto;
-  right: -1px;
+  right: auto;
 }
 
 .map-key-ruleset-heading {
@@ -1266,17 +1266,18 @@
 }
 
 .map-key-setting-label {
-  display: block;
+  display: flex;
   margin-top: 0px;
   color: #aaaaaa;
   font-size: 11px;
   font-weight: 600;
 }
 
-.map-key-environment-checkbox {
+.map-key-setting-checkbox {
   display: flex;
+  flex-direction: row-reverse;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
 
   width: 100%;
   box-sizing: border-box;
@@ -1289,7 +1290,22 @@
   cursor: pointer;
 }
 
-.map-key-environment-checkbox input[type='checkbox'] {
+.map-key-setting-checkbox input[type='checkbox'] {
+  margin: 0;
+  flex-shrink: 0;
+}/* Keep Ruleset checkboxes beside their labels */
+
+.map-key-ruleset-panel
+.ruleset-interaction-field:has(input[type='checkbox']) {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.map-key-ruleset-panel
+.ruleset-interaction-field input[type='checkbox'] {
   margin: 0;
   flex-shrink: 0;
 }
@@ -1321,12 +1337,12 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  margin-top: 16px;
+  margin-top: 2px;
 }
 
 .map-key-settings-actions button {
   width: 100%;
-  padding: 0px 10px;
+  padding: 0px 0px;
   background: #303338;
   color: #eeeeee;
   height: 24px;
@@ -3701,4 +3717,31 @@ box-shadow:
 
 .ruleset-interaction-field input[type='checkbox'] {
   justify-self: start;
+}
+
+/* Consistent Map-key tab layout */
+
+.map-key-ruleset-panel .ruleset-interaction-panel {
+  padding: 0;
+  width: 100%;
+}
+
+.map-key-ruleset-panel .ruleset-interaction-field {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.map-key-ruleset-panel .ruleset-interaction-field select,
+.map-key-ruleset-panel .ruleset-interaction-field input[type='number'],
+.map-key-ruleset-panel .ruleset-interaction-field input[type='text'] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sector-grid-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
 }

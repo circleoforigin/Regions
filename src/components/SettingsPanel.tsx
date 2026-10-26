@@ -7,13 +7,13 @@ interface SettingsPanelProps
   onColorChange?: (color: string) => void;
   exposureLevel?: ExposureLevel;
   onExposureLevelChange?: (
-    value: ExposureLevel | undefined
+    value: ExposureLevel
   ) => void;
   canBurn?: boolean;
   canFlood?: boolean;
   onEnvironmentChange?: (
     property: 'canBurn' | 'canFlood',
-    value: boolean | undefined
+    value: boolean
   ) => void;
   onDelete?: () => void;
   showLabel?: boolean;
@@ -50,23 +50,18 @@ export default function SettingsPanel({
     </span>
 
     <select
-      value={exposureLevel ?? ''}
-      onChange={(event) =>
-      {
-        const value = event.target.value;
-
-        onExposureLevelChange(
-          value === ''
-            ? undefined
-            : Number(value) as ExposureLevel
-        );
-      }}
-    >
-      <option value="">Inherit from Map</option>
-      <option value="0">Fully</option>
-      <option value="1">Partial</option>
-      <option value="2">Protected</option>
-    </select>
+  value={exposureLevel ?? 0}
+  onChange={(event) =>
+  {
+    onExposureLevelChange(
+      Number(event.target.value) as ExposureLevel
+    );
+  }}
+>
+  <option value={0}>Fully</option>
+  <option value={1}>Partial</option>
+  <option value={2}>Protected</option>
+</select>
   </label>
 )}
 {objectType === 'area' && onEnvironmentChange && (
@@ -85,30 +80,17 @@ export default function SettingsPanel({
           {label}
         </span>
 
-        <select
-          value={
-            value === undefined
-              ? 'inherit'
-              : String(value)
-          }
+        <input
+          type="checkbox"
+          checked={value ?? false}
           onChange={(event) =>
           {
-            const selection = event.target.value;
-
             onEnvironmentChange(
               property,
-              selection === 'inherit'
-                ? undefined
-                : selection === 'true'
+              event.target.checked
             );
           }}
-        >
-          <option value="inherit">
-            Inherit from Map
-          </option>
-          <option value="true">Yes</option>
-          <option value="false">No</option>
-        </select>
+        />
       </label>
     ))}
   </>

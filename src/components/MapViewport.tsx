@@ -30,6 +30,7 @@ import { useRulesetInteraction } from '../rules/useRulesetInteraction';
 import { convertMapDistance } from '../interaction/distance/DistanceMeasurement';
 import {
   findSectorCrossings,
+  getSectorSizeInMapUnits,
   OVERWORLD_SECTOR_RESOLUTION,
 } from '../spatial/Sector';
 import { resolveSpatialContext } from '../spatial/SpatialContextResolver';
@@ -1290,9 +1291,22 @@ const selectedFeatureSecondaryActions =
     height: 480,
   });
 
-    const registeredWidth = imageSize.width * registration.scale;
+  const registeredWidth = imageSize.width * registration.scale;
+  const registeredHeight = imageSize.height * registration.scale;
 
-    const registeredHeight = imageSize.height * registration.scale;
+  const sectorSizeInMapUnits =
+    map.simulationScale === 'overworld' &&
+      registration.distanceScale
+        ? getSectorSizeInMapUnits(
+            registration.distanceScale,
+            OVERWORLD_SECTOR_RESOLUTION
+          )
+        : null;
+
+  const sectorGridSize =
+    sectorSizeInMapUnits !== null
+      ? sectorSizeInMapUnits * scale
+      : null;
 
   const minScale =
     imageSize.width > 0 &&
@@ -5912,7 +5926,7 @@ function saveSectionProperties() {
   />
 )}
       
-      <img
+<img
   className="map-viewport-image"
   src={imageUrl}
   alt={mapName}
@@ -5939,6 +5953,52 @@ function saveSectionProperties() {
     `translate(-50%, -50%) scale(${scale * registration.scale})`,
 }}
 />
+
+{layerVisibility.sectorGrid &&
+  sectorGridSize !== null &&
+  Number.isFinite(sectorGridSize) &&
+  sectorGridSize > 0 &&
+  registeredWidth > 0 &&
+  registeredHeight > 0 && (
+    <svg
+      className="sector-grid-overlay"
+      width={viewportSize.width}
+      height={viewportSize.height}
+      aria-hidden="true"
+    >
+      <defs>
+        <pattern
+          id="sector-grid-pattern"
+          patternUnits="userSpaceOnUse"
+          x={mapToScreen(0, 0).x}
+          y={mapToScreen(0, 0).y}
+          width={sectorGridSize}
+          height={sectorGridSize}
+        >
+          <path
+            d={`M ${sectorGridSize} 0 H 0 V ${sectorGridSize}`}
+            fill="none"
+            stroke="rgba(255, 255, 255, 0.55)"
+            strokeWidth={1}
+          />
+        </pattern>
+      </defs>
+
+      <rect
+        x={mapToScreen(
+          registration.offsetX - registeredWidth / 2,
+          0
+        ).x}
+        y={mapToScreen(
+          0,
+          registration.offsetY - registeredHeight / 2
+        ).y}
+        width={registeredWidth * scale}
+        height={registeredHeight * scale}
+        fill="url(#sector-grid-pattern)"
+      />
+    </svg>
+  )}
 
 {calibrationActive && (
   <svg

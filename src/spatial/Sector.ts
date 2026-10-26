@@ -15,7 +15,7 @@ export interface SectorResolution
 }
 
 export const OVERWORLD_SECTOR_RESOLUTION: SectorResolution = {
-  size: 10,
+  size: 5,
   unit: 'miles',
 };
 
