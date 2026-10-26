@@ -117,7 +117,13 @@ export function resolveWorldPositionFrames(
         true
       );
     }
-    else if (map.simulationScale === 'local')
+    else if (
+      map.parentLocationId &&
+      (
+        map.simulationScale === 'area' ||
+        map.simulationScale === 'local'
+      )
+    )
     {
       if (!map.parentLocationId) return null;
 

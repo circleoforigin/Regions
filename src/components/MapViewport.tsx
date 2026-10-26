@@ -1299,7 +1299,10 @@ const selectedFeatureSecondaryActions =
   const sectorSizeInMapUnits =
     (map.simulationScale === 'overworld' ||
       (
-        map.simulationScale === 'local' &&
+        (
+          map.simulationScale === 'area' ||
+          map.simulationScale === 'local'
+        ) &&
         !map.areaBoundaryLink &&
         Boolean(map.parentLocationId)
       )) &&
@@ -1316,7 +1319,10 @@ const selectedFeatureSecondaryActions =
       : null;
 
   const imageCenterWorldPosition =
-    map.simulationScale === 'local' &&
+    (
+      map.simulationScale === 'area' ||
+      map.simulationScale === 'local'
+    ) &&
     !map.areaBoundaryLink &&
     map.parentLocationId
       ? resolveWorldPosition(
