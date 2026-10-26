@@ -48,7 +48,7 @@ import type {
 } from './components/MapViewport';
 import FeatureTypesDialog from './components/FeatureTypesDialog';
 import type { Project } from './models/Project';
-import type { Map as RegionMap } from './models/Map';
+import { normalizeMapSimulationScale, type Map as RegionMap } from './models/Map';
 import type { Feature } from './models/Feature';
 import type { PathSegment } from './models/Path';
 import type { RichTextDocument } from './models/RichText';
@@ -1612,7 +1612,9 @@ function normalizeMap(map: RegionMap): RegionMap {
     ...map,
     featureIds,
     sectionIds,
-    simulationScale: map.simulationScale ?? 'overworld',
+    simulationScale: normalizeMapSimulationScale(
+      map.simulationScale
+    ),
   };
 
   delete (normalized as RegionMap & { features?: Feature[] }).features;
@@ -4087,6 +4089,15 @@ function handleMapSimulationScaleChange(
     return;
   }
 
+  console.log(
+  '[Simulation Scale Change]',
+  {
+    mapId: activeMap.id,
+    previous: activeMap.simulationScale,
+    requested: scale,
+  }
+);
+
   setActiveMap({
     ...activeMap,
     simulationScale: scale,
@@ -4195,7 +4206,7 @@ function linkAreaLocation(area: Section, destination: RegionMap, isNew: boolean)
   const pivotX = (Math.min(...polygon.map((point) => point.x)) + Math.max(...polygon.map((point) => point.x))) / 2;
   const pivotY = (Math.min(...polygon.map((point) => point.y)) + Math.max(...polygon.map((point) => point.y))) / 2;
   const child: RegionMap = { ...destination, parentMapId: activeMap.id,
-    simulationScale: 'area', updatedAt: new Date(),
+    simulationScale: 'sprawl', updatedAt: new Date(),
     areaBoundaryLink: { areaId: area.id,
       alignment: { rotation: 0, zoom: 100, width: 100, height: 100, x: 0, y: 0, pivotX, pivotY } } };
   setPendingMaps((current) => [...current.filter((map) => map.id !== child.id), child]);

@@ -120,7 +120,7 @@ export function resolveWorldPositionFrames(
     else if (
       map.parentLocationId &&
       (
-        map.simulationScale === 'area' ||
+        map.simulationScale === 'sprawl' ||
         map.simulationScale === 'local'
       )
     )

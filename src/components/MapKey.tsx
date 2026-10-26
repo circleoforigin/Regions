@@ -16,7 +16,7 @@ function defaultCountsTowardDailyTravel(
 ): boolean {
   return (
     scale === 'overworld' ||
-    scale === 'area'
+    scale === 'sprawl'
   );
 }
 
@@ -411,7 +411,7 @@ value={
           }}
         >
           <option value="overworld">Overworld</option>
-          <option value="area">Area</option>
+          <option value="sprawl">Sprawl</option>
           <option value="local">Local</option>
           <option value="special">Special</option>
         </select>

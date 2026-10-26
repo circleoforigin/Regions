@@ -8,11 +8,23 @@ export type MapDistanceUnit =
   | 'meters'
   | 'kilometers';
 
-  export type MapSimulationScale =
+export type MapSimulationScale =
   | 'overworld'
-  | 'area'
+  | 'sprawl'
   | 'local'
   | 'special';
+
+export function normalizeMapSimulationScale(
+  scale: MapSimulationScale | 'area' | undefined
+): MapSimulationScale
+{
+  if (scale === 'area')
+  {
+    return 'sprawl';
+  }
+
+  return scale ?? 'overworld';
+}
 
 export interface MapImageRegistration {
   scale: number;

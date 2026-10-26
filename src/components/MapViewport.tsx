@@ -30,9 +30,9 @@ import { useRulesetInteraction } from '../rules/useRulesetInteraction';
 import { convertMapDistance } from '../interaction/distance/DistanceMeasurement';
 import {
   findSectorCrossings,
-  getSectorSizeInMapUnits,
   OVERWORLD_SECTOR_RESOLUTION,
 } from '../spatial/Sector';
+import SectorGridOverlay from './overlays/SectorGridOverlay';
 import { resolveSpatialContext } from '../spatial/SpatialContextResolver';
 import { resolveWorldPosition } from '../spatial/WorldPositionResolver';
 import {
@@ -1295,87 +1295,6 @@ const selectedFeatureSecondaryActions =
 
   const registeredWidth = imageSize.width * registration.scale;
   const registeredHeight = imageSize.height * registration.scale;
-
-  const sectorSizeInMapUnits =
-    (map.simulationScale === 'overworld' ||
-      (
-        (
-          map.simulationScale === 'area' ||
-          map.simulationScale === 'local'
-        ) &&
-        !map.areaBoundaryLink &&
-        Boolean(map.parentLocationId)
-      )) &&
-    registration.distanceScale
-      ? getSectorSizeInMapUnits(
-          registration.distanceScale,
-          OVERWORLD_SECTOR_RESOLUTION
-        )
-      : null;
-
-  const sectorGridSize =
-    sectorSizeInMapUnits !== null
-      ? sectorSizeInMapUnits * scale
-      : null;
-
-  const imageCenterWorldPosition =
-    (
-      map.simulationScale === 'area' ||
-      map.simulationScale === 'local'
-    ) &&
-    !map.areaBoundaryLink &&
-    map.parentLocationId
-      ? resolveWorldPosition(
-          map.id,
-          {
-            x: registration.offsetX,
-            y: registration.offsetY,
-          },
-          projectMaps,
-          projectFeatures
-        )
-      : null;
-
-  const rootMap =
-    imageCenterWorldPosition
-      ? projectMaps.find(
-          (candidate) =>
-            candidate.id ===
-            imageCenterWorldPosition.mapId
-        )
-      : null;
-
-  const rootSectorSize =
-    rootMap?.imageRegistration?.distanceScale
-      ? getSectorSizeInMapUnits(
-          rootMap.imageRegistration.distanceScale,
-          OVERWORLD_SECTOR_RESOLUTION
-        )
-      : null;
-
-  const sectorGridOrigin =
-    map.simulationScale === 'overworld'
-      ? { x: 0, y: 0 }
-      : (
-          imageCenterWorldPosition &&
-          rootSectorSize !== null &&
-          sectorSizeInMapUnits !== null
-        )
-        ? {
-            x:
-              registration.offsetX -
-              (
-                imageCenterWorldPosition.x /
-                rootSectorSize
-              ) * sectorSizeInMapUnits,
-            y:
-              registration.offsetY -
-              (
-                imageCenterWorldPosition.y /
-                rootSectorSize
-              ) * sectorSizeInMapUnits,
-          }
-        : null;
 
   const minScale =
     imageSize.width > 0 &&
@@ -6023,62 +5942,18 @@ function saveSectionProperties() {
 }}
 />
 
-{layerVisibility.sectorGrid &&
-  sectorGridOrigin !== null &&
-  sectorGridSize !== null &&
-  Number.isFinite(sectorGridSize) &&
-  sectorGridSize > 0 &&
-  registeredWidth > 0 &&
-  registeredHeight > 0 && (
-    <svg
-      className="sector-grid-overlay"
-      width={viewportSize.width}
-      height={viewportSize.height}
-      aria-hidden="true"
-    >
-      <defs>
-        <pattern
-          id="sector-grid-pattern"
-          patternUnits="userSpaceOnUse"
-                    x={
-            mapToScreen(
-              sectorGridOrigin?.x ?? 0,
-              0
-            ).x
-          }
-          y={
-            mapToScreen(
-              0,
-              sectorGridOrigin?.y ?? 0
-            ).y
-          }
-          width={sectorGridSize}
-          height={sectorGridSize}
-        >
-          <path
-            d={`M ${sectorGridSize} 0 H 0 V ${sectorGridSize}`}
-            fill="none"
-            stroke="rgba(255, 255, 255, 0.55)"
-            strokeWidth={1}
-          />
-        </pattern>
-      </defs>
-
-      <rect
-        x={mapToScreen(
-          registration.offsetX - registeredWidth / 2,
-          0
-        ).x}
-        y={mapToScreen(
-          0,
-          registration.offsetY - registeredHeight / 2
-        ).y}
-        width={registeredWidth * scale}
-        height={registeredHeight * scale}
-        fill="url(#sector-grid-pattern)"
-      />
-    </svg>
-  )}
+{layerVisibility.sectorGrid && (
+  <SectorGridOverlay
+    map={map}
+    projectMaps={projectMaps}
+    projectFeatures={projectFeatures}
+    registration={registration}
+    imageSize={imageSize}
+    viewportSize={viewportSize}
+    scale={scale}
+    pan={pan}
+  />
+)}
 
 {calibrationActive && (
   <svg
