@@ -7068,6 +7068,13 @@ mapMediaSlotsEnabled={
         imageUrl={activeMapImageUrl}
         mapId={activeMap.id}
         map={activeMap}
+                projectMaps={[
+          ...projectMaps.filter(
+            (candidate) =>
+              candidate.id !== activeMap.id
+          ),
+          activeMap,
+        ]}
         mapName={activeMap.name}
         mapTypeId={activeMap.featureTypeId}
         parentMapName={parentMapName}
