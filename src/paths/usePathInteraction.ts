@@ -18,6 +18,7 @@ import {
 } from './PathGeometry';
 import { resolvePathSegment } from './PathMapState';
 import {
+  deleteOrphanPathTerminal,
   deletePathSegment,
   deletePathShapePoint,
   movePathTerminal,
@@ -591,6 +592,42 @@ export function usePathInteraction({
       ]
     );
 
+  const removeOrphanTerminal =
+  useCallback(
+    async (terminalId: string) =>
+    {
+      if (!active)
+      {
+        return;
+      }
+
+      await onMapChange(
+        async (map) =>
+        {
+          const result =
+            await deleteOrphanPathTerminal(
+              map,
+              terminalId,
+              network
+            );
+
+          if (result.deleted)
+          {
+            onNetworkChange(result.network);
+          }
+
+          return result.map;
+        }
+      );
+    },
+    [
+      active,
+      network,
+      onMapChange,
+      onNetworkChange,
+    ]
+  );
+
   const beginTerminalMove =
     useCallback(
       (
@@ -749,6 +786,7 @@ export function usePathInteraction({
 
     removeShapePoint,
     removeSegment,
+    removeOrphanTerminal,
 
     beginTerminalMove,
     commitTerminalMove,

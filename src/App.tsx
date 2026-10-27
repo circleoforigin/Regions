@@ -91,6 +91,7 @@ import {
 import { useInteractionMode } from './interaction/useInteractionMode';
 import { featureRepository } from './features/FeatureRepository';
 import {
+  detachFeatureFromPathNetwork,
   loadPathNetwork,
   promotePathTerminalToFeature,
   savePathSegment,
@@ -4720,6 +4721,38 @@ async function handleDeleteFeature(
     !feature.targetMapId ||
     !feature.targetFeatureId
   ) {
+        let updatedMap = activeMap;
+
+    try
+    {
+      const result =
+        await detachFeatureFromPathNetwork(
+          activeMap,
+          feature,
+          activePathNetwork
+        );
+
+      updatedMap = result.map;
+
+      setActivePathNetwork(
+        result.network
+      );
+    }
+    catch (error)
+    {
+      console.error(
+        'Unable to detach Feature from Paths:',
+        error
+      );
+
+      setNavigationError(
+        'Unable to preserve attached Paths. ' +
+        'The Feature was not deleted.'
+      );
+
+      return;
+    }
+    
     if (feature.type === 'location') {
       clearParentLocationReferences(new Set([feature.id]));
     }
@@ -4730,15 +4763,15 @@ async function handleDeleteFeature(
       )
     );
 
-    setActiveMap({
-      ...activeMap,
-      featureIds:
-        activeMap.featureIds.filter(
-          (featureId) =>
-            featureId !== feature.id
-        ),
-      updatedAt: now,
-    });
+setActiveMap({
+  ...updatedMap,
+  featureIds:
+    updatedMap.featureIds.filter(
+      (featureId) =>
+        featureId !== feature.id
+    ),
+  updatedAt: now,
+});
 
     setPendingFeatureDeletionIds(
       (current) => {

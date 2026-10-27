@@ -546,6 +546,44 @@ function MapViewport({
       onMapChange:
         onPathMapChange,
     });
+
+  const brokenPathSegments =
+  pathNetwork.segments
+    .map((segment) =>
+    {
+      const start =
+        resolvePathTerminal(
+          segment.start,
+          pathNetwork.terminals,
+          features
+        );
+
+      const end =
+        resolvePathTerminal(
+          segment.end,
+          pathNetwork.terminals,
+          features
+        );
+
+      if (start && end)
+      {
+        return null;
+      }
+
+      return {
+        segment,
+        missingStart: !start,
+        missingEnd: !end,
+      };
+    })
+    .filter(
+      (entry): entry is {
+        segment: PathSegment;
+        missingStart: boolean;
+        missingEnd: boolean;
+      } => entry !== null
+    );
+
   const distanceMeasurement = useDistanceMeasurement();
   const [
     routePieceId,
@@ -5514,6 +5552,43 @@ function handlePathTerminalPointerDown(
     return;
   }
 
+  if (event.shiftKey)
+{
+  event.preventDefault();
+  event.stopPropagation();
+
+  const isAttached =
+    pathNetwork.segments.some((segment) =>
+    {
+      return (
+        (
+          segment.start.kind === 'standalone' &&
+          segment.start.terminalId === terminalId
+        ) ||
+        (
+          segment.end.kind === 'standalone' &&
+          segment.end.terminalId === terminalId
+        )
+      );
+    });
+
+  if (isAttached)
+  {
+    window.alert(
+      'This Terminal is attached to a Path ' +
+      'and cannot be deleted.'
+    );
+
+    return;
+  }
+
+  void pathInteraction.removeOrphanTerminal(
+    terminalId
+  );
+
+  return;
+}
+
   event.preventDefault();
   event.stopPropagation();
 
@@ -6051,6 +6126,88 @@ function saveSectionProperties() {
     })}
     </svg>
 )}
+
+{interactionMode === 'path' &&
+  brokenPathSegments.length > 0 && (
+    <div
+      style={{
+        position: 'absolute',
+        right: 16,
+        bottom: 16,
+        zIndex: 1000,
+        width: 280,
+        maxHeight: '40vh',
+        overflowY: 'auto',
+        padding: 12,
+        background: '#20242b',
+        color: '#ffffff',
+        border: '1px solid #555',
+        borderRadius: 8,
+      }}
+      onPointerDown={(event) =>
+        event.stopPropagation()
+      }
+    >
+      <strong>
+        Broken Paths ({brokenPathSegments.length})
+      </strong>
+
+      <p style={{ fontSize: 12 }}>
+        These Paths reference missing endpoints.
+      </p>
+
+      {brokenPathSegments.map(
+        ({
+          segment,
+          missingStart,
+          missingEnd,
+        }) => (
+          <div
+            key={segment.id}
+            style={{
+              padding: '8px 0',
+              borderTop: '1px solid #555',
+            }}
+          >
+            <div>
+              {segment.name || segment.type}
+            </div>
+
+            <small>
+              {missingStart && missingEnd
+                ? 'Both endpoints missing'
+                : missingStart
+                  ? 'Start endpoint missing'
+                  : 'End endpoint missing'}
+            </small>
+
+            <div>
+              <button
+                type="button"
+                onClick={() =>
+                {
+                  if (
+                    !window.confirm(
+                      `Permanently delete broken Path "${segment.name || segment.type}"?`
+                    )
+                  )
+                  {
+                    return;
+                  }
+
+                  void pathInteraction.removeSegment(
+                    segment.id
+                  );
+                }}
+              >
+                Delete Path
+              </button>
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  )}
 
 {pathTerminalContextMenu && (
   <div
@@ -6968,19 +7125,7 @@ onClick={(event) => {
           
 if (interactionMode === 'build')
 {
-  const objectType =
-    feature.type === 'location'
-      ? 'Location'
-      : 'Feature';
-
-  if (
-    window.confirm(
-      `Delete ${objectType} "${feature.name}"?`
-    )
-  )
-  {
-    onDeleteFeature?.(feature);
-  }
+  onDeleteFeature?.(feature); 
 
   return;
 }

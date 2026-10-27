@@ -6,7 +6,7 @@ import type {
   PathSegment,
   StandalonePathTerminal,
 } from '../models/Path';
-
+import type { Feature } from '../models/Feature';
 import {
   pathSegmentRepository,
 } from './PathSegmentRepository';
@@ -240,6 +240,170 @@ export async function deletePathSegment(
     },
 
     deletedTerminalIds,
+  };
+}
+
+export async function detachFeatureFromPathNetwork(
+  map: Map,
+  feature: Feature,
+  network: PathNetwork
+): Promise<{
+  map: Map;
+  network: PathNetwork;
+}>
+{
+  const connectedSegments =
+    network.segments.filter((segment) =>
+    {
+      return (
+        (
+          segment.start.kind === 'feature' &&
+          segment.start.featureId === feature.id
+        ) ||
+        (
+          segment.end.kind === 'feature' &&
+          segment.end.featureId === feature.id
+        )
+      );
+    });
+
+  if (connectedSegments.length === 0)
+  {
+    return { map, network };
+  }
+
+  const now = new Date();
+
+  const terminal: StandalonePathTerminal = {
+    id: crypto.randomUUID(),
+    mapId: map.id,
+    position: { ...feature.position },
+  };
+
+  const replaceReference = (
+    reference: PathSegment['start']
+  ): PathSegment['start'] =>
+  {
+    if (
+      reference.kind === 'feature' &&
+      reference.featureId === feature.id
+    )
+    {
+      return {
+        kind: 'standalone',
+        terminalId: terminal.id,
+      };
+    }
+
+    return reference;
+  };
+
+  const updatedSegments =
+    network.segments.map((segment) =>
+    {
+      if (!connectedSegments.includes(segment))
+      {
+        return segment;
+      }
+
+      return {
+        ...segment,
+        start: replaceReference(segment.start),
+        end: replaceReference(segment.end),
+        updatedAt: now,
+      };
+    });
+
+  // Persist the Terminal before redirecting Path references.
+  await pathTerminalRepository.saveTerminal(terminal);
+
+  await Promise.all(
+    updatedSegments
+      .filter((segment) =>
+        connectedSegments.some(
+          (connected) => connected.id === segment.id
+        )
+      )
+      .map((segment) =>
+        pathSegmentRepository.saveSegment(segment)
+      )
+  );
+
+  return {
+    map: {
+      ...map,
+      pathTerminalIds: [
+        ...(map.pathTerminalIds ?? []),
+        terminal.id,
+      ],
+      updatedAt: now,
+    },
+
+    network: {
+      terminals: [
+        ...network.terminals,
+        terminal,
+      ],
+      segments: updatedSegments,
+    },
+  };
+}
+
+export async function deleteOrphanPathTerminal(
+  map: Map,
+  terminalId: string,
+  network: PathNetwork
+): Promise<{
+  map: Map;
+  network: PathNetwork;
+  deleted: boolean;
+}>
+{
+  const terminal = network.terminals.find(
+    (candidate) => candidate.id === terminalId
+  );
+
+  if (!terminal)
+  {
+    return { map, network, deleted: false };
+  }
+
+  const isAttached = network.segments.some((segment) =>
+  {
+    return (
+      (
+        segment.start.kind === 'standalone' &&
+        segment.start.terminalId === terminalId
+      ) ||
+      (
+        segment.end.kind === 'standalone' &&
+        segment.end.terminalId === terminalId
+      )
+    );
+  });
+
+  if (isAttached)
+  {
+    return { map, network, deleted: false };
+  }
+
+  await pathTerminalRepository.deleteTerminal(terminalId);
+
+  return {
+    map: {
+      ...map,
+      pathTerminalIds: (map.pathTerminalIds ?? []).filter(
+        (id) => id !== terminalId
+      ),
+      updatedAt: new Date(),
+    },
+    network: {
+      ...network,
+      terminals: network.terminals.filter(
+        (candidate) => candidate.id !== terminalId
+      ),
+    },
+    deleted: true,
   };
 }
 

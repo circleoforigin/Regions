@@ -9,6 +9,7 @@ import {
 } from '../../spatial/Sector';
 import {
   resolveWorldPosition,
+  resolveWorldPointOnMap,
 } from '../../spatial/WorldPositionResolver';
 
 interface Point
@@ -46,11 +47,303 @@ export default function SectorGridOverlay({
   pan,
 }: SectorGridOverlayProps)
 {  
-  const registeredWidth =
-    imageSize.width * registration.scale;
+  const registeredWidth = imageSize.width * registration.scale;
+  const registeredHeight = imageSize.height * registration.scale;
 
-  const registeredHeight =
-    imageSize.height * registration.scale;
+  const isAreaLinkedMap =
+    Boolean(map.areaBoundaryLink) &&
+    Boolean(map.parentMapId) &&
+    (
+        map.simulationScale === 'sprawl' ||
+        map.simulationScale === 'local'
+    );
+
+  if (isAreaLinkedMap)
+  {
+  console.log('Area-linked grid entered', {
+  map: map.name,
+  parentMapId: map.parentMapId,
+  areaBoundaryLink: map.areaBoundaryLink,
+});
+
+  const centerWorld = resolveWorldPosition(
+    map.id,
+    {
+      x: registration.offsetX,
+      y: registration.offsetY,
+    },
+    projectMaps,
+    projectFeatures
+  );
+
+  const rootMap = centerWorld
+    ? projectMaps.find(
+        (candidate) =>
+          candidate.id === centerWorld.mapId
+      )
+    : null;
+
+  const rootDistanceScale =
+    rootMap?.imageRegistration?.distanceScale;
+
+  const rootSectorSize = rootDistanceScale
+    ? getSectorSizeInMapUnits(
+        rootDistanceScale,
+        OVERWORLD_SECTOR_RESOLUTION
+      )
+    : null;
+
+  if (
+    !centerWorld ||
+    !rootMap ||
+    !rootSectorSize ||
+    !Number.isFinite(rootSectorSize) ||
+    rootSectorSize <= 0 ||
+    registeredWidth <= 0 ||
+    registeredHeight <= 0
+  )
+  {
+    return null;
+  }
+
+  const halfWidth = registeredWidth / 2;
+  const halfHeight = registeredHeight / 2;
+
+  const imageCorners = [
+    {
+      x: registration.offsetX - halfWidth,
+      y: registration.offsetY - halfHeight,
+    },
+    {
+      x: registration.offsetX + halfWidth,
+      y: registration.offsetY - halfHeight,
+    },
+    {
+      x: registration.offsetX + halfWidth,
+      y: registration.offsetY + halfHeight,
+    },
+    {
+      x: registration.offsetX - halfWidth,
+      y: registration.offsetY + halfHeight,
+    },
+  ];
+
+  const worldCorners = imageCorners.map(
+    (corner) =>
+      resolveWorldPosition(
+        map.id,
+        corner,
+        projectMaps,
+        projectFeatures
+      )
+  );
+
+  if (worldCorners.some((corner) => !corner))
+  {
+    return null;
+  }
+
+  const worldXs = worldCorners.map(
+    (corner) => corner!.x
+  );
+
+  const worldYs = worldCorners.map(
+    (corner) => corner!.y
+  );
+
+  const minimumX = Math.min(...worldXs);
+  const maximumX = Math.max(...worldXs);
+  const minimumY = Math.min(...worldYs);
+  const maximumY = Math.max(...worldYs);
+
+  const mapToScreen = (point: Point): Point =>
+  {
+    return {
+      x:
+        viewportSize.width / 2 +
+        pan.x +
+        point.x * scale,
+      y:
+        viewportSize.height / 2 +
+        pan.y +
+        point.y * scale,
+    };
+  };
+
+  const worldToScreen = (
+    x: number,
+    y: number
+  ): Point | null =>
+  {
+    const local = resolveWorldPointOnMap(
+      rootMap.id,
+      { x, y },
+      map.id,
+      projectMaps,
+      projectFeatures
+    );
+
+    return local
+      ? mapToScreen(local)
+      : null;
+  };
+
+  const gridLines: {
+    start: Point;
+    end: Point;
+    major: boolean;
+  }[] = [];
+
+const sectorStart = worldToScreen(
+  centerWorld.x,
+  centerWorld.y
+);
+
+const sectorEnd = worldToScreen(
+  centerWorld.x + rootSectorSize,
+  centerWorld.y
+);
+
+const sectorScreenWidth =
+  sectorStart && sectorEnd
+    ? Math.hypot(
+        sectorEnd.x - sectorStart.x,
+        sectorEnd.y - sectorStart.y
+      )
+    : 0;
+
+const showSubdivisions =
+  map.simulationScale === 'sprawl' &&
+  sectorScreenWidth >= 100;
+
+const subdivisionCount =
+  showSubdivisions ? 5 : 1;
+
+  const gridStep =
+    rootSectorSize / subdivisionCount;
+
+  const appendLine = (
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    major: boolean
+  ) =>
+  {
+    const start = worldToScreen(x1, y1);
+    const end = worldToScreen(x2, y2);
+
+    if (!start || !end)
+    {
+      return;
+    }
+
+    gridLines.push({
+      start,
+      end,
+      major,
+    });
+  };
+
+  const firstX =
+    Math.floor(minimumX / gridStep);
+
+  const lastX =
+    Math.ceil(maximumX / gridStep);
+
+  const firstY =
+    Math.floor(minimumY / gridStep);
+
+  const lastY =
+    Math.ceil(maximumY / gridStep);
+
+  // Prevent excessive rendering when a Map
+  // spans an unexpectedly large world area.
+  if (
+    lastX - firstX > 500 ||
+    lastY - firstY > 500
+  )
+  {
+    return null;
+  }
+
+  for (let index = firstX; index <= lastX; index++)
+  {
+    const x = index * gridStep;
+
+    appendLine(
+      x,
+      minimumY,
+      x,
+      maximumY,
+      index % subdivisionCount === 0
+    );
+  }
+
+  for (let index = firstY; index <= lastY; index++)
+  {
+    const y = index * gridStep;
+
+    appendLine(
+      minimumX,
+      y,
+      maximumX,
+      y,
+      index % subdivisionCount === 0
+    );
+  }
+
+  const screenCorners =
+    imageCorners.map(mapToScreen);
+
+  const clipId = `sector-grid-clip-${map.id}`;
+
+  return (
+    <svg
+      className="sector-grid-overlay"
+      width={viewportSize.width}
+      height={viewportSize.height}
+      aria-hidden="true"
+    >
+      <defs>
+        <clipPath id={clipId}>
+          <polygon
+            points={screenCorners
+              .map(
+                (point) =>
+                  `${point.x},${point.y}`
+              )
+              .join(' ')}
+          />
+        </clipPath>
+      </defs>
+
+      <g clipPath={`url(#${clipId})`}>
+        {gridLines.map((line, index) => (
+          <line
+            key={index}
+            x1={line.start.x}
+            y1={line.start.y}
+            x2={line.end.x}
+            y2={line.end.y}
+            vectorEffect="non-scaling-stroke"
+            stroke="rgba(255, 255, 255, 0.55)"
+            strokeWidth={
+              line.major && showSubdivisions
+                ? 2.5
+                : 1
+            }
+            strokeDasharray={
+              line.major
+                ? undefined
+                : '6 6'
+            }
+          />
+        ))}
+      </g>
+    </svg>
+  );
+}
 
   const isLocationMap =
     (map.simulationScale === 'sprawl' ||
