@@ -12,6 +12,7 @@ import type { Piece } from '../models/Piece';
 import type { InteractionMode } from '../interaction/InteractionMode';
 import ModeSelector from '../interaction/ModeSelector';
 import { isPieceTracked } from '../models/Piece';
+import WeatherMenu from '../weather/components/WeatherMenu';
 
 const LAYER_OPTIONS: { id: RegionsLayer; label: string }[] = [
   { id: 'features', label: 'Features' },
@@ -108,6 +109,7 @@ function MenuBar({
   ] = useState(false);
 
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [weatherMenuOpen, setWeatherMenuOpen] = useState(false);
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
   const [piecesMenuOpen, setPiecesMenuOpen] = useState(false);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
@@ -120,7 +122,8 @@ function MenuBar({
       !mapMenuOpen &&
       !piecesMenuOpen &&
       !settingsMenuOpen &&
-      !pieceMenuOpen
+      !pieceMenuOpen &&
+      !weatherMenuOpen
     ) return;
 
     function handleOutsidePointerDown(
@@ -142,6 +145,7 @@ function MenuBar({
         setSettingsMenuOpen(false);
         setPieceMenuOpen(false);
         setPiecesMenuOpen(false);
+        setWeatherMenuOpen(false);
       }
     }
 
@@ -162,6 +166,7 @@ function MenuBar({
     piecesMenuOpen,
     pieceMenuOpen,
     settingsMenuOpen,
+    weatherMenuOpen,
   ]);
 
   function closeMenus() {
@@ -171,6 +176,7 @@ function MenuBar({
     setLayersMenuOpen(false);
     setSettingsMenuOpen(false);
     setPieceMenuOpen(false);
+    setWeatherMenuOpen(false);
   }
 
   function handleNewProject() {
@@ -214,6 +220,7 @@ function MenuBar({
             setSettingsMenuOpen(false);
             setPieceMenuOpen(false);
             setPiecesMenuOpen(false);
+            setWeatherMenuOpen(false);
           }}
         >
           Project
@@ -292,6 +299,7 @@ function MenuBar({
             setSettingsMenuOpen(false);
             setPieceMenuOpen(false);
             setPiecesMenuOpen(false);
+            setWeatherMenuOpen(false);
           }}
         >
           Map
@@ -399,6 +407,7 @@ function MenuBar({
             setLayersMenuOpen(false);
             setSettingsMenuOpen(false);
             setPieceMenuOpen(false);
+            setWeatherMenuOpen(false);
           }}
         >
           Pieces
@@ -446,7 +455,33 @@ function MenuBar({
             </button>
           </div>
         )}
-      </div>      
+      </div>    
+
+      
+<div className="menu-group">
+  <button
+    type="button"
+    className="menu-item"
+    disabled={!projectName}
+    aria-expanded={weatherMenuOpen}
+    onClick={() =>
+    {
+      const nextOpen = !weatherMenuOpen;
+
+      closeMenus();
+      setWeatherMenuOpen(nextOpen);
+    }}
+  >
+    Weather
+  </button>
+
+  {weatherMenuOpen && (
+    <WeatherMenu
+      projectActive={Boolean(projectName)}
+    />
+  )}
+</div>
+  
 
       <div className="menu-group">
         <button
@@ -459,6 +494,7 @@ function MenuBar({
             setLayersMenuOpen(false);
             setPieceMenuOpen(false);
             setPiecesMenuOpen(false);
+            setWeatherMenuOpen(false);
           }}
         >
           Settings
@@ -526,6 +562,7 @@ function MenuBar({
             setLayersMenuOpen(false);
             setSettingsMenuOpen(false);
             setPiecesMenuOpen(false);
+            setWeatherMenuOpen(false);
           }}
         >
           {trackedPieces.find((piece) => {

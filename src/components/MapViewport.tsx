@@ -33,6 +33,7 @@ import {
   OVERWORLD_SECTOR_RESOLUTION,
 } from '../spatial/Sector';
 import SectorGridOverlay from './overlays/SectorGridOverlay';
+import WeatherNodeOverlay from '../weather/components/WeatherNodeOverlay';
 import { resolveSpatialContext } from '../spatial/SpatialContextResolver';
 import { resolveWorldPosition } from '../spatial/WorldPositionResolver';
 import {
@@ -6022,6 +6023,17 @@ function saveSectionProperties() {
     map={map}
     projectMaps={projectMaps}
     projectFeatures={projectFeatures}
+    registration={registration}
+    imageSize={imageSize}
+    viewportSize={viewportSize}
+    scale={scale}
+    pan={pan}
+  />
+)}
+
+{layerVisibility.weatherNodes && (
+  <WeatherNodeOverlay
+    map={map}
     registration={registration}
     imageSize={imageSize}
     viewportSize={viewportSize}
