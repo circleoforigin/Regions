@@ -112,6 +112,7 @@ import {
 } from './projects/ProjectRepository';;
 import { hostedMapImageService } from './services/maps/HostedMapImageService';
 import { useRegionsState } from './state/RegionsStateContext';
+import { useWorldWeather } from './weather/useWorldWeather';
 
 type ProjectActionOutcome = 'unchanged' | 'saved' | 'discarded';
 type SpatialNavigationSource =
@@ -246,6 +247,7 @@ function App()
 
   const activeProjectId = activeProject?.id ?? null;
   const activeMapId = activeMap?.id ?? null;
+  const worldWeather = useWorldWeather(activeProjectId);
 
   const removeInvalidRoutes =
   useCallback(
