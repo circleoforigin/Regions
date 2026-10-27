@@ -1,3 +1,4 @@
+
 export interface WeatherConfiguration
 {
   seed: number;
@@ -30,7 +31,7 @@ export const DEFAULT_WEATHER_CONFIGURATION:
   },
 
   movement: {
-    stepsPerDay: 4,
+    stepsPerDay: 6,
     directionCycleLength: 256,
   },
 

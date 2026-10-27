@@ -330,7 +330,7 @@ const subdivisionCount =
             stroke="rgba(255, 255, 255, 0.55)"
             strokeWidth={
               line.major && showSubdivisions
-                ? 2.5
+                ? 1.5
                 : 1
             }
             strokeDasharray={
