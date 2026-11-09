@@ -1,20 +1,10 @@
-
 import type {
   Map as RegionMap,
   MapImageRegistration,
 } from '../../models/Map';
-
-import {
-  useRegionsState,
-} from '../../state/RegionsStateContext';
-
-import {
-  defaultLayerVisibility,
-} from '../../state/RegionsState';
-
-import {
-  useWeather,
-} from '../WeatherContext';
+import { useRegionsState } from '../../state/RegionsStateContext';
+import { defaultLayerVisibility } from '../../state/RegionsState';
+import { useWeather } from '../WeatherContext';
 
 import WeatherNodeOverlay from './WeatherNodeOverlay';
 import WeatherWindOverlay from './WeatherWindOverlay';
@@ -49,6 +39,7 @@ export default function WeatherOverlayLayer({
   const { state } = useRegionsState();
 
   const {
+    worldContext,
     configuration,
     movementCycle,
     windField,
@@ -70,16 +61,20 @@ const movementStep = 0;
 
   return (
     <>
-      {showNodes && (
-        <WeatherNodeOverlay
-          map={map}
-          registration={registration}
-          imageSize={imageSize}
-          viewportSize={viewportSize}
-          scale={scale}
-          pan={pan}
-        />
-      )}
+{showNodes &&
+  worldContext &&
+  configuration && (
+    <WeatherNodeOverlay
+      map={map}
+      registration={registration}
+      imageSize={imageSize}
+      viewportSize={viewportSize}
+      scale={scale}
+      pan={pan}
+      worldSeed={worldContext.seed}
+      configuration={configuration}
+    />
+  )}
 
       {showWind &&
         configuration &&

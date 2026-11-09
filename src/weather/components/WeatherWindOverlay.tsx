@@ -1,5 +1,4 @@
-
-import { useId, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import type {
   Map as RegionMap,
@@ -60,7 +59,7 @@ export default function WeatherWindOverlay({
   configuration,
   movementStep,
 }: WeatherWindOverlayProps) {
-  const clipId = useId();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const sectorSize = registration.distanceScale
     ? getSectorSizeInMapUnits(
@@ -157,10 +156,11 @@ export default function WeatherWindOverlay({
       Math.max(0, yEnd - yStart + 1);
 
     // Reduce rendering density at extreme zoom-out.
-    const stride = Math.max(
-      1,
-      Math.ceil(Math.sqrt(count / 5000))
-    );
+const stride = Math.max(
+  1,
+  Math.ceil(Math.sqrt(count / 2500)),
+  Math.ceil(8 / stepPx)
+);
 
     for (let y = yStart; y <= yEnd; y += stride) {
       for (let x = xStart; x <= xEnd; x += stride) {
@@ -183,10 +183,10 @@ export default function WeatherWindOverlay({
 
     return {
       arrows,
-      arrowSize: Math.min(
-        15,
-        Math.max(4, stepPx * 0.32)
-      ),
+arrowSize: Math.min(
+  8.25,
+  Math.max(3.75, stepPx * 0.24)
+),
       imageLeft,
       imageTop,
       imageWidth,
@@ -211,75 +211,133 @@ export default function WeatherWindOverlay({
     movementStep,
   ]);
 
-  if (!geometry) {
-    return null;
-  }
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      return;
+    }
+
+    const pixelRatio =
+      window.devicePixelRatio || 1;
+
+    const width = viewportSize.width;
+    const height = viewportSize.height;
+
+    canvas.width = Math.round(
+      width * pixelRatio
+    );
+
+    canvas.height = Math.round(
+      height * pixelRatio
+    );
+
+    context.setTransform(
+      pixelRatio,
+      0,
+      0,
+      pixelRatio,
+      0,
+      0
+    );
+
+    context.clearRect(
+      0,
+      0,
+      width,
+      height
+    );
+
+    if (!geometry) {
+      return;
+    }
+
+    context.save();
+
+    // Keep arrows inside the registered
+    // map image.
+    context.beginPath();
+    context.rect(
+      geometry.imageLeft,
+      geometry.imageTop,
+      geometry.imageWidth,
+      geometry.imageHeight
+    );
+    context.clip();
+
+    const size = geometry.arrowSize;
+
+    // Draw all arrows using one Canvas,
+    // rather than thousands of SVG elements.
+    for (const arrow of geometry.arrows) {
+      context.save();
+
+      context.translate(
+        arrow.x,
+        arrow.y
+      );
+
+      context.rotate(
+        arrow.angle * Math.PI / 180
+      );
+
+      context.beginPath();
+
+      context.moveTo(-size, 0);
+      context.lineTo(size, 0);
+
+      context.moveTo(
+        size * 0.25,
+        -size * 0.65
+      );
+
+      context.lineTo(size, 0);
+
+      context.lineTo(
+        size * 0.25,
+        size * 0.65
+      );
+
+      context.lineJoin = 'round';
+      context.lineCap = 'round';
+
+      context.strokeStyle = '#111111';
+      context.lineWidth = 2;
+      context.stroke();
+
+      context.strokeStyle = '#78c8ff';
+      context.lineWidth = 1;
+      context.stroke();
+
+      context.restore();
+    }
+
+    context.restore();
+  }, [
+    geometry,
+    viewportSize.width,
+    viewportSize.height,
+  ]);
 
   return (
-    <svg
-      width={viewportSize.width}
-      height={viewportSize.height}
+    <canvas
+      ref={canvasRef}
       aria-hidden="true"
       style={{
         position: 'absolute',
         left: 0,
         top: 0,
+        width: viewportSize.width,
+        height: viewportSize.height,
         pointerEvents: 'none',
-        overflow: 'hidden',
       }}
-    >
-      <defs>
-        <clipPath id={clipId}>
-          <rect
-            x={geometry.imageLeft}
-            y={geometry.imageTop}
-            width={geometry.imageWidth}
-            height={geometry.imageHeight}
-          />
-        </clipPath>
-      </defs>
-
-      <g clipPath={`url(#${clipId})`}>
-        {geometry.arrows.map((arrow, index) => {
-          const size = geometry.arrowSize;
-
-          const path = [
-            `M ${-size} 0`,
-            `L ${size} 0`,
-            `M ${size * 0.25} ${-size * 0.65}`,
-            `L ${size} 0`,
-            `L ${size * 0.25} ${size * 0.65}`,
-          ].join(' ');
-
-          return (
-            <g
-              key={index}
-              transform={
-                `translate(${arrow.x} ${arrow.y}) ` +
-                `rotate(${arrow.angle})`
-              }
-            >
-              <path
-                d={path}
-                fill="none"
-                stroke="#111111"
-                strokeWidth={4}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-
-              <path
-                d={path}
-                fill="none"
-                stroke="#78c8ff"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </g>
-          );
-        })}
-      </g>
-    </svg>
+    />
   );
 }

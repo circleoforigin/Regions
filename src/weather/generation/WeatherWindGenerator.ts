@@ -43,8 +43,7 @@ function wrap(
 /**
  * Generate a permanent wind-direction field
  * from the Weather Nodes' pressure influences.
- *
- * Each Weather Node is 10 miles apart.
+ * 
  * Each atmospheric Sector is 5 miles wide.
  *
  * Pressure is interpolated to calculate
@@ -70,8 +69,23 @@ export function generateWeatherWindField(
     );
   }
 
-  const widthInSectors = width * 2;
-  const heightInSectors = height * 2;
+const sectorsPerNode =
+  configuration.plane.nodeSpacingMiles / 5;
+
+if (
+  !Number.isSafeInteger(sectorsPerNode) ||
+  sectorsPerNode <= 0
+) {
+  throw new Error(
+    'Weather Node spacing must be a positive multiple of 5 miles.'
+  );
+}
+
+const widthInSectors =
+  width * sectorsPerNode;
+
+const heightInSectors =
+  height * sectorsPerNode;
 
   const pressures = new Float64Array(
     width * height
@@ -92,44 +106,74 @@ export function generateWeatherWindField(
     }
   }
 
-  const pressureAt = (
-    sectorX: number,
-    sectorY: number
+ 
+const pressureAt = (
+  sectorX: number,
+  sectorY: number
+): number => {
+  // Convert atmospheric Sector coordinates
+  // into Weather Node row coordinates.
+  const nodeY =
+    sectorY / sectorsPerNode;
+
+  const y0 = Math.floor(nodeY);
+  const y1 = y0 + 1;
+
+  const ty = nodeY - y0;
+
+  const at = (
+    x: number,
+    y: number
   ): number => {
-    // Node (0,0) is centered in Sector (0,0).
-    // Adjacent Nodes are two Sectors apart.
-    const nodeX = sectorX / 2;
-    const nodeY = sectorY / 2;
+    return pressures[
+      wrap(y, height) * width +
+      wrap(x, width)
+    ];
+  };
+
+  // Sample a horizontal row while accounting
+  // for its alternating 10-mile offset.
+  const sampleRow = (
+    row: number
+  ): number => {
+    const wrappedRow =
+      wrap(row, height);
+
+    const rowOffset =
+      wrappedRow % 2 === 1
+        ? sectorsPerNode / 2
+        : 0;
+
+    const nodeX =
+      (sectorX - rowOffset) /
+      sectorsPerNode;
 
     const x0 = Math.floor(nodeX);
-    const y0 = Math.floor(nodeY);
-
     const tx = nodeX - x0;
-    const ty = nodeY - y0;
 
-    const at = (
-      x: number,
-      y: number
-    ): number => {
-      return pressures[
-        wrap(y, height) * width +
-        wrap(x, width)
-      ];
-    };
-
-    const top =
-      at(x0, y0) * (1 - tx) +
-      at(x0 + 1, y0) * tx;
-
-    const bottom =
-      at(x0, y0 + 1) * (1 - tx) +
-      at(x0 + 1, y0 + 1) * tx;
+    const left = at(x0, row);
+    const right = at(x0 + 1, row);
 
     return (
-      top * (1 - ty) +
-      bottom * ty
+      left * (1 - tx) +
+      right * tx
     );
   };
+
+  const upperPressure =
+    sampleRow(y0);
+
+  const lowerPressure =
+    sampleRow(y1);
+
+  // Interpolate between the two
+  // staggered rows.
+  return (
+    upperPressure * (1 - ty) +
+    lowerPressure * ty
+  );
+};
+
 
   const directions = new Uint8Array(
     widthInSectors * heightInSectors
@@ -147,15 +191,19 @@ export function generateWeatherWindField(
       x < widthInSectors;
       x++
     ) {
-      // Wind flows from higher pressure
-      // toward lower pressure.
-      const dx =
-        pressureAt(x - 1, y) -
-        pressureAt(x + 1, y);
 
-      const dy =
-        pressureAt(x, y - 1) -
-        pressureAt(x, y + 1);
+// Calculate the pressure gradient around
+// the center of the atmospheric Sector.
+const centerX = x + 0.5;
+const centerY = y + 0.5;
+
+const dx =
+  pressureAt(centerX - 1, centerY) -
+  pressureAt(centerX + 1, centerY);
+
+const dy =
+  pressureAt(centerX, centerY - 1) -
+  pressureAt(centerX, centerY + 1);
 
       const angle = Math.atan2(
         dy,

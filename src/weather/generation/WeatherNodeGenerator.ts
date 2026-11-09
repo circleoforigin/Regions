@@ -1,24 +1,13 @@
-
-import {
-  deriveSeed,
-} from '@settingforge/module-sdk';
-
-import type {
-  WeatherNode,
-} from '../models/WeatherNode';
-
-import type {
-  WeatherConfiguration,
-} from '../models/WeatherConfiguration';
+import { deriveSeed } from '@settingforge/module-sdk';
+import type { WeatherNode } from '../models/WeatherNode';
+import type { WeatherConfiguration } from '../models/WeatherConfiguration';
 
 function normalizeCoordinate(
   coordinate: number,
   size: number
 ): number
 {
-  return (
-    (coordinate % size) + size
-  ) % size;
+  return ((coordinate % size) + size) % size;
 }
 
 export function generateWeatherNode(
@@ -28,11 +17,8 @@ export function generateWeatherNode(
   configuration: WeatherConfiguration
 ): WeatherNode
 {
-  const width =
-    configuration.plane.width;
-
-  const height =
-    configuration.plane.height;
+  const width = configuration.plane.width;
+  const height = configuration.plane.height;
 
   if (
     !Number.isSafeInteger(x) ||
@@ -43,16 +29,11 @@ export function generateWeatherNode(
     height <= 0
   )
   {
-    throw new Error(
-      'Invalid Weather node coordinates or plane dimensions.'
-    );
+    throw new Error('Invalid Weather node coordinates or plane dimensions.');
   }
 
-  const nodeX =
-    normalizeCoordinate(x, width);
-
-  const nodeY =
-    normalizeCoordinate(y, height);
+  const nodeX = normalizeCoordinate(x, width);
+  const nodeY = normalizeCoordinate(y, height);
 
   const pressureSeed =
     deriveSeed(
@@ -60,10 +41,7 @@ export function generateWeatherNode(
       `weather.pressure:${nodeX}:${nodeY}`
     );
 
-  const pressureInfluence =
-    (
-      pressureSeed / 0xFFFFFFFF
-    ) * 2 - 1;
+ const pressureInfluence = (pressureSeed % 3) - 1;
 
   return {
     position: {

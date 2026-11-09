@@ -1,36 +1,52 @@
-
-import { useId } from 'react';
-
+import { useMemo } from 'react';
 import type {
   Map as RegionMap,
   MapImageRegistration,
 } from '../../models/Map';
-
 import {
   getSectorSizeInMapUnits,
   OVERWORLD_SECTOR_RESOLUTION,
 } from '../../spatial/Sector';
+import type { WeatherConfiguration } from '../models/WeatherConfiguration';
+import { generateWeatherNode } from '../generation/WeatherNodeGenerator';
 
-interface Point
-{
+interface Point {
   x: number;
   y: number;
 }
 
-interface Size
-{
+interface Size {
   width: number;
   height: number;
 }
 
-interface WeatherNodeOverlayProps
-{
+interface WeatherNodeOverlayProps {
   map: RegionMap;
   registration: MapImageRegistration;
   imageSize: Size;
   viewportSize: Size;
   scale: number;
   pan: Point;
+  worldSeed: number;
+  configuration: WeatherConfiguration;
+}
+
+const LOW_COLOR = '#4A8FD4';
+const NEUTRAL_COLOR = '#9299A1';
+const HIGH_COLOR = '#DB7455';
+
+function getPressureColor(
+  pressure: number
+): string {
+  if (pressure === -1) {
+    return LOW_COLOR;
+  }
+
+  if (pressure === 1) {
+    return HIGH_COLOR;
+  }
+
+  return NEUTRAL_COLOR;
 }
 
 export default function WeatherNodeOverlay({
@@ -40,15 +56,41 @@ export default function WeatherNodeOverlay({
   viewportSize,
   scale,
   pan,
-}: WeatherNodeOverlayProps)
-{
-  const patternId = useId();
+  worldSeed,
+  configuration,
+}: WeatherNodeOverlayProps) {
+  const pressureColors = useMemo(() => {
+    const { width, height } =
+      configuration.plane;
+
+    const colors: string[] = [];
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const node = generateWeatherNode(
+          x,
+          y,
+          worldSeed,
+          configuration
+        );
+
+        colors.push(
+          getPressureColor(
+            node.pressureInfluence
+          )
+        );
+      }
+    }
+
+    return colors;
+  }, [worldSeed, configuration]);
 
   if (
     map.simulationScale !== 'overworld' ||
-    !registration.distanceScale
-  )
-  {
+    !registration.distanceScale ||
+    !Number.isFinite(scale) ||
+    scale <= 0
+  ) {
     return null;
   }
 
@@ -61,11 +103,8 @@ export default function WeatherNodeOverlay({
   if (
     sectorSize === null ||
     !Number.isFinite(sectorSize) ||
-    sectorSize <= 0 ||
-    !Number.isFinite(scale) ||
-    scale <= 0
-  )
-  {
+    sectorSize <= 0
+  ) {
     return null;
   }
 
@@ -80,60 +119,156 @@ export default function WeatherNodeOverlay({
     !Number.isFinite(registeredHeight) ||
     registeredWidth <= 0 ||
     registeredHeight <= 0
-  )
-  {
+  ) {
+    return null;
+  }
+
+  const sectorsPerNode =
+    configuration.plane.nodeSpacingMiles / 5;
+
+  if (
+    !Number.isSafeInteger(sectorsPerNode) ||
+    sectorsPerNode <= 0
+  ) {
     return null;
   }
 
   const nodeSpacing =
-    sectorSize * 2 * scale;
+    sectorSize * sectorsPerNode * scale;
 
-  const nodeRadius =
-    sectorSize * scale * 0.35;
+  const sectorScreenSize =
+    sectorSize * scale;
 
-  const toScreen = (
-    x: number,
-    y: number
-  ): Point =>
-  {
-    return {
-      x:
-        viewportSize.width / 2 +
-        pan.x +
-        x * scale,
+const originX =
+  viewportSize.width / 2 + pan.x;
 
-      y:
-        viewportSize.height / 2 +
-        pan.y +
-        y * scale,
-    };
-  };
+const originY =
+  viewportSize.height / 2 + pan.y;
 
-  // Sector (0, 0) is bounded by
-  // Map coordinates 0 and sectorSize.
-  //
-  // The first Weather Node occupies its
-  // center, at half a Sector.
-  const origin =
-    toScreen(
-      sectorSize / 2,
-      sectorSize / 2
-    );
-
-  const imageTopLeft =
-    toScreen(
+  const imageLeft =
+    viewportSize.width / 2 +
+    pan.x +
+    (
       registration.offsetX -
-        registeredWidth / 2,
+      registeredWidth / 2
+    ) * scale;
 
+  const imageTop =
+    viewportSize.height / 2 +
+    pan.y +
+    (
       registration.offsetY -
-        registeredHeight / 2
+      registeredHeight / 2
+    ) * scale;
+
+  const imageRight =
+    imageLeft + registeredWidth * scale;
+
+  const imageBottom =
+    imageTop + registeredHeight * scale;
+
+  const left = Math.max(0, imageLeft);
+  const top = Math.max(0, imageTop);
+
+  const right = Math.min(
+    viewportSize.width,
+    imageRight
+  );
+
+  const bottom = Math.min(
+    viewportSize.height,
+    imageBottom
+  );
+
+  if (
+    right <= left ||
+    bottom <= top ||
+    nodeSpacing <= 0
+  ) {
+    return null;
+  }
+
+  // Only render nodes within the visible
+  // portion of the registered map.
+  const startX = Math.ceil(
+    (left - originX) / nodeSpacing
+  );
+
+  const endX = Math.floor(
+    (right - originX) / nodeSpacing
+  );
+
+  const startY = Math.ceil(
+    (top - originY) / nodeSpacing
+  );
+
+  const endY = Math.floor(
+    (bottom - originY) / nodeSpacing
+  );
+
+  const planeWidth =
+    configuration.plane.width;
+
+  const planeHeight =
+    configuration.plane.height;
+
+  const wrap = (
+    value: number,
+    size: number
+  ): number =>
+    ((value % size) + size) % size;
+
+  // Keep symbols small enough that the
+  // underlying map remains readable.
+  const radius = Math.min(
+    5,
+    Math.max(2, sectorScreenSize * 0.18)
+  );
+
+  const circles: React.ReactNode[] = [];
+
+for (let y = startY; y <= endY; y++) {
+  // Alternate rows are shifted east by
+  // half the Weather Node spacing.
+  const rowOffset =
+    wrap(y, planeHeight) % 2 === 1
+      ? nodeSpacing / 2
+      : 0;
+
+  for (let x = startX - 1; x <= endX; x++) {
+    const planeX = wrap(
+      x,
+      planeWidth
     );
 
-  const imageWidth =
-    registeredWidth * scale;
+      const planeY = wrap(
+        y,
+        planeHeight
+      );
 
-  const imageHeight =
-    registeredHeight * scale;
+      const color =
+        pressureColors[
+          planeY * planeWidth + planeX
+        ];
+
+      circles.push(
+        <circle
+          key={`${x}:${y}`}
+cx={
+  originX +
+  x * nodeSpacing +
+  rowOffset
+}
+          cy={originY + y * nodeSpacing}
+          r={radius}
+          fill={color}
+          fillOpacity={0.85}
+          stroke="#111827"
+          strokeWidth={0.75}
+        />
+      );
+    }
+  }
 
   return (
     <svg
@@ -148,32 +283,7 @@ export default function WeatherNodeOverlay({
         overflow: 'hidden',
       }}
     >
-      <defs>
-        <pattern
-          id={patternId}
-          patternUnits="userSpaceOnUse"
-          x={origin.x - nodeSpacing / 2}
-          y={origin.y - nodeSpacing / 2}
-          width={nodeSpacing}
-          height={nodeSpacing}
-        >
-          <circle
-            cx={nodeSpacing / 2}
-            cy={nodeSpacing / 2}
-            r={nodeRadius}
-            fill="#858D96"
-            fillOpacity={0.55}
-          />
-        </pattern>
-      </defs>
-
-      <rect
-        x={imageTopLeft.x}
-        y={imageTopLeft.y}
-        width={imageWidth}
-        height={imageHeight}
-        fill={`url(#${patternId})`}
-      />
+      {circles}
     </svg>
   );
 }
