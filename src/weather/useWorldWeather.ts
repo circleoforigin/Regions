@@ -1,22 +1,15 @@
-
 import {
   useEffect,
   useMemo,
   useState,
 } from 'react';
-
 import {
   getWorldSeed,
   type WorldSeedContext,
 } from '../host/WorldSeedClient';
-
-import {
-  createWorldWeatherConfiguration,
-} from './WeatherSeedConfiguration';
-
-import {
-  createWeatherMovementCycle,
-} from './WeatherMovementCycle';
+import { createWorldWeatherConfiguration } from './WeatherSeedConfiguration';
+import { createWeatherMovementCycle } from './WeatherMovementCycle';
+import { generateWeatherWindField } from './generation/WeatherWindGenerator';
 
 export function useWorldWeather(
   projectId: string | null
@@ -113,10 +106,28 @@ export function useWorldWeather(
       configuration,
     ]);
 
-  return {
-    worldContext:
-      configuration ? worldContext : null,
+  const windField =
+  useMemo(() =>
+  {
+    if (!configuration || !worldContext)
+    {
+      return null;
+    }
+
+    return generateWeatherWindField(
+      worldContext.seed,
+      configuration
+    );
+  }, [
+    worldContext,
     configuration,
-    movementCycle,
-  };
+  ]);
+
+return {
+  worldContext:
+    configuration ? worldContext : null,
+  configuration,
+  movementCycle,
+  windField,
+};
 }

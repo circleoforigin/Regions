@@ -167,13 +167,16 @@ export function getWrappedWeatherDisplacement(
     return ((value % size) + size) % size;
   };
 
-  // The plane dimensions are measured in Weather
-  // Nodes. Each Node occupies two Sector units.
-  const widthInSectors =
-    configuration.plane.width * 2;
+// Convert the Weather Plane dimensions
+// from Weather Nodes into 5-mile Sectors.
+const sectorsPerNode =
+  configuration.plane.nodeSpacingMiles / 5;
 
-  const heightInSectors =
-    configuration.plane.height * 2;
+const widthInSectors =
+  configuration.plane.width * sectorsPerNode;
+
+const heightInSectors =
+  configuration.plane.height * sectorsPerNode;
 
   return {
     x: wrap(displacement.x, widthInSectors),

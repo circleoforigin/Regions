@@ -112,7 +112,7 @@ import {
 } from './projects/ProjectRepository';;
 import { hostedMapImageService } from './services/maps/HostedMapImageService';
 import { useRegionsState } from './state/RegionsStateContext';
-import { useWorldWeather } from './weather/useWorldWeather';
+import { WeatherProvider } from './weather/WeatherContext';
 
 type ProjectActionOutcome = 'unchanged' | 'saved' | 'discarded';
 type SpatialNavigationSource =
@@ -247,8 +247,7 @@ function App()
 
   const activeProjectId = activeProject?.id ?? null;
   const activeMapId = activeMap?.id ?? null;
-  const worldWeather = useWorldWeather(activeProjectId);
-
+  
   const removeInvalidRoutes =
   useCallback(
     (
@@ -7099,6 +7098,7 @@ mapMediaSlotsEnabled={
         <p>Use Map → Assign Map Image...</p>
       </div>
     ) : activeMapImageUrl ? (
+      <WeatherProvider projectId={activeProject.id}>
       <MapViewport
         key={activeMap.id}
         ref={mapViewportRef}
@@ -7445,6 +7445,7 @@ pathSecondaryActions={(
         onSectionError={setNavigationError}
         onZoomStateChange={setZoomControl}
       />
+  </WeatherProvider>
     ) : (
   <div className="regions-empty-map">
     <h2>

@@ -25,9 +25,9 @@ export const DEFAULT_WEATHER_CONFIGURATION:
   seed: 1,
 
   plane: {
-    width: 100,
-    height: 100,
-    nodeSpacingMiles: 10,
+    width: 50,
+    height: 50,
+    nodeSpacingMiles: 20,
   },
 
   movement: {
