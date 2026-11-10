@@ -10,6 +10,7 @@ import {
 import { createWorldWeatherConfiguration } from './WeatherSeedConfiguration';
 import { createWeatherMovementCycle } from './WeatherMovementCycle';
 import { generateWeatherWindField } from './generation/WeatherWindGenerator';
+import { generateWeatherPressureField } from './generation/WeatherPressureFieldGenerator';
 
 export function useWorldWeather(
   projectId: string | null
@@ -106,28 +107,36 @@ export function useWorldWeather(
       configuration,
     ]);
 
-  const windField =
-  useMemo(() =>
-  {
-    if (!configuration || !worldContext)
-    {
-      return null;
-    }
+  const pressureField = useMemo(() => {
+  if (!configuration) {
+    return null;
+  }
 
-    return generateWeatherWindField(
-      worldContext.seed,
-      configuration
-    );
-  }, [
-    worldContext,
-    configuration,
-  ]);
+  return generateWeatherPressureField(
+    configuration
+  );
+}, [configuration]);
+
+  const windField = useMemo(() => {
+  if (!configuration || !pressureField) {
+    return null;
+  }
+
+  return generateWeatherWindField(
+    pressureField,
+    configuration
+  );
+}, [
+  configuration,
+  pressureField,
+]);
 
 return {
   worldContext:
     configuration ? worldContext : null,
   configuration,
   movementCycle,
+  pressureField,
   windField,
 };
 }

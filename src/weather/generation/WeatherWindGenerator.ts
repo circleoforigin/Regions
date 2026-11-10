@@ -1,5 +1,7 @@
 import type { WeatherConfiguration } from '../models/WeatherConfiguration';
-import { generateWeatherNode } from './WeatherNodeGenerator';
+import type {
+  WeatherPressureField,
+} from './WeatherPressureFieldGenerator';
 import {
   getWrappedWeatherDisplacement,
   type WeatherMovementCycle,
@@ -52,7 +54,7 @@ function wrap(
  * This does NOT interpolate movement.
  */
 export function generateWeatherWindField(
-  worldSeed: number,
+  pressureField: WeatherPressureField,
   configuration: WeatherConfiguration
 ): WeatherWindField {
   const width = configuration.plane.width;
@@ -87,24 +89,17 @@ const widthInSectors =
 const heightInSectors =
   height * sectorsPerNode;
 
-  const pressures = new Float64Array(
-    width * height
+if (
+  pressureField.width !== width ||
+  pressureField.height !== height ||
+  pressureField.pressures.length !== width * height
+) {
+  throw new Error(
+    'Weather pressure field dimensions do not match configuration.'
   );
+}
 
-  // Generate the permanent pressure grid.
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const node = generateWeatherNode(
-        x,
-        y,
-        worldSeed,
-        configuration
-      );
-
-      pressures[y * width + x] =
-        node.pressureInfluence;
-    }
-  }
+const pressures = pressureField.pressures;
 
  
 const pressureAt = (

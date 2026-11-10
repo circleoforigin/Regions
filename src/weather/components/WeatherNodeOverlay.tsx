@@ -9,6 +9,7 @@ import {
 } from '../../spatial/Sector';
 import type { WeatherConfiguration } from '../models/WeatherConfiguration';
 import { generateWeatherNode } from '../generation/WeatherNodeGenerator';
+import type { WeatherPressureField } from '../generation/WeatherPressureFieldGenerator';
 
 interface Point {
   x: number;
@@ -29,6 +30,7 @@ interface WeatherNodeOverlayProps {
   pan: Point;
   worldSeed: number;
   configuration: WeatherConfiguration;
+  pressureField: WeatherPressureField;
 }
 
 const LOW_COLOR = '#4A8FD4';
@@ -58,6 +60,7 @@ export default function WeatherNodeOverlay({
   pan,
   worldSeed,
   configuration,
+  pressureField,
 }: WeatherNodeOverlayProps) {
   const pressureColors = useMemo(() => {
     const { width, height } =
@@ -71,7 +74,7 @@ export default function WeatherNodeOverlay({
           x,
           y,
           worldSeed,
-          configuration
+          pressureField
         );
 
         colors.push(

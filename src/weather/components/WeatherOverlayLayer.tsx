@@ -38,12 +38,13 @@ export default function WeatherOverlayLayer({
 }: WeatherOverlayLayerProps) {
   const { state } = useRegionsState();
 
-  const {
-    worldContext,
-    configuration,
-    movementCycle,
-    windField,
-  } = useWeather();
+const {
+  worldContext,
+  configuration,
+  movementCycle,
+  pressureField,
+  windField,
+} = useWeather();
 
   const visibility =
     state.layerVisibility ??
@@ -62,8 +63,7 @@ const movementStep = 0;
   return (
     <>
 {showNodes &&
-  worldContext &&
-  configuration && (
+  pressureField && (
     <WeatherNodeOverlay
       map={map}
       registration={registration}
@@ -71,8 +71,7 @@ const movementStep = 0;
       viewportSize={viewportSize}
       scale={scale}
       pan={pan}
-      worldSeed={worldContext.seed}
-      configuration={configuration}
+      pressureField={pressureField}
     />
   )}
 
