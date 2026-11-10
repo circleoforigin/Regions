@@ -10,7 +10,9 @@ import {
 import { createWorldWeatherConfiguration } from './WeatherSeedConfiguration';
 import { createWeatherMovementCycle } from './WeatherMovementCycle';
 import { generateWeatherWindField } from './generation/WeatherWindGenerator';
-import { generateWeatherPressureField } from './generation/WeatherPressureFieldGenerator';
+import {
+  generateWeatherPressureFields,
+} from './generation/WeatherPressureFieldGenerator';
 
 export function useWorldWeather(
   projectId: string | null
@@ -107,28 +109,31 @@ export function useWorldWeather(
       configuration,
     ]);
 
-  const pressureField = useMemo(() => {
+  const generatedPressureFields = useMemo(() => {
   if (!configuration) {
     return null;
   }
 
-  return generateWeatherPressureField(
+  return generateWeatherPressureFields(
     configuration
   );
 }, [configuration]);
 
-  const windField = useMemo(() => {
-  if (!configuration || !pressureField) {
+const pressureField =
+  generatedPressureFields?.nodeField ?? null;
+
+const windField = useMemo(() => {
+  if (!configuration || !generatedPressureFields) {
     return null;
   }
 
   return generateWeatherWindField(
-    pressureField,
+    generatedPressureFields.windPressureField,
     configuration
   );
 }, [
   configuration,
-  pressureField,
+  generatedPressureFields,
 ]);
 
 return {

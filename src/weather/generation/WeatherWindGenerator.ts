@@ -42,6 +42,369 @@ function wrap(
   return ((value % size) + size) % size;
 }
 
+
+const WIND_DIRECTION_VECTORS = Array.from(
+  { length: 8 },
+  (_, direction) => ({
+    x: Math.cos(direction * Math.PI / 4),
+    y: Math.sin(direction * Math.PI / 4),
+  })
+);
+
+/**
+ * Smooth the generated wind field using
+ * circular averaging and local conflict detection.
+ *
+ * Every pass reads the previous complete field.
+ * The original directions remain an anchor.
+ */
+function refineWeatherWindField(
+  field: WeatherWindField,
+  passCount = 2
+): WeatherWindField {
+  const width = field.widthInSectors;
+  const height = field.heightInSectors;
+
+  if (
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    field.directions.length !== width * height ||
+    !Number.isSafeInteger(passCount) ||
+    passCount < 0
+  ) {
+    throw new Error(
+      'Invalid wind refinement parameters.'
+    );
+  }
+
+  const original = field.directions;
+  let current = new Uint8Array(original);
+
+  const indexAt = (x: number, y: number): number =>
+    wrap(y, height) * width + wrap(x, width);
+
+  for (let pass = 0; pass < passCount; pass++) {
+    const next = new Uint8Array(current);
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const index = y * width + x;
+
+        const originalDirection = original[index];
+        const currentDirection = current[index];
+
+        const originalVector =
+          WIND_DIRECTION_VECTORS[originalDirection];
+
+        const currentVector =
+          WIND_DIRECTION_VECTORS[currentDirection];
+
+        // Anchor the average to the original
+        // pressure-generated wind direction.
+        let sumX = originalVector.x * 2;
+        let sumY = originalVector.y * 2;
+
+        let oppositionCount = 0;
+
+        for (let offsetY = -1; offsetY <= 1; offsetY++) {
+          for (let offsetX = -1; offsetX <= 1; offsetX++) {
+            if (offsetX === 0 && offsetY === 0) {
+              continue;
+            }
+
+            const neighborDirection = current[
+              indexAt(x + offsetX, y + offsetY)
+            ];
+
+            const neighborVector =
+              WIND_DIRECTION_VECTORS[neighborDirection];
+
+            // Circular averaging handles the
+            // transition between direction 7 and 0.
+            sumX += neighborVector.x;
+            sumY += neighborVector.y;
+
+            const distance = Math.hypot(
+              offsetX,
+              offsetY
+            );
+
+            // Direction from this Sector
+            // toward the neighboring Sector.
+            const towardNeighborX =
+              offsetX / distance;
+
+            const towardNeighborY =
+              offsetY / distance;
+
+            const currentTowardNeighbor =
+              currentVector.x * towardNeighborX +
+              currentVector.y * towardNeighborY;
+
+            const neighborTowardCurrent =
+              neighborVector.x * -towardNeighborX +
+              neighborVector.y * -towardNeighborY;
+
+            if (
+              currentTowardNeighbor > 0.7 &&
+              neighborTowardCurrent > 0.7
+            ) {
+              oppositionCount++;
+            }
+          }
+        }
+
+        const magnitude = Math.hypot(sumX, sumY);
+
+        if (magnitude < 0.001) {
+          continue;
+        }
+
+        const agreement =
+          (
+            sumX * currentVector.x +
+            sumY * currentVector.y
+          ) / magnitude;
+
+        // Preserve directions that already
+        // agree with their surroundings.
+        if (
+          oppositionCount === 0 &&
+          agreement >= 0.7
+        ) {
+          continue;
+        }
+
+        let bestDirection = currentDirection;
+        let bestScore = -Infinity;
+
+        for (
+          let candidate = 0;
+          candidate < 8;
+          candidate++
+        ) {
+          const candidateVector =
+            WIND_DIRECTION_VECTORS[candidate];
+
+          const score =
+            candidateVector.x * sumX +
+            candidateVector.y * sumY +
+            0.5 * (
+              candidateVector.x * originalVector.x +
+              candidateVector.y * originalVector.y
+            );
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestDirection = candidate;
+          }
+        }
+
+        next[index] = bestDirection;
+      }
+    }
+
+    current = next;
+  }
+
+  return {
+    widthInSectors: width,
+    heightInSectors: height,
+    directions: current,
+  };
+}
+
+
+/**
+ * Detect whether two neighboring Sectors
+ * have winds pointing directly toward
+ * one another.
+ *
+ * Only cardinally adjacent pairs are
+ * considered for this targeted correction.
+ */
+function isHeadOnWindCollision(
+  firstDirection: number,
+  secondDirection: number,
+  offsetX: number,
+  offsetY: number
+): boolean {
+  const first = WIND_DIRECTION_VECTORS[firstDirection];
+  const second = WIND_DIRECTION_VECTORS[secondDirection];
+
+  const firstTowardSecond =
+    first.x * offsetX +
+    first.y * offsetY;
+
+  const secondTowardFirst =
+    second.x * -offsetX +
+    second.y * -offsetY;
+
+  return (
+    firstTowardSecond > 0.7 &&
+    secondTowardFirst > 0.7
+  );
+}
+
+
+/**
+ * Resolve isolated head-on collisions.
+ *
+ * Uses surrounding wind agreement to select
+ * a deflection, with the original generated
+ * direction retained as an anchor.
+ *
+ * Changes are synchronous and accepted only
+ * when they reduce local conflict.
+ */
+function resolveWindCollisions(
+  field: WeatherWindField,
+  originalDirections: Uint8Array
+): WeatherWindField {
+  const width = field.widthInSectors;
+  const height = field.heightInSectors;
+
+  const current = field.directions;
+  const next = new Uint8Array(current);
+
+  const indexAt = (x: number, y: number): number =>
+    wrap(y, height) * width + wrap(x, width);
+
+  const cardinalNeighbors = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+  ];
+
+  const collisionCount = (
+    x: number,
+    y: number,
+    direction: number
+  ): number => {
+    let count = 0;
+
+    for (const offset of cardinalNeighbors) {
+      const neighborDirection = current[
+        indexAt(x + offset.x, y + offset.y)
+      ];
+
+      if (
+        isHeadOnWindCollision(
+          direction,
+          neighborDirection,
+          offset.x,
+          offset.y
+        )
+      ) {
+        count++;
+      }
+    }
+
+    return count;
+  };
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = y * width + x;
+      const direction = current[index];
+
+      const existingCollisions = collisionCount(
+        x,
+        y,
+        direction
+      );
+
+      if (existingCollisions === 0) {
+        continue;
+      }
+
+      let bestDirection = direction;
+      let bestScore = -Infinity;
+
+      // Limit corrections to a single 45-degree
+      // rotation in either direction.
+      for (const adjustment of [-1, 0, 1]) {
+        const candidate = wrap(
+          direction + adjustment,
+          8
+        );
+
+        const candidateVector =
+          WIND_DIRECTION_VECTORS[candidate];
+
+        const originalVector =
+          WIND_DIRECTION_VECTORS[
+            originalDirections[index]
+          ];
+
+        const collisions = collisionCount(
+          x,
+          y,
+          candidate
+        );
+
+        // Do not introduce additional collisions.
+        if (collisions > existingCollisions) {
+          continue;
+        }
+
+        let agreement = 0;
+
+        for (let offsetY = -1; offsetY <= 1; offsetY++) {
+          for (let offsetX = -1; offsetX <= 1; offsetX++) {
+            if (offsetX === 0 && offsetY === 0) {
+              continue;
+            }
+
+            const neighborDirection = current[
+              indexAt(x + offsetX, y + offsetY)
+            ];
+
+            const neighborVector =
+              WIND_DIRECTION_VECTORS[
+                neighborDirection
+              ];
+
+            agreement +=
+              candidateVector.x * neighborVector.x +
+              candidateVector.y * neighborVector.y;
+          }
+        }
+
+        const originalAgreement =
+          candidateVector.x * originalVector.x +
+          candidateVector.y * originalVector.y;
+
+        const score =
+          agreement +
+          originalAgreement * 2 -
+          collisions * 6;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestDirection = candidate;
+        }
+      }
+
+      next[index] = bestDirection;
+    }
+  }
+
+  return {
+    widthInSectors: width,
+    heightInSectors: height,
+    directions: next,
+  };
+}
+
+// Tangential flow dominates, while a smaller
+// pressure-gradient component produces spiraling.
+const WIND_CIRCULATION_WEIGHT = 0.8;
+const WIND_PRESSURE_FLOW_WEIGHT = 0.2;
+
 /**
  * Generate a permanent wind-direction field
  * from the Weather Nodes' pressure influences.
@@ -192,18 +555,43 @@ const pressureAt = (
 const centerX = x + 0.5;
 const centerY = y + 0.5;
 
+// Sample pressure 15 miles away in each
+// direction instead of only 5 miles.
+const gradientRadius = 3;
+
 const dx =
-  pressureAt(centerX - 1, centerY) -
-  pressureAt(centerX + 1, centerY);
+  pressureAt(centerX - gradientRadius, centerY) -
+  pressureAt(centerX + gradientRadius, centerY);
 
 const dy =
-  pressureAt(centerX, centerY - 1) -
-  pressureAt(centerX, centerY + 1);
+  pressureAt(centerX, centerY - gradientRadius) -
+  pressureAt(centerX, centerY + gradientRadius);
+// dx and dy point from higher pressure
+// toward lower pressure.
+//
+// In screen coordinates, Y increases south.
+//
+// Rotating the downhill gradient clockwise
+// produces Northern Hemisphere circulation:
+// clockwise around highs and
+// counterclockwise around lows.
+const circulationX = -dy;
+const circulationY = dx;
 
-      const angle = Math.atan2(
-        dy,
-        dx
-      );
+// Combine circulation with a smaller
+// high-to-low pressure component.
+const windX =
+  circulationX * WIND_CIRCULATION_WEIGHT +
+  dx * WIND_PRESSURE_FLOW_WEIGHT;
+
+const windY =
+  circulationY * WIND_CIRCULATION_WEIGHT +
+  dy * WIND_PRESSURE_FLOW_WEIGHT;
+
+const angle = Math.atan2(
+  windY,
+  windX
+);
 
       // Quantize to the eight compass
       // directions.
@@ -220,11 +608,19 @@ const dy =
     }
   }
 
-  return {
+const refinedField = refineWeatherWindField(
+  {
     widthInSectors,
     heightInSectors,
     directions,
-  };
+  },
+  2
+);
+
+return resolveWindCollisions(
+  refinedField,
+  directions
+);
 }
 
 /**

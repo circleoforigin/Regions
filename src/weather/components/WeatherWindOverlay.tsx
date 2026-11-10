@@ -151,19 +151,43 @@ export default function WeatherWindOverlay({
       angle: number;
     }[] = [];
 
-    const count =
-      Math.max(0, xEnd - xStart + 1) *
-      Math.max(0, yEnd - yStart + 1);
+// Fixed density based on zoom and viewport size,
+// independent of the currently visible map area.
+const MAX_VISIBLE_ARROWS = 600;
 
-    // Reduce rendering density at extreme zoom-out.
-const stride = Math.max(
-  1,
-  Math.ceil(Math.sqrt(count / 2500)),
-  Math.ceil(8 / stepPx)
-);
+const viewportSectorCount =
+  Math.ceil(viewportSize.width / stepPx) *
+  Math.ceil(viewportSize.height / stepPx);
 
-    for (let y = yStart; y <= yEnd; y += stride) {
-      for (let x = xStart; x <= xEnd; x += stride) {
+//const stride = Math.max(
+  //1,
+  //Math.ceil(
+    //Math.sqrt(
+      //viewportSectorCount / MAX_VISIBLE_ARROWS
+    //)
+  //),
+  //Math.ceil(12 / stepPx)
+//);
+
+// Diagnostic mode: one arrow per 5-mile Sector.
+const stride = 1;
+
+const alignedStartX =
+  Math.ceil(xStart / stride) * stride;
+
+const alignedStartY =
+  Math.ceil(yStart / stride) * stride;
+
+for (
+  let y = alignedStartY;
+  y <= yEnd;
+  y += stride
+) {
+  for (
+    let x = alignedStartX;
+    x <= xEnd;
+    x += stride
+  ) {
         const direction = getWorldWindDirection(
           windField,
           movementCycle,
@@ -183,9 +207,11 @@ const stride = Math.max(
 
     return {
       arrows,
+// Smaller arrows for the full-density
+// diagnostic overlay.
 arrowSize: Math.min(
-  8.25,
-  Math.max(3.75, stepPx * 0.24)
+  5.5,
+  Math.max(2.5, stepPx * 0.18)
 ),
       imageLeft,
       imageTop,
