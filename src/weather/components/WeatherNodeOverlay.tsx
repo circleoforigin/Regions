@@ -1,19 +1,18 @@
-
 import { useEffect, useRef } from 'react';
-
 import type {
   Map as RegionMap,
   MapImageRegistration,
 } from '../../models/Map';
-
 import {
   getSectorSizeInMapUnits,
   OVERWORLD_SECTOR_RESOLUTION,
 } from '../../spatial/Sector';
-
-import type {
-  WeatherPressureField,
-} from '../generation/WeatherPressureFieldGenerator';
+import type { WeatherPressureField } from '../generation/WeatherPressureFieldGenerator';
+import {
+  getWrappedWeatherDisplacement,
+  type WeatherMovementCycle,
+} from '../WeatherMovementCycle';
+import type { WeatherConfiguration } from '../models/WeatherConfiguration';
 
 interface Point {
   x: number;
@@ -33,6 +32,9 @@ interface WeatherNodeOverlayProps {
   scale: number;
   pan: Point;
   pressureField: WeatherPressureField;
+  movementCycle: WeatherMovementCycle;
+  configuration: WeatherConfiguration;
+  movementStep: number;
 }
 
 const PRESSURE_COLORS = [
@@ -84,17 +86,9 @@ export default function WeatherNodeOverlay({
 
     const dpr = window.devicePixelRatio || 1;
 
-    canvas.width = Math.round(
-      viewportWidth * dpr
-    );
-
-    canvas.height = Math.round(
-      viewportHeight * dpr
-    );
-
-    context.setTransform(
-      dpr, 0, 0, dpr, 0, 0
-    );
+    canvas.width = Math.round(viewportWidth * dpr);
+    canvas.height = Math.round(viewportHeight * dpr);
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     context.clearRect(
       0, 0,
@@ -124,11 +118,8 @@ export default function WeatherNodeOverlay({
       return;
     }
 
-    const registeredWidth =
-      imageWidth * registrationScale;
-
-    const registeredHeight =
-      imageHeight * registrationScale;
+    const registeredWidth = imageWidth * registrationScale;
+    const registeredHeight = imageHeight * registrationScale;
 
     if (
       !Number.isFinite(registeredWidth) ||
@@ -141,12 +132,18 @@ export default function WeatherNodeOverlay({
 
     // 20-mile Node spacing / 5-mile Sectors.
     const sectorsPerNode = 4;
+    const nodeSpacing = sectorSize * sectorsPerNode * scale;
+    const sectorScreenSize = sectorSize * scale;
 
-    const nodeSpacing =
-      sectorSize * sectorsPerNode * scale;
+    const displacement =
+        getWrappedWeatherDisplacement(
+            movementCycle,
+            movementStep,
+            configuration
+        );
 
-    const sectorScreenSize =
-      sectorSize * scale;
+    const movementOffsetX = displacement.x * sectorScreenSize;
+    const movementOffsetY = displacement.y * sectorScreenSize;
 
     if (
       !Number.isFinite(nodeSpacing) ||
@@ -155,11 +152,10 @@ export default function WeatherNodeOverlay({
       return;
     }
 
-    const originX =
-      viewportWidth / 2 + panX;
-
-    const originY =
-      viewportHeight / 2 + panY;
+    const originX = viewportWidth / 2 + panX;
+    const originY = viewportHeight / 2 + panY;
+    const weatherOriginX = originX + movementOffsetX;
+    const weatherOriginY = originY + movementOffsetY;
 
     const imageLeft =
       originX +
@@ -169,11 +165,8 @@ export default function WeatherNodeOverlay({
       originY +
       (offsetY - registeredHeight / 2) * scale;
 
-    const imageRight =
-      imageLeft + registeredWidth * scale;
-
-    const imageBottom =
-      imageTop + registeredHeight * scale;
+    const imageRight = imageLeft + registeredWidth * scale;
+    const imageBottom = imageTop + registeredHeight * scale;
 
     const left = Math.max(0, imageLeft);
     const top = Math.max(0, imageTop);
@@ -193,19 +186,19 @@ export default function WeatherNodeOverlay({
     }
 
     const startX = Math.floor(
-      (left - originX) / nodeSpacing
+      (left - weatherOriginX) / nodeSpacing
     ) - 1;
 
     const endX = Math.ceil(
-      (right - originX) / nodeSpacing
+      (right - weatherOriginX) / nodeSpacing
     ) + 1;
 
     const startY = Math.floor(
-      (top - originY) / nodeSpacing
+      (top - weatherOriginY) / nodeSpacing
     ) - 1;
 
     const endY = Math.ceil(
-      (bottom - originY) / nodeSpacing
+      (bottom - weatherOriginY) / nodeSpacing
     ) + 1;
 
     const planeWidth = pressureField.width;
@@ -244,8 +237,7 @@ export default function WeatherNodeOverlay({
           ? nodeSpacing / 2
           : 0;
 
-      const cy =
-        originY + y * nodeSpacing;
+      const cy = weatherOriginY + y * nodeSpacing;
 
       if (
         cy + radius < top ||
@@ -256,7 +248,7 @@ export default function WeatherNodeOverlay({
 
       for (let x = startX; x <= endX; x++) {
         const cx =
-          originX +
+          weatherOriginX +
           x * nodeSpacing +
           rowOffset;
 
@@ -274,8 +266,7 @@ export default function WeatherNodeOverlay({
             planeY * planeWidth + planeX
           ];
 
-        const color =
-          PRESSURE_COLORS[pressure + 1];
+        const color = PRESSURE_COLORS[pressure + 1];
 
         context.beginPath();
         context.arc(
@@ -308,6 +299,9 @@ export default function WeatherNodeOverlay({
     registrationScale,
     offsetX,
     offsetY,
+    movementCycle,
+    movementStep,
+    configuration,
   ]);
 
   return (

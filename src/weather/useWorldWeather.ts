@@ -9,10 +9,10 @@ import {
 } from '../host/WorldSeedClient';
 import { createWorldWeatherConfiguration } from './WeatherSeedConfiguration';
 import { createWeatherMovementCycle } from './WeatherMovementCycle';
-import { generateWeatherWindField } from './generation/WeatherWindGenerator';
 import {
-  generateWeatherPressureFields,
-} from './generation/WeatherPressureFieldGenerator';
+  loadOrCreateWeatherFields,
+  type PersistedWeatherFields,
+} from './WeatherFieldRepository';
 
 export function useWorldWeather(
   projectId: string | null
@@ -109,32 +109,78 @@ export function useWorldWeather(
       configuration,
     ]);
 
-  const generatedPressureFields = useMemo(() => {
-  if (!configuration) {
-    return null;
+
+const [
+  savedWeatherFields,
+  setSavedWeatherFields,
+] = useState<PersistedWeatherFields | null>(null);
+
+const [
+  weatherFieldsLoading,
+  setWeatherFieldsLoading,
+] = useState(false);
+
+const [
+  weatherFieldsError,
+  setWeatherFieldsError,
+] = useState<unknown>(null);
+
+useEffect(() => {
+  let cancelled = false;
+
+  setSavedWeatherFields(null);
+  setWeatherFieldsError(null);
+
+  if (
+    !projectId ||
+    !worldContext ||
+    !configuration ||
+    resolvedProjectId !== projectId
+  ) {
+    setWeatherFieldsLoading(false);
+    return;
   }
 
-  return generateWeatherPressureFields(
+  setWeatherFieldsLoading(true);
+
+  void loadOrCreateWeatherFields(
+    projectId,
+    worldContext.worldId,
     configuration
-  );
-}, [configuration]);
+  )
+    .then(fields => {
+      if (!cancelled) {
+        setSavedWeatherFields(fields);
+      }
+    })
+    .catch((error: unknown) => {
+      if (!cancelled) {
+        setWeatherFieldsError(error);
 
-const pressureField =
-  generatedPressureFields?.nodeField ?? null;
+        console.error(
+          '[Weather] Unable to load or save atmospheric fields.',
+          error
+        );
+      }
+    })
+    .finally(() => {
+      if (!cancelled) {
+        setWeatherFieldsLoading(false);
+      }
+    });
 
-const windField = useMemo(() => {
-  if (!configuration || !generatedPressureFields) {
-    return null;
-  }
-
-  return generateWeatherWindField(
-    generatedPressureFields.windPressureField,
-    configuration
-  );
+  return () => {
+    cancelled = true;
+  };
 }, [
+  projectId,
+  resolvedProjectId,
+  worldContext,
   configuration,
-  generatedPressureFields,
 ]);
+
+const pressureField = savedWeatherFields?.pressureField ?? null;
+const windField = savedWeatherFields?.windField ?? null;
 
 return {
   worldContext:
@@ -143,5 +189,7 @@ return {
   movementCycle,
   pressureField,
   windField,
+  weatherFieldsLoading,
+  weatherFieldsError,
 };
 }

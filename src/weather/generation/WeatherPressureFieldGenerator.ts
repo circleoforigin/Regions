@@ -263,19 +263,13 @@ export function getWeatherNodePressure(
   ] as WeatherPressure;
 }
 
-
-
-export interface WeatherGenerationFields {
-  nodeField: WeatherPressureField;
-  windPressureField: WeatherPressureField;
-}
-
 /**
  * Generate pressure systems from their centers.
  *
  * Strong cores exist only in windPressureField.
  * nodeField contains normalized -1, 0, +1.
  */
+
 export function generateWeatherPressureFields(
   configuration: WeatherConfiguration,
   random: () => number = Math.random
@@ -294,8 +288,15 @@ export function generateWeatherPressureFields(
     );
   }
 
-  const pressures = new Int8Array(width * height);
-  const occupied = new Uint8Array(width * height);
+  const count = width * height;
+  const pressures = new Int8Array(count);
+
+  // -1 means no system has claimed the Node.
+  const owners = new Int32Array(count);
+  owners.fill(-1);
+
+  // Protect temporary strong-pressure cores.
+  const cores = new Uint8Array(count);
 
   const indexAt = (x: number, y: number): number =>
     wrap(y, height) * width + wrap(x, width);
@@ -321,51 +322,82 @@ export function generateWeatherPressureFields(
     );
   };
 
-  const claim = (
-    index: number,
-    pressure: number
-  ): void => {
-    occupied[index] = 1;
-    pressures[index] = pressure;
-  };
-
   const randomIndex = (length: number): number =>
     Math.floor(random() * length);
 
-  // Target roughly one potential system center
-  // per twelve Weather Nodes.
-  const attempts = Math.ceil(
-    pressures.length / 12
+  interface PressureSystem {
+    pressure: -1 | 1;
+    frontier: number[];
+  }
+
+  const systems: PressureSystem[] = [];
+
+  const claim = (
+    index: number,
+    systemId: number,
+    isCore = false
+  ): void => {
+    owners[index] = systemId;
+
+    const pressure = systems[systemId].pressure;
+
+    pressures[index] = isCore
+      ? pressure * 2
+      : pressure;
+
+    if (isCore) {
+      cores[index] = 1;
+    }
+  };
+
+  // PHASE 1: Place all pressure cores first.
+  const targetSystems = Math.max(
+    2,
+    Math.floor(count / 14)
   );
 
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const center = randomIndex(pressures.length);
+  const placementAttempts = count * 4;
 
-    if (occupied[center]) continue;
+  for (
+    let attempt = 0;
+    attempt < placementAttempts &&
+    systems.length < targetSystems;
+    attempt++
+  ) {
+    const center = randomIndex(count);
 
-    // Reserve some separation between systems.
-    // This also leaves neutral pressure regions.
+    if (owners[center] !== -1) continue;
+
     if (
       neighborsOf(center).some(
-        index => occupied[index] === 1
+        index => owners[index] !== -1
       )
     ) {
       continue;
     }
 
-    const pressure = random() < 0.5 ? -1 : 1;
-    const strongPressure = pressure * 2;
+    const systemId = systems.length;
 
-    // Begin with a small strong-pressure core.
-    claim(center, strongPressure);
+    systems.push({
+      pressure: random() < 0.5 ? -1 : 1,
+      frontier: [],
+    });
 
-    const core: number[] = [center];
+    claim(center, systemId, true);
+
+    const coreNodes = [center];
     const coreTarget = 1 + randomIndex(3);
 
-    while (core.length < coreTarget) {
-      const candidates = core.flatMap(
-        index => neighborsOf(index)
-      ).filter(index => occupied[index] === 0);
+    while (coreNodes.length < coreTarget) {
+      const candidates = [
+        ...new Set(
+          coreNodes.flatMap(
+            index => neighborsOf(index)
+          )
+        ),
+      ].filter(
+        index => owners[index] === -1
+      );
 
       if (candidates.length === 0) break;
 
@@ -373,57 +405,72 @@ export function generateWeatherPressureFields(
         randomIndex(candidates.length)
       ];
 
-      claim(next, strongPressure);
-      core.push(next);
+      claim(next, systemId, true);
+      coreNodes.push(next);
     }
 
-    // Grow an irregular surrounding region.
-    // Most systems remain relatively small.
-    const sizeRoll = random();
+    systems[systemId].frontier = [...coreNodes];
+  }
 
-    const outerTarget =
-      sizeRoll < 0.7
-        ? 4 + randomIndex(7)
-        : sizeRoll < 0.95
-          ? 11 + randomIndex(8)
-          : 19 + randomIndex(8);
+  if (systems.length === 0) {
+    throw new Error(
+      'Unable to place Weather pressure cores.'
+    );
+  }
 
-    const region = [...core];
-    let outerClaimed = 0;
+  // PHASE 2: Grow every system in alternating
+  // rounds until all Nodes are claimed.
+  let remaining = owners.reduce(
+    (sum, owner) => sum + (owner === -1 ? 1 : 0),
+    0
+  );
 
-    while (outerClaimed < outerTarget) {
+  while (remaining > 0) {
+    let claimedThisRound = 0;
+
+    // Randomize the order each round so the
+    // same system does not always move first.
+    const order = systems.map((_, index) => index);
+
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = randomIndex(i + 1);
+
+      [order[i], order[j]] =
+        [order[j], order[i]];
+    }
+
+    for (const systemId of order) {
+      const system = systems[systemId];
       const candidates = new Set<number>();
 
-      for (const index of region) {
-        for (const neighbor of neighborsOf(index)) {
-          if (occupied[neighbor] === 0) {
+      for (const source of system.frontier) {
+        for (const neighbor of neighborsOf(source)) {
+          if (owners[neighbor] === -1) {
             candidates.add(neighbor);
           }
         }
       }
 
-      if (candidates.size === 0) break;
+      if (candidates.size === 0) continue;
 
       const available = [...candidates];
 
-      // Favor filling indentations, but retain
-      // randomness for irregular boundaries.
+      // Prefer compact growth, but permit
+      // irregular edges and protrusions.
       const weights = available.map(index => {
-        const adjacent = neighborsOf(index)
-          .filter(neighbor =>
-            pressures[neighbor] === pressure ||
-            pressures[neighbor] === strongPressure
+        const matching = neighborsOf(index)
+          .filter(
+            neighbor => owners[neighbor] === systemId
           ).length;
 
-        return 1 + adjacent * 2;
+        return 1 + matching * 2;
       });
 
-      const total = weights.reduce(
+      let selection = random() * weights.reduce(
         (sum, weight) => sum + weight,
         0
       );
 
-      let selection = random() * total;
       let chosen = available[available.length - 1];
 
       for (let i = 0; i < available.length; i++) {
@@ -435,22 +482,127 @@ export function generateWeatherPressureFields(
         }
       }
 
-      claim(chosen, pressure);
-      region.push(chosen);
-      outerClaimed++;
+      claim(chosen, systemId);
+      remaining--;
+      claimedThisRound++;
+    }
+
+    // Refresh all frontiers after the complete
+    // round. Growth is therefore simultaneous
+    // at the round level, not system-by-system.
+    for (let systemId = 0; systemId < systems.length; systemId++) {
+      const system = systems[systemId];
+
+      const nextFrontier: number[] = [];
+
+      for (let index = 0; index < count; index++) {
+        if (owners[index] !== systemId) continue;
+
+        if (
+          neighborsOf(index).some(
+            neighbor => owners[neighbor] === -1
+          )
+        ) {
+          nextFrontier.push(index);
+        }
+      }
+
+      system.frontier = nextFrontier;
+    }
+
+    if (claimedThisRound === 0 && remaining > 0) {
+      throw new Error(
+        'Weather pressure growth stalled.'
+      );
     }
   }
 
-  // Unclaimed Nodes remain neutral.
-  // The strong cores are normalized only
-  // for the permanent Weather Node field.
-  const nodePressures = new Int8Array(pressures);
+  // PHASE 3: Neutral smoothing.
+  //
+  // Only boundaries between opposing
+  // pressure signs are neutralized.
+  // Strong-pressure cores remain intact.
+  const neutralized = new Int8Array(pressures);
 
-  for (let i = 0; i < nodePressures.length; i++) {
-    if (nodePressures[i] === -2) {
-      nodePressures[i] = -1;
-    } else if (nodePressures[i] === 2) {
-      nodePressures[i] = 1;
+  for (let index = 0; index < count; index++) {
+    if (cores[index]) continue;
+
+    const pressure = Math.sign(pressures[index]);
+    const neighbors = neighborsOf(index);
+
+    let opposing = 0;
+    let matching = 0;
+
+    for (const neighbor of neighbors) {
+      const neighborPressure =
+        Math.sign(pressures[neighbor]);
+
+      if (neighborPressure === -pressure) {
+        opposing++;
+      } else if (neighborPressure === pressure) {
+        matching++;
+      }
+    }
+
+    // More conflicting neighbors produce a
+    // higher chance of becoming neutral.
+    const neutralChance =
+      opposing >= 3 ? 0.95 :
+      opposing === 2 ? 0.8 :
+      opposing === 1 ? 0.45 :
+      0;
+
+    if (
+      opposing > 0 &&
+      random() < neutralChance
+    ) {
+      neutralized[index] = 0;
+    } else if (
+      matching <= 1 &&
+      random() < 0.5
+    ) {
+      // Remove some thin isolated fragments.
+      neutralized[index] = 0;
+    }
+  }
+
+  // Apply a second, gentler neutral pass
+  // to soften unusually sharp boundaries.
+  const softened = new Int8Array(neutralized);
+
+  for (let index = 0; index < count; index++) {
+    if (cores[index]) continue;
+    if (neutralized[index] === 0) continue;
+
+    const neighbors = neighborsOf(index);
+
+    const neutralNeighbors = neighbors.filter(
+      neighbor => neutralized[neighbor] === 0
+    ).length;
+
+    const opposingNeighbors = neighbors.filter(
+      neighbor =>
+        Math.sign(neutralized[neighbor]) ===
+        -Math.sign(neutralized[index])
+    ).length;
+
+    if (
+      neutralNeighbors >= 2 &&
+      opposingNeighbors >= 1 &&
+      random() < 0.3
+    ) {
+      softened[index] = 0;
+    }
+  }
+
+  // Permanent Nodes retain only -1, 0, +1.
+  const nodePressures = new Int8Array(softened);
+
+  for (let index = 0; index < count; index++) {
+    if (nodePressures[index] === -2) {
+      nodePressures[index] = -1;
+    } else if (nodePressures[index] === 2) {
+      nodePressures[index] = 1;
     }
   }
 
@@ -463,8 +615,7 @@ export function generateWeatherPressureFields(
     windPressureField: {
       width,
       height,
-      pressures,
+      pressures: softened,
     },
   };
 }
-
