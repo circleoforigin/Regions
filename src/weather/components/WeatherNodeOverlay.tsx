@@ -7,7 +7,6 @@ import {
   getSectorSizeInMapUnits,
   OVERWORLD_SECTOR_RESOLUTION,
 } from '../../spatial/Sector';
-import type { WeatherConfiguration } from '../models/WeatherConfiguration';
 import { generateWeatherNode } from '../generation/WeatherNodeGenerator';
 import type { WeatherPressureField } from '../generation/WeatherPressureFieldGenerator';
 
@@ -28,8 +27,6 @@ interface WeatherNodeOverlayProps {
   viewportSize: Size;
   scale: number;
   pan: Point;
-  worldSeed: number;
-  configuration: WeatherConfiguration;
   pressureField: WeatherPressureField;
 }
 
@@ -58,35 +55,34 @@ export default function WeatherNodeOverlay({
   viewportSize,
   scale,
   pan,
-  worldSeed,
-  configuration,
   pressureField,
 }: WeatherNodeOverlayProps) {
   const pressureColors = useMemo(() => {
-    const { width, height } =
-      configuration.plane;
+  const {
+    width,
+    height,
+  } = pressureField;
 
-    const colors: string[] = [];
+  const colors: string[] = [];
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const node = generateWeatherNode(
-          x,
-          y,
-          worldSeed,
-          pressureField
-        );
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const node = generateWeatherNode(
+        x,
+        y,
+        pressureField
+      );
 
-        colors.push(
-          getPressureColor(
-            node.pressureInfluence
-          )
-        );
-      }
+      colors.push(
+        getPressureColor(
+          node.pressureInfluence
+        )
+      );
     }
+  }
 
-    return colors;
-  }, [worldSeed, configuration]);
+  return colors;
+}, [pressureField]);
 
   if (
     map.simulationScale !== 'overworld' ||
@@ -126,8 +122,7 @@ export default function WeatherNodeOverlay({
     return null;
   }
 
-  const sectorsPerNode =
-    configuration.plane.nodeSpacingMiles / 5;
+  const sectorsPerNode = 4;
 
   if (
     !Number.isSafeInteger(sectorsPerNode) ||
@@ -209,11 +204,8 @@ const originY =
     (bottom - originY) / nodeSpacing
   );
 
-  const planeWidth =
-    configuration.plane.width;
-
-  const planeHeight =
-    configuration.plane.height;
+const planeWidth = pressureField.width;
+const planeHeight = pressureField.height;
 
   const wrap = (
     value: number,
