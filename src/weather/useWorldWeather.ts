@@ -8,11 +8,15 @@ import {
   type WorldSeedContext,
 } from '../host/WorldSeedClient';
 import { createWorldWeatherConfiguration } from './WeatherSeedConfiguration';
-import { createWeatherMovementCycle } from './WeatherMovementCycle';
 import {
   loadOrCreateWeatherFields,
   type PersistedWeatherFields,
 } from './WeatherFieldRepository';
+import { moduleEventBus } from '../host/ModuleBus';
+import {
+  createWeatherMovementCycle,
+  getWeatherMovementStep,
+} from './WeatherMovementCycle';
 
 export function useWorldWeather(
   projectId: string | null
@@ -109,6 +113,110 @@ export function useWorldWeather(
       configuration,
     ]);
 
+const [
+  clockState,
+  setClockState,
+] = useState<{
+  time: number;
+  secondsPerDay: number;
+} | null>(null);
+
+useEffect(() =>
+{
+  let cancelled = false;
+
+  setClockState(null);
+
+  const applyClockState = (
+    payload: unknown
+  ) =>
+  {
+    if (cancelled)
+    {
+      return;
+    }
+
+    const state = payload as {
+      time?: number;
+      era?: {
+        secondsPerMinute?: number;
+        minutesPerHour?: number;
+        hoursPerDay?: number;
+      };
+    } | undefined;
+
+    const era = state?.era;
+
+    if (
+      typeof state?.time !== 'number' ||
+      !Number.isFinite(state.time) ||
+      !era ||
+      typeof era.secondsPerMinute !== 'number' ||
+      typeof era.minutesPerHour !== 'number' ||
+      typeof era.hoursPerDay !== 'number'
+    )
+    {
+      return;
+    }
+
+    const secondsPerDay =
+      era.secondsPerMinute *
+      era.minutesPerHour *
+      era.hoursPerDay;
+
+    if (
+      !Number.isFinite(secondsPerDay) ||
+      secondsPerDay <= 0
+    )
+    {
+      return;
+    }
+
+    setClockState({
+      time: state.time,
+      secondsPerDay,
+    });
+  };
+
+  if (!projectId)
+  {
+    return;
+  }
+
+  const unsubscribe =
+    moduleEventBus.subscribe(
+      'Simulation.TimeCommitted',
+      (message) =>
+      {
+        applyClockState(message.payload);
+      }
+    );
+
+  void moduleEventBus.request(
+    'Simulation.GetClockState',
+    {}
+  )
+    .then((response) =>
+    {
+      applyClockState(response);
+    })
+    .catch((error: unknown) =>
+    {
+      if (!cancelled)
+      {
+        console.error(
+          '[Weather] Unable to obtain SimClock state.',
+          error
+        );
+      }
+    });
+
+  return () =>
+  {
+    cancelled = true;
+    unsubscribe();
+  };
+}, [projectId]);
 
 const [
   savedWeatherFields,
@@ -182,11 +290,21 @@ useEffect(() => {
 const pressureField = savedWeatherFields?.pressureField ?? null;
 const windField = savedWeatherFields?.windField ?? null;
 
+const movementStep =
+  configuration && clockState
+    ? getWeatherMovementStep(
+        clockState.time /
+          clockState.secondsPerDay,
+        configuration
+      )
+    : null;
+
 return {
   worldContext:
     configuration ? worldContext : null,
   configuration,
   movementCycle,
+  movementStep,
   pressureField,
   windField,
   weatherFieldsLoading,

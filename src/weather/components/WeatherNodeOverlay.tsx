@@ -58,6 +58,9 @@ export default function WeatherNodeOverlay({
   scale,
   pan,
   pressureField,
+  movementCycle,
+  configuration,
+  movementStep,
 }: WeatherNodeOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

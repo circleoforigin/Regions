@@ -39,9 +39,9 @@ export default function WeatherOverlayLayer({
   const { state } = useRegionsState();
 
 const {
-  worldContext,
   configuration,
   movementCycle,
+  movementStep,
   pressureField,
   windField,
 } = useWeather();
@@ -50,19 +50,16 @@ const {
     state.layerVisibility ??
     defaultLayerVisibility;
 
-  const showNodes =
-    visibility.weatherNodes;
+  const showNodes = visibility.weatherNodes;
 
-  const showWind =
-    visibility.weatherWind;
-
-// Initial atmospheric position.
-// Temporary until SimClock is connected.
-const movementStep = 0;
+  const showWind = visibility.weatherWind;
 
   return (
     <>
 {showNodes &&
+  configuration &&
+  movementCycle &&
+  movementStep !== null &&
   pressureField && (
     <WeatherNodeOverlay
       map={map}
@@ -72,6 +69,9 @@ const movementStep = 0;
       scale={scale}
       pan={pan}
       pressureField={pressureField}
+      movementCycle={movementCycle}
+      configuration={configuration}
+      movementStep={movementStep}
     />
   )}
 
