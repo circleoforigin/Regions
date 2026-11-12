@@ -17,6 +17,9 @@ import {
   createWeatherMovementCycle,
   getWeatherMovementStep,
 } from './WeatherMovementCycle';
+import type { WeatherEnvironmentSnapshot } from './WeatherEnvironment';
+import { TemperatureManager } from './TemperatureManager';
+import { deriveWeatherSeeds } from './WeatherSeedConfiguration';
 
 export function useWorldWeather(
   projectId: string | null
@@ -113,6 +116,30 @@ export function useWorldWeather(
       configuration,
     ]);
 
+const temperatureManager =
+  useMemo(() =>
+  {
+    if (!worldContext || !configuration) {
+      return null;
+    }
+
+    const seeds = deriveWeatherSeeds(
+      worldContext.seed
+    );
+
+    const nodeCount =
+      configuration.plane.width *
+      configuration.plane.height;
+
+    return new TemperatureManager(
+      seeds.temperature,
+      nodeCount
+    );
+  }, [
+    worldContext,
+    configuration,
+  ]);
+
 const [
   clockState,
   setClockState,
@@ -123,9 +150,10 @@ const [
 
 useEffect(() =>
 {
-  let cancelled = false;
+let cancelled = false;
+let receivedLiveClockEvent = false;
 
-  setClockState(null);
+setClockState(null);
 
   const applyClockState = (
     payload: unknown
@@ -183,29 +211,116 @@ useEffect(() =>
     return;
   }
 
-  const unsubscribe =
-    moduleEventBus.subscribe(
-      'Simulation.TimeCommitted',
-      (message) =>
-      {
-        applyClockState(message.payload);
-      }
-    );
+const unsubscribe =
+  moduleEventBus.subscribe(
+    'Simulation.TimeCommitted',
+    (message) =>
+    {
+      receivedLiveClockEvent = true;
+      applyClockState(message.payload);
+    }
+  );
 
   void moduleEventBus.request(
     'Simulation.GetClockState',
     {}
   )
-    .then((response) =>
-    {
-      applyClockState(response);
-    })
+.then((response) =>
+{
+  if (
+    cancelled ||
+    receivedLiveClockEvent
+  )
+  {
+    return;
+  }
+
+  applyClockState(response);
+})
     .catch((error: unknown) =>
     {
       if (!cancelled)
       {
         console.error(
           '[Weather] Unable to obtain SimClock state.',
+          error
+        );
+      }
+    });
+
+  return () =>
+  {
+    cancelled = true;
+    unsubscribe();
+  };
+}, [projectId]);
+
+const [
+  environment,
+  setEnvironment,
+] = useState<WeatherEnvironmentSnapshot | null>(
+  null
+);
+
+useEffect(() =>
+{
+  let cancelled = false;
+  let receivedLiveUpdate = false;
+
+  setEnvironment(null);
+
+  if (!projectId)
+  {
+    return;
+  }
+
+  const applyEnvironment = (
+    payload: unknown
+  ) =>
+  {
+    if (cancelled)
+    {
+      return;
+    }
+
+    const snapshot =
+      payload as WeatherEnvironmentSnapshot | undefined;
+
+    if (!snapshot?.definitions)
+    {
+      return;
+    }
+
+    setEnvironment(snapshot);
+  };
+
+  const unsubscribe =
+    moduleEventBus.subscribe(
+      'Environment.DefinitionsChanged',
+      message =>
+      {
+        receivedLiveUpdate = true;
+        applyEnvironment(message.payload);
+      }
+    );
+
+  void moduleEventBus.request(
+    'Environment.GetDefinitions',
+    {}
+  )
+    .then(response =>
+    {
+      if (!receivedLiveUpdate)
+      {
+        applyEnvironment(response);
+      }
+    })
+    .catch((error: unknown) =>
+    {
+      if (!cancelled)
+      {
+        console.error(
+          '[Weather] Unable to obtain Environment definitions.',
           error
         );
       }
@@ -307,6 +422,8 @@ return {
   movementStep,
   pressureField,
   windField,
+  environment,
+  temperatureManager,
   weatherFieldsLoading,
   weatherFieldsError,
 };

@@ -8,10 +8,10 @@ import {
   type WeatherConfiguration,
 } from './models/WeatherConfiguration';
 
-export interface WeatherSeeds
-{
+export interface WeatherSeeds {
   movement: number;
   transitions: number;
+  temperature: number;
 }
 
 export function deriveWeatherSeeds(
@@ -27,6 +27,11 @@ export function deriveWeatherSeeds(
     transitions: deriveSeed(
       worldSeed,
       'weather.transitions'
+    ),
+
+    temperature: deriveSeed(
+        worldSeed,
+        'weather.temperature'
     ),
   };
 }
