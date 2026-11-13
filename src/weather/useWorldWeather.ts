@@ -40,61 +40,7 @@ export function useWorldWeather(
     setResolvedProjectId,
   ] = useState<string | null>(
     null
-  );
-
-  const [
-  temperatureManager,
-  setTemperatureManager,
-] = useState<TemperatureManager | null>(null);
-
-useEffect(() => {
-  let cancelled = false;
-
-  setTemperatureManager(null);
-
-  if (
-    !projectId ||
-    !worldContext ||
-    !configuration ||
-    resolvedProjectId !== projectId
-  ) {
-    return;
-  }
-
-  const seeds = deriveWeatherSeeds(
-    worldContext.seed
-  );
-
-  void loadOrCreateTemperatureSwing(
-    projectId,
-    worldContext.worldId,
-    seeds.temperature
-  )
-    .then(cycle => {
-      if (!cancelled) {
-        setTemperatureManager(
-          new TemperatureManager(cycle)
-        );
-      }
-    })
-    .catch((error: unknown) => {
-      if (!cancelled) {
-        console.error(
-          '[Temperature] Unable to load TemperatureSwing.',
-          error
-        );
-      }
-    });
-
-  return () => {
-    cancelled = true;
-  };
-}, [
-  projectId,
-  resolvedProjectId,
-  worldContext,
-  configuration,
-]);
+  );  
 
   useEffect(() =>
   {
@@ -173,11 +119,59 @@ useEffect(() => {
       configuration,
     ]);
 
-loadOrCreateTemperatureSwing(
+    const [
+  temperatureManager,
+  setTemperatureManager,
+] = useState<TemperatureManager | null>(null);
+
+useEffect(() => {
+  let cancelled = false;
+
+  setTemperatureManager(null);
+
+  if (
+    !projectId ||
+    !worldContext ||
+    !configuration ||
+    resolvedProjectId !== projectId
+  ) {
+    return;
+  }
+
+  const seeds = deriveWeatherSeeds(
+    worldContext.seed
+  );
+
+  void loadOrCreateTemperatureSwing(
+    projectId,
+    worldContext.worldId,
+    seeds.temperature
+  )
+    .then(cycle => {
+      if (!cancelled) {
+        setTemperatureManager(
+          new TemperatureManager(cycle)
+        );
+      }
+    })
+    .catch((error: unknown) => {
+      if (!cancelled) {
+        console.error(
+          '[Temperature] Unable to load TemperatureSwing.',
+          error
+        );
+      }
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [
   projectId,
-  worldContext.worldId,
-  seeds.temperature
-)
+  resolvedProjectId,
+  worldContext,
+  configuration,
+]);
 
 const [
   clockState,

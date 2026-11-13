@@ -40,7 +40,7 @@ export function createTemperatureSwingCycle(
         ? randomInteger(0, 2)
         : roll < 0.98
           ? randomInteger(3, 6)
-          : randomInteger(7, 10);
+          : randomInteger(7, 8);
 
     return magnitude === 0
       ? 0
@@ -49,59 +49,126 @@ export function createTemperatureSwingCycle(
         : magnitude;
   };
 
-  const halfLength =
-    TEMPERATURE_SWING_LENGTH / 2;
+  const values: number[] = [0];
 
-  const firstHalf: number[] = [0];
-
-  while (firstHalf.length < halfLength) {
-    const previous =
-      firstHalf[firstHalf.length - 1];
-
-    let next: number;
-
-    do {
-      next = previous + generateChange();
-    } while (
-      next < -MAX_TEMPERATURE_SWING ||
-      next > MAX_TEMPERATURE_SWING
-    );
-
-    firstHalf.push(next);
-  }
-
-  // Keep the join between the two halves
-  // within the maximum daily change.
   while (
-    Math.abs(firstHalf[halfLength - 1]) > 5
+    values.length < TEMPERATURE_SWING_LENGTH - 1
   ) {
-    firstHalf.pop();
-
-    const previous =
-      firstHalf[firstHalf.length - 1];
+    const previous = values[values.length - 1];
 
     let next: number;
 
     do {
       next = previous + generateChange();
     } while (
-      next < -5 ||
-      next > 5
+      Math.abs(next) > MAX_TEMPERATURE_SWING
     );
 
-    firstHalf.push(next);
+    values.push(next);
   }
 
-  // Mirroring with inverted signs guarantees
-  // an exact zero sum without altering values.
-  const secondHalf = firstHalf
-    .slice()
-    .reverse()
-    .map(value => -value);
+  // Close the cycle without a sudden jump.
+// Gradually guide the final days toward
+// the starting value so the cycle closes.
+const closingDays = 16;
+const closingStart =
+  TEMPERATURE_SWING_LENGTH - closingDays;
 
-  return {
-    values: [...firstHalf, ...secondHalf],
-  };
+for (
+  let index = closingStart;
+  index < values.length;
+  index++
+) {
+  const remaining =
+    TEMPERATURE_SWING_LENGTH - index;
+
+  const previous = values[index - 1];
+
+  const target = Math.round(
+    previous * (remaining - 1) / remaining
+  );
+
+  values[index] = Math.max(
+    -MAX_TEMPERATURE_SWING,
+    Math.min(MAX_TEMPERATURE_SWING, target)
+  );
+}
+
+values.push(0);
+
+  // Find an integer offset that places the
+  // total sum at or immediately below zero.
+  const sumWithOffset = (offset: number): number =>
+    values.reduce(
+      (sum, value) =>
+        sum + Math.max(
+          -MAX_TEMPERATURE_SWING,
+          Math.min(
+            MAX_TEMPERATURE_SWING,
+            value + offset
+          )
+        ),
+      0
+    );
+
+  let low = -20;
+  let high = 20;
+
+  while (low < high) {
+    const middle = Math.floor(
+      (low + high + 1) / 2
+    );
+
+    if (sumWithOffset(middle) <= 0) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  for (let index = 0; index < values.length; index++) {
+    values[index] = Math.max(
+      -MAX_TEMPERATURE_SWING,
+      Math.min(
+        MAX_TEMPERATURE_SWING,
+        values[index] + low
+      )
+    );
+  }
+
+  // Correct the remaining negative sum
+  // by distributing individual +1 changes.
+  let deficit = -values.reduce(
+    (sum, value) => sum + value,
+    0
+  );
+
+  const candidates = values
+    .map((value, index) => ({
+      value,
+      index,
+    }))
+    .filter(item =>
+      item.value < MAX_TEMPERATURE_SWING
+    );
+
+  // Deterministically shuffle correction locations.
+  for (let index = candidates.length - 1; index > 0; index--) {
+    const other = randomInteger(0, index);
+
+    [candidates[index], candidates[other]] =
+      [candidates[other], candidates[index]];
+  }
+
+  for (
+    let index = 0;
+    index < deficit;
+    index++
+  ) {
+    values[candidates[index].index]++;
+  }
+
+  return { values };
 }
 
 export function validateTemperatureSwingCycle(
@@ -128,12 +195,15 @@ export function validateTemperatureSwingCycle(
     return false;
   }
 
-  return values.every((value, index) => {
-    const next =
-      values[(index + 1) % values.length];
+return values.every((value, index) => {
+  const next =
+    values[(index + 1) % values.length];
 
-    return Math.abs(next - value) <= 10;
-  });
+  return (
+    Math.abs(next - value) <=
+    MAX_TEMPERATURE_SWING
+  );
+});
 }
 
 export class TemperatureManager {
@@ -241,4 +311,56 @@ export async function loadOrCreateTemperatureSwing(
   );
 
   return cycle;
+}
+
+export function testTemperatureSwingGenerator(): void {
+  const seeds = [
+    0,
+    1,
+    42,
+    12345,
+    987654321,
+    0xffffffff,
+  ];
+
+  for (const seed of seeds) {
+    const first = createTemperatureSwingCycle(seed);
+    const second = createTemperatureSwingCycle(seed);
+
+    if (!validateTemperatureSwingCycle(first)) {
+      throw new Error(
+        `TemperatureSwing validation failed for seed ${seed}.`
+      );
+    }
+
+    if (
+      first.values.some(
+        (value, index) =>
+          value !== second.values[index]
+      )
+    ) {
+      throw new Error(
+        `TemperatureSwing is not deterministic for seed ${seed}.`
+      );
+    }
+
+    const manager = new TemperatureManager(first);
+
+    for (const day of [
+      -1025, -1024, -1, 0, 1, 1023, 1024, 1025,
+    ]) {
+      const expected =
+        first.values[
+          ((day % TEMPERATURE_SWING_LENGTH) +
+            TEMPERATURE_SWING_LENGTH) %
+          TEMPERATURE_SWING_LENGTH
+        ];
+
+      if (manager.getDailySwing(day) !== expected) {
+        throw new Error(
+          `TemperatureSwing lookup failed for day ${day}.`
+        );
+      }
+    }
+  }
 }
