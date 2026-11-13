@@ -18,7 +18,10 @@ import {
   getWeatherMovementStep,
 } from './WeatherMovementCycle';
 import type { WeatherEnvironmentSnapshot } from './WeatherEnvironment';
-import { TemperatureManager } from './TemperatureManager';
+import {
+  TemperatureManager,
+  loadOrCreateTemperatureSwing,
+} from './TemperatureManager';
 import { deriveWeatherSeeds } from './WeatherSeedConfiguration';
 
 export function useWorldWeather(
@@ -38,6 +41,60 @@ export function useWorldWeather(
   ] = useState<string | null>(
     null
   );
+
+  const [
+  temperatureManager,
+  setTemperatureManager,
+] = useState<TemperatureManager | null>(null);
+
+useEffect(() => {
+  let cancelled = false;
+
+  setTemperatureManager(null);
+
+  if (
+    !projectId ||
+    !worldContext ||
+    !configuration ||
+    resolvedProjectId !== projectId
+  ) {
+    return;
+  }
+
+  const seeds = deriveWeatherSeeds(
+    worldContext.seed
+  );
+
+  void loadOrCreateTemperatureSwing(
+    projectId,
+    worldContext.worldId,
+    seeds.temperature
+  )
+    .then(cycle => {
+      if (!cancelled) {
+        setTemperatureManager(
+          new TemperatureManager(cycle)
+        );
+      }
+    })
+    .catch((error: unknown) => {
+      if (!cancelled) {
+        console.error(
+          '[Temperature] Unable to load TemperatureSwing.',
+          error
+        );
+      }
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [
+  projectId,
+  resolvedProjectId,
+  worldContext,
+  configuration,
+]);
 
   useEffect(() =>
   {
@@ -116,29 +173,11 @@ export function useWorldWeather(
       configuration,
     ]);
 
-const temperatureManager =
-  useMemo(() =>
-  {
-    if (!worldContext || !configuration) {
-      return null;
-    }
-
-    const seeds = deriveWeatherSeeds(
-      worldContext.seed
-    );
-
-    const nodeCount =
-      configuration.plane.width *
-      configuration.plane.height;
-
-    return new TemperatureManager(
-      seeds.temperature,
-      nodeCount
-    );
-  }, [
-    worldContext,
-    configuration,
-  ]);
+loadOrCreateTemperatureSwing(
+  projectId,
+  worldContext.worldId,
+  seeds.temperature
+)
 
 const [
   clockState,

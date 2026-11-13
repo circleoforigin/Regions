@@ -1,9 +1,8 @@
-import {
-  deriveSeed,
-} from '@settingforge/module-sdk';
+import { hostedCollectionRepository } from '../host/HostedCollectionRepository';
 
-export const TEMPERATURE_SWING_LENGTH = 256;
+export const TEMPERATURE_SWING_LENGTH = 1024;
 export const MAX_TEMPERATURE_SWING = 10;
+export const TEMPERATURE_SWING_VERSION = 1;
 
 export interface TemperatureSwingCycle {
   values: number[];
@@ -15,7 +14,7 @@ function nextRandomState(state: number): number {
   ) >>> 0;
 }
 
-function createTemperatureSwingCycle(
+export function createTemperatureSwingCycle(
   seed: number
 ): TemperatureSwingCycle {
   let state = seed >>> 0;
@@ -50,123 +49,196 @@ function createTemperatureSwingCycle(
         : magnitude;
   };
 
-  for (
-    let attempt = 0;
-    attempt < 100000;
-    attempt++
-  ) {
-    const values: number[] = [
-      randomInteger(-10, 10),
-    ];
+  const halfLength =
+    TEMPERATURE_SWING_LENGTH / 2;
 
-    while (
-      values.length < TEMPERATURE_SWING_LENGTH
-    ) {
-      const previous =
-        values[values.length - 1];
+  const firstHalf: number[] = [0];
 
-      let next: number;
+  while (firstHalf.length < halfLength) {
+    const previous =
+      firstHalf[firstHalf.length - 1];
 
-      do {
-        next = previous + generateChange();
-      } while (
-        next < -MAX_TEMPERATURE_SWING ||
-        next > MAX_TEMPERATURE_SWING
-      );
+    let next: number;
 
-      values.push(next);
-    }
-
-    const sum = values.reduce(
-      (total, value) => total + value,
-      0
+    do {
+      next = previous + generateChange();
+    } while (
+      next < -MAX_TEMPERATURE_SWING ||
+      next > MAX_TEMPERATURE_SWING
     );
 
-    const boundaryChange = Math.abs(
-      values[values.length - 1] -
-      values[0]
-    );
-
-    if (
-      sum === 0 &&
-      boundaryChange <= MAX_TEMPERATURE_SWING
-    ) {
-      return { values };
-    }
+    firstHalf.push(next);
   }
 
-  throw new Error(
-    'Unable to generate TemperatureSwing cycle.'
-  );
+  // Keep the join between the two halves
+  // within the maximum daily change.
+  while (
+    Math.abs(firstHalf[halfLength - 1]) > 5
+  ) {
+    firstHalf.pop();
+
+    const previous =
+      firstHalf[firstHalf.length - 1];
+
+    let next: number;
+
+    do {
+      next = previous + generateChange();
+    } while (
+      next < -5 ||
+      next > 5
+    );
+
+    firstHalf.push(next);
+  }
+
+  // Mirroring with inverted signs guarantees
+  // an exact zero sum without altering values.
+  const secondHalf = firstHalf
+    .slice()
+    .reverse()
+    .map(value => -value);
+
+  return {
+    values: [...firstHalf, ...secondHalf],
+  };
 }
 
-export function getTemperatureSwing(
-  cycle: TemperatureSwingCycle,
-  worldDay: number
-): number {
-  if (!Number.isSafeInteger(worldDay)) {
-    throw new Error(
-      'TemperatureSwing requires an integer World day.'
-    );
+export function validateTemperatureSwingCycle(
+  cycle: TemperatureSwingCycle
+): boolean {
+  const values = cycle.values;
+
+  if (
+    values.length !== TEMPERATURE_SWING_LENGTH ||
+    !values.every(value =>
+      Number.isInteger(value) &&
+      Math.abs(value) <= MAX_TEMPERATURE_SWING
+    )
+  ) {
+    return false;
   }
 
-  const index =
-    ((worldDay % cycle.values.length) +
-      cycle.values.length) %
-    cycle.values.length;
+  const sum = values.reduce(
+    (total, value) => total + value,
+    0
+  );
 
-  return cycle.values[index];
+  if (sum !== 0) {
+    return false;
+  }
+
+  return values.every((value, index) => {
+    const next =
+      values[(index + 1) % values.length];
+
+    return Math.abs(next - value) <= 10;
+  });
 }
 
 export class TemperatureManager {
-  private readonly cycles = new Map<number, TemperatureSwingCycle>();
-  private readonly temperatureSeed: number;
-  private readonly nodeCount: number;
+  private readonly cycle: TemperatureSwingCycle;
 
-  constructor(
-    temperatureSeed: number,
-    nodeCount: number
-  ) {
-    this.temperatureSeed = temperatureSeed;
-    this.nodeCount = nodeCount;
-  }
-
-  private getCycle(
-    nodeIndex: number
-  ): TemperatureSwingCycle {
-    if (
-      !Number.isSafeInteger(nodeIndex) ||
-      nodeIndex < 0 ||
-      nodeIndex >= this.nodeCount
-    ) {
+  constructor(cycle: TemperatureSwingCycle) {
+    if (!validateTemperatureSwingCycle(cycle)) {
       throw new Error(
-        'Invalid Weather Node index.'
+        'Invalid TemperatureSwing cycle.'
       );
     }
 
-    let cycle = this.cycles.get(nodeIndex);
+    this.cycle = {
+      values: [...cycle.values],
+    };
+  }
 
-    if (!cycle) {
-      const seed = deriveSeed(
-        this.temperatureSeed,
-        `weather.temperature.node.${nodeIndex}`
+  getDailySwing(worldDay: number): number {
+    if (!Number.isSafeInteger(worldDay)) {
+      throw new Error(
+        'Temperature requires an integer World day.'
       );
+    }
 
-      cycle = createTemperatureSwingCycle(seed);
+    const index =
+      ((worldDay % TEMPERATURE_SWING_LENGTH) +
+        TEMPERATURE_SWING_LENGTH) %
+      TEMPERATURE_SWING_LENGTH;
 
-      this.cycles.set(nodeIndex, cycle);
+    return this.cycle.values[index];
+  }
+
+  getCycle(): TemperatureSwingCycle {
+    return {
+      values: [...this.cycle.values],
+    };
+  }
+}
+
+const TEMPERATURE_COLLECTION = 'temperature-swing';
+
+interface StoredTemperatureSwing {
+  version: number;
+  worldId: string;
+  values: number[];
+}
+
+export async function loadOrCreateTemperatureSwing(
+  projectId: string,
+  worldId: string,
+  seed: number
+): Promise<TemperatureSwingCycle> {
+  if (!projectId || !worldId) {
+    throw new Error(
+      'Temperature persistence requires a Project and World.'
+    );
+  }
+
+  const stored =
+    await hostedCollectionRepository.load<
+      StoredTemperatureSwing
+    >(
+      TEMPERATURE_COLLECTION,
+      projectId
+    );
+
+  if (stored) {
+    const cycle: TemperatureSwingCycle = {
+      values: stored.values,
+    };
+
+    if (
+      stored.version !== TEMPERATURE_SWING_VERSION ||
+      stored.worldId !== worldId ||
+      !validateTemperatureSwingCycle(cycle)
+    ) {
+      throw new Error(
+        'Stored TemperatureSwing is incompatible or invalid.'
+      );
     }
 
     return cycle;
   }
 
-  getDailySwing(
-    nodeIndex: number,
-    worldDay: number
-  ): number {
-    return getTemperatureSwing(
-      this.getCycle(nodeIndex),
-      worldDay
+  const cycle = createTemperatureSwingCycle(
+    seed
+  );
+
+  if (!validateTemperatureSwingCycle(cycle)) {
+    throw new Error(
+      'Generated TemperatureSwing is invalid.'
     );
   }
+
+  const record: StoredTemperatureSwing = {
+    version: TEMPERATURE_SWING_VERSION,
+    worldId,
+    values: cycle.values,
+  };
+
+  await hostedCollectionRepository.save(
+    TEMPERATURE_COLLECTION,
+    projectId,
+    record
+  );
+
+  return cycle;
 }
