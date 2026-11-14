@@ -24,6 +24,55 @@ import {
 } from './TemperatureManager';
 import { deriveWeatherSeeds } from './WeatherSeedConfiguration';
 
+interface WeatherCalendarEra {
+  id: string;
+  name: string;
+  abbreviation: string;
+  secondsPerMinute: number;
+  minutesPerHour: number;
+  hoursPerDay: number;
+  dayNames: string[];
+  months: {
+    id: string;
+    name: string;
+    days: number;
+  }[];
+  leapRule?: {
+    interval: number;
+    exceptEvery?: number;
+    unlessEvery?: number;
+    monthId: string;
+    afterDay: number;
+    additionalDays: number;
+  };
+  startingWeekday: string;
+  dateFormat: string;
+}
+
+interface WeatherSeasonAnchor {
+  monthId: string;
+  day: number;
+  time: number;
+}
+
+interface WeatherSeasonStart
+  extends WeatherSeasonAnchor {
+  seasonId: string;
+}
+
+interface WeatherSeasonCalendarYear {
+  year: number;
+  starts: WeatherSeasonStart[];
+  shortSolstice?: WeatherSeasonAnchor;
+  longSolstice?: WeatherSeasonAnchor;
+}
+
+interface WeatherSeasonCalendar {
+  previous: WeatherSeasonCalendarYear;
+  current: WeatherSeasonCalendarYear;
+  next: WeatherSeasonCalendarYear;
+}
+
 export function useWorldWeather(
   projectId: string | null
 )
@@ -119,7 +168,7 @@ export function useWorldWeather(
       configuration,
     ]);
 
-    const [
+const [
   temperatureManager,
   setTemperatureManager,
 ] = useState<TemperatureManager | null>(null);
@@ -179,6 +228,7 @@ const [
 ] = useState<{
   time: number;
   secondsPerDay: number;
+  era: WeatherCalendarEra;
 } | null>(null);
 
 useEffect(() =>
@@ -199,26 +249,24 @@ setClockState(null);
 
     const state = payload as {
       time?: number;
-      era?: {
-        secondsPerMinute?: number;
-        minutesPerHour?: number;
-        hoursPerDay?: number;
-      };
+      era?: WeatherCalendarEra;
     } | undefined;
 
     const era = state?.era;
 
-    if (
-      typeof state?.time !== 'number' ||
-      !Number.isFinite(state.time) ||
-      !era ||
-      typeof era.secondsPerMinute !== 'number' ||
-      typeof era.minutesPerHour !== 'number' ||
-      typeof era.hoursPerDay !== 'number'
-    )
-    {
-      return;
-    }
+if (
+  typeof state?.time !== 'number' ||
+  !Number.isFinite(state.time) ||
+  !era ||
+  typeof era.secondsPerMinute !== 'number' ||
+  typeof era.minutesPerHour !== 'number' ||
+  typeof era.hoursPerDay !== 'number' ||
+  !Array.isArray(era.months) ||
+  era.months.length === 0
+)
+{
+  return;
+}
 
     const secondsPerDay =
       era.secondsPerMinute *
@@ -234,8 +282,9 @@ setClockState(null);
     }
 
     setClockState({
-      time: state.time,
-      secondsPerDay,
+        time: state.time,
+        secondsPerDay,
+        era,
     });
   };
 
@@ -287,6 +336,64 @@ const unsubscribe =
     unsubscribe();
   };
 }, [projectId]);
+
+const [
+  seasonCalendar,
+  setSeasonCalendar,
+] = useState<WeatherSeasonCalendar | null>(
+  null
+);
+
+useEffect(() => {
+  let cancelled = false;
+
+  setSeasonCalendar(null);
+
+  if (!projectId || !clockState) {
+    return;
+  }
+
+  void moduleEventBus.request(
+    'Celestial.GetSeasonCalendar',
+    {
+      time: clockState.time,
+      era: clockState.era,
+    }
+  )
+    .then(response => {
+      if (cancelled) {
+        return;
+      }
+
+      const calendar =
+        response as WeatherSeasonCalendar;
+
+      if (
+        !calendar?.current ||
+        !Array.isArray(calendar.current.starts) ||
+        !calendar?.previous ||
+        !calendar?.next
+      ) {
+        throw new Error(
+          'Celestial returned an invalid season calendar.'
+        );
+      }
+
+      setSeasonCalendar(calendar);
+    })
+    .catch((error: unknown) => {
+      if (!cancelled) {
+        console.error(
+          '[Temperature] Unable to obtain season calendar.',
+          error
+        );
+      }
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [projectId, clockState]);
 
 const [
   environment,
@@ -457,6 +564,7 @@ return {
   windField,
   environment,
   temperatureManager,
+  seasonCalendar,
   weatherFieldsLoading,
   weatherFieldsError,
 };
