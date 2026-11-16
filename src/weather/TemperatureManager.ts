@@ -1,3 +1,4 @@
+import { createSeededRandom } from '@settingforge/module-sdk';
 import { hostedCollectionRepository } from '../host/HostedCollectionRepository';
 
 export const TEMPERATURE_SWING_LENGTH = 1024;
@@ -17,21 +18,10 @@ export interface DailyTemperatureRangeCycle {
   values: number[];
 }
 
-function nextRandomState(state: number): number {
-  return (
-    Math.imul(state, 1664525) + 1013904223
-  ) >>> 0;
-}
-
 export function createTemperatureSwingCycle(
   seed: number
 ): TemperatureSwingCycle {
-  let state = seed >>> 0;
-
-  const random = (): number => {
-    state = nextRandomState(state);
-    return state / 0x100000000;
-  };
+  const random = createSeededRandom(seed);
 
   const randomInteger = (
     minimum: number,
@@ -217,12 +207,7 @@ return values.every((value, index) => {
 export function createDailyTemperatureRangeCycle(
   seed: number
 ): DailyTemperatureRangeCycle {
-  let state = seed >>> 0;
-
-  const random = (): number => {
-    state = nextRandomState(state);
-    return state / 0x100000000;
-  };
+  const random = createSeededRandom(seed);
 
   const randomInteger = (
     minimum: number,

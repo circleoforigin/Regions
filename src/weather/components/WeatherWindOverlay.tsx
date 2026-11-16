@@ -153,11 +153,11 @@ export default function WeatherWindOverlay({
 
 // Fixed density based on zoom and viewport size,
 // independent of the currently visible map area.
-const MAX_VISIBLE_ARROWS = 600;
+//const MAX_VISIBLE_ARROWS = 600;
 
-const viewportSectorCount =
-  Math.ceil(viewportSize.width / stepPx) *
-  Math.ceil(viewportSize.height / stepPx);
+//const viewportSectorCount =
+  //Math.ceil(viewportSize.width / stepPx) *
+  //Math.ceil(viewportSize.height / stepPx);
 
 //const stride = Math.max(
   //1,

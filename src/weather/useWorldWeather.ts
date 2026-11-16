@@ -521,7 +521,8 @@ useEffect(() => {
   void loadOrCreateWeatherFields(
     projectId,
     worldContext.worldId,
-    configuration
+    configuration,
+    worldContext.seed
   )
     .then(fields => {
       if (!cancelled) {

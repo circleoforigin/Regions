@@ -1,7 +1,5 @@
-
-import type {
-  WeatherConfiguration,
-} from './models/WeatherConfiguration';
+import { nextRandomState } from '@settingforge/module-sdk';
+import type { WeatherConfiguration } from './models/WeatherConfiguration';
 
 export interface WeatherVector
 {
@@ -28,15 +26,6 @@ const DIRECTIONS: readonly WeatherVector[] = [
   { x: -1, y: -1 },
   { x: -1, y: 1 },
 ];
-
-function nextRandomState(
-  state: number
-): number
-{
-  return (
-    Math.imul(state, 1664525) + 1013904223
-  ) >>> 0;
-}
 
 export function createWeatherMovementCycle(
   configuration: WeatherConfiguration

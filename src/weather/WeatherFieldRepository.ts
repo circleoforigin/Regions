@@ -1,17 +1,11 @@
-
-import {
-  hostedCollectionRepository,
-} from '../host/HostedCollectionRepository';
-
-import type {
-  WeatherConfiguration,
-} from './models/WeatherConfiguration';
-
+import { createSeededRandom } from '@settingforge/module-sdk';
+import { deriveWeatherSeeds } from './WeatherSeedConfiguration';
+import { hostedCollectionRepository } from '../host/HostedCollectionRepository';
+import type { WeatherConfiguration } from './models/WeatherConfiguration';
 import {
   generateWeatherPressureFields,
   type WeatherPressureField,
 } from './generation/WeatherPressureFieldGenerator';
-
 import {
   generateWeatherWindField,
   type WeatherWindField,
@@ -90,7 +84,8 @@ function restoreWeatherFields(
 export async function loadOrCreateWeatherFields(
   projectId: string,
   worldId: string,
-  configuration: WeatherConfiguration
+  configuration: WeatherConfiguration,
+  worldSeed: number
 ): Promise<PersistedWeatherFields> {
   if (!projectId || !worldId) {
     throw new Error(
@@ -113,8 +108,13 @@ export async function loadOrCreateWeatherFields(
   }
 
   // Generate only when no saved atmosphere exists.
+  const seeds = deriveWeatherSeeds(worldSeed);
+
+  const random = createSeededRandom(seeds.pressure);
+
   const generated = generateWeatherPressureFields(
-    configuration
+    configuration,
+    random
   );
 
   const pressureField = generated.nodeField;
