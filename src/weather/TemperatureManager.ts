@@ -70,6 +70,73 @@ export function interpolateSeasonalTemperature(
   );
 }
 
+/**
+ * Resolves the seasonal baseline temperature
+ * from a chronologically ordered anchor profile.
+ *
+ * Outside the profile, the nearest endpoint
+ * temperature is returned.
+ */
+export function getSeasonalBaselineTemperature(
+  profile: SeasonalTemperatureProfile,
+  time: number
+): number {
+  if (!Number.isFinite(time)) {
+    throw new Error(
+      'Seasonal temperature requires a finite time.'
+    );
+  }
+
+  const anchors = profile.anchors;
+
+  if (anchors.length === 0) {
+    throw new Error(
+      'Seasonal temperature profile is empty.'
+    );
+  }
+
+  for (let index = 0; index < anchors.length; index++) {
+    const anchor = anchors[index];
+
+    if (
+      !Number.isFinite(anchor.time) ||
+      !Number.isFinite(anchor.temperature) ||
+      (
+        index > 0 &&
+        anchor.time <= anchors[index - 1].time
+      )
+    ) {
+      throw new Error(
+        'Seasonal temperature profile has invalid anchors.'
+      );
+    }
+  }
+
+  if (time <= anchors[0].time) {
+    return anchors[0].temperature;
+  }
+
+  const last = anchors[anchors.length - 1];
+
+  if (time >= last.time) {
+    return last.temperature;
+  }
+
+  for (let index = 1; index < anchors.length; index++) {
+    const end = anchors[index];
+
+    if (time <= end.time) {
+      return interpolateSeasonalTemperature(
+        anchors[index - 1],
+        end,
+        time
+      );
+    }
+  }
+
+  return last.temperature;
+}
+
 export function createTemperatureSwingCycle(
   seed: number
 ): TemperatureSwingCycle {
