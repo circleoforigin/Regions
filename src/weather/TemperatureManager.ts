@@ -634,16 +634,14 @@ export function testDailyTemperatureRangeGenerator(): void {
     0xffffffff,
   ];
 
-  for (const seed of seeds) {
-    const first =
-      createDailyTemperatureRangeCycle(seed);
+  for (const seed of seeds)
+  {
+    const first = createDailyTemperatureRangeCycle(seed);
 
-    const second =
-      createDailyTemperatureRangeCycle(seed);
+    const second = createDailyTemperatureRangeCycle(seed);
 
-    if (
-      !validateDailyTemperatureRangeCycle(first)
-    ) {
+    if (!validateDailyTemperatureRangeCycle(first))
+    {
       throw new Error(
         `DailyTemperatureRange validation failed for seed ${seed}.`
       );
@@ -659,5 +657,41 @@ export function testDailyTemperatureRangeGenerator(): void {
         `DailyTemperatureRange is not deterministic for seed ${seed}.`
       );
     }
+
+    const swingCycle = createTemperatureSwingCycle(seed);
+
+    const manager = new TemperatureManager(
+      swingCycle,
+      first
+    );
+
+    for (const day of [
+      -1010,
+      -1009,
+      -1,
+      0,
+      1,
+      1008,
+      1009,
+      1010,
+      2018,
+    ]) {
+      const index =
+        ((day % DAILY_TEMPERATURE_RANGE_LENGTH) +
+          DAILY_TEMPERATURE_RANGE_LENGTH) %
+        DAILY_TEMPERATURE_RANGE_LENGTH;
+
+      const expected = first.values[index];
+
+      if (
+        manager.getDailyTemperatureRange(day) !==
+        expected
+      ) {
+        throw new Error(
+          `DailyTemperatureRange lookup failed for day ${day}.`
+        );
+      }
+    }
+
   }
 }
