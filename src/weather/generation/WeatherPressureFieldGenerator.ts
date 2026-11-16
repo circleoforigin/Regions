@@ -19,7 +19,7 @@ function wrap(value: number, size: number): number {
 
 export function generateWeatherPressureField(
   configuration: WeatherConfiguration,
-  random: () => number = Math.random
+  random: () => number
 ): WeatherPressureField {
   const { width, height } = configuration.plane;
 
@@ -272,7 +272,7 @@ export function getWeatherNodePressure(
 
 export function generateWeatherPressureFields(
   configuration: WeatherConfiguration,
-  random: () => number = Math.random
+  random: () => number
 ): WeatherGenerationFields {
   const { width, height } = configuration.plane;
 

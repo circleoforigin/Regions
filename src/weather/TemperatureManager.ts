@@ -18,6 +18,58 @@ export interface DailyTemperatureRangeCycle {
   values: number[];
 }
 
+export interface SeasonalTemperatureAnchor {
+  time: number;
+  temperature: number;
+}
+
+export interface SeasonalTemperatureProfile {
+  anchors: SeasonalTemperatureAnchor[];
+}
+
+/**
+ * Interpolates smoothly between two temperature
+ * anchors using a cosine curve.
+ *
+ * The result has zero slope at both endpoints.
+ */
+export function interpolateSeasonalTemperature(
+  start: SeasonalTemperatureAnchor,
+  end: SeasonalTemperatureAnchor,
+  time: number
+): number {
+  if (
+    !Number.isFinite(start.time) ||
+    !Number.isFinite(end.time) ||
+    !Number.isFinite(start.temperature) ||
+    !Number.isFinite(end.temperature) ||
+    !Number.isFinite(time) ||
+    end.time <= start.time
+  ) {
+    throw new Error(
+      'Invalid seasonal temperature interpolation.'
+    );
+  }
+
+  const progress = Math.max(
+    0,
+    Math.min(
+      1,
+      (time - start.time) /
+        (end.time - start.time)
+    )
+  );
+
+  const weight =
+    (1 - Math.cos(Math.PI * progress)) / 2;
+
+  return (
+    start.temperature +
+    (end.temperature - start.temperature) *
+      weight
+  );
+}
+
 export function createTemperatureSwingCycle(
   seed: number
 ): TemperatureSwingCycle {
