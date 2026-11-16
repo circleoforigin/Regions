@@ -8,6 +8,15 @@ export interface TemperatureSwingCycle {
   values: number[];
 }
 
+export const DAILY_TEMPERATURE_RANGE_LENGTH = 1009;
+export const MIN_DAILY_TEMPERATURE_RANGE = 10;
+export const MAX_DAILY_TEMPERATURE_RANGE = 30;
+export const DAILY_TEMPERATURE_RANGE_VERSION = 1;
+
+export interface DailyTemperatureRangeCycle {
+  values: number[];
+}
+
 function nextRandomState(state: number): number {
   return (
     Math.imul(state, 1664525) + 1013904223
@@ -71,8 +80,7 @@ export function createTemperatureSwingCycle(
 // Gradually guide the final days toward
 // the starting value so the cycle closes.
 const closingDays = 16;
-const closingStart =
-  TEMPERATURE_SWING_LENGTH - closingDays;
+const closingStart = TEMPERATURE_SWING_LENGTH - closingDays;
 
 for (
   let index = closingStart;
@@ -206,20 +214,178 @@ return values.every((value, index) => {
 });
 }
 
+export function createDailyTemperatureRangeCycle(
+  seed: number
+): DailyTemperatureRangeCycle {
+  let state = seed >>> 0;
+
+  const random = (): number => {
+    state = nextRandomState(state);
+    return state / 0x100000000;
+  };
+
+  const randomInteger = (
+    minimum: number,
+    maximum: number
+  ): number =>
+    minimum + Math.floor(
+      random() * (maximum - minimum + 1)
+    );
+
+  const clamp = (value: number): number =>
+    Math.max(
+      MIN_DAILY_TEMPERATURE_RANGE,
+      Math.min(
+        MAX_DAILY_TEMPERATURE_RANGE,
+        value
+      )
+    );
+
+  const values: number[] = [
+    randomInteger(15, 25),
+  ];
+
+  while (
+    values.length <
+    DAILY_TEMPERATURE_RANGE_LENGTH
+  ) {
+    const previous =
+      values[values.length - 1];
+
+    const roll = random();
+
+    const magnitude =
+      roll < 0.85
+        ? randomInteger(0, 2)
+        : roll < 0.98
+          ? randomInteger(3, 5)
+          : randomInteger(6, 8);
+
+    const change =
+      magnitude === 0
+        ? 0
+        : random() < 0.5
+          ? -magnitude
+          : magnitude;
+
+    // Favor the typical 15–25°F range
+    // without excluding occasional extremes.
+    const centerAdjustment =
+      previous < 15
+        ? 1
+        : previous > 25
+          ? -1
+          : 0;
+
+    values.push(
+      clamp(
+        previous +
+        change +
+        centerAdjustment
+      )
+    );
+  }
+
+  // Guide the final 16 days toward the
+  // first value to avoid a cycle-boundary jump.
+  const closingDays = 16;
+  const closingStart =
+    DAILY_TEMPERATURE_RANGE_LENGTH -
+    closingDays;
+
+  for (
+    let index = closingStart;
+    index < values.length;
+    index++
+  ) {
+    const previous = values[index - 1];
+
+    const remaining =
+      DAILY_TEMPERATURE_RANGE_LENGTH -
+      index;
+
+    const target =
+      values[0];
+
+    values[index] = clamp(
+      previous +
+      Math.round(
+        (target - previous) /
+        (remaining + 1)
+      )
+    );
+  }
+
+  return { values };
+}
+
+export function validateDailyTemperatureRangeCycle(
+  cycle: DailyTemperatureRangeCycle
+): boolean {
+  const values = cycle.values;
+
+  if (
+    values.length !==
+      DAILY_TEMPERATURE_RANGE_LENGTH ||
+    !values.every(
+      value =>
+        Number.isInteger(value) &&
+        value >=
+          MIN_DAILY_TEMPERATURE_RANGE &&
+        value <=
+          MAX_DAILY_TEMPERATURE_RANGE
+    )
+  ) {
+    return false;
+  }
+
+  return values.every(
+    (value, index) => {
+      const next =
+        values[
+          (index + 1) %
+          values.length
+        ];
+
+      return Math.abs(
+        next - value
+      ) <= 10;
+    }
+  );
+}
+
 export class TemperatureManager {
   private readonly cycle: TemperatureSwingCycle;
+  private readonly dailyRangeCycle: DailyTemperatureRangeCycle | null;
 
-  constructor(cycle: TemperatureSwingCycle) {
-    if (!validateTemperatureSwingCycle(cycle)) {
-      throw new Error(
-        'Invalid TemperatureSwing cycle.'
-      );
-    }
-
-    this.cycle = {
-      values: [...cycle.values],
-    };
+  constructor(
+  cycle: TemperatureSwingCycle,
+  dailyRangeCycle: DailyTemperatureRangeCycle | null = null
+) {
+  if (!validateTemperatureSwingCycle(cycle)) {
+    throw new Error(
+      'Invalid TemperatureSwing cycle.'
+    );
   }
+
+  if (
+    dailyRangeCycle &&
+    !validateDailyTemperatureRangeCycle(dailyRangeCycle)
+  ) {
+    throw new Error(
+      'Invalid DailyTemperatureRange cycle.'
+    );
+  }
+
+  this.cycle = {
+    values: [...cycle.values],
+  };
+
+  this.dailyRangeCycle = dailyRangeCycle
+    ? { values: [...dailyRangeCycle.values] }
+    : null;
+}
+
 
   getDailySwing(worldDay: number): number {
     if (!Number.isSafeInteger(worldDay)) {
@@ -235,6 +401,30 @@ export class TemperatureManager {
 
     return this.cycle.values[index];
   }
+
+
+getDailyTemperatureRange(
+  worldDay: number
+): number {
+  if (!Number.isSafeInteger(worldDay)) {
+    throw new Error(
+      'DailyTemperatureRange requires an integer World day.'
+    );
+  }
+
+  if (!this.dailyRangeCycle) {
+    throw new Error(
+      'DailyTemperatureRange has not been loaded.'
+    );
+  }
+
+  const index =
+    ((worldDay % DAILY_TEMPERATURE_RANGE_LENGTH) +
+      DAILY_TEMPERATURE_RANGE_LENGTH) %
+    DAILY_TEMPERATURE_RANGE_LENGTH;
+
+  return this.dailyRangeCycle.values[index];
+}
 
   getCycle(): TemperatureSwingCycle {
     return {
@@ -313,6 +503,75 @@ export async function loadOrCreateTemperatureSwing(
   return cycle;
 }
 
+
+const DAILY_TEMPERATURE_RANGE_COLLECTION =
+  'daily-temperature-range';
+
+interface StoredDailyTemperatureRange {
+  version: number;
+  worldId: string;
+  values: number[];
+}
+
+export async function loadOrCreateDailyTemperatureRange(
+  projectId: string,
+  worldId: string,
+  seed: number
+): Promise<DailyTemperatureRangeCycle> {
+  if (!projectId || !worldId) {
+    throw new Error(
+      'DailyTemperatureRange requires a Project and World.'
+    );
+  }
+
+  const stored =
+    await hostedCollectionRepository.load<
+      StoredDailyTemperatureRange
+    >(
+      DAILY_TEMPERATURE_RANGE_COLLECTION,
+      projectId
+    );
+
+  if (stored) {
+    const cycle: DailyTemperatureRangeCycle = {
+      values: stored.values,
+    };
+
+    if (
+      stored.version !== DAILY_TEMPERATURE_RANGE_VERSION ||
+      stored.worldId !== worldId ||
+      !validateDailyTemperatureRangeCycle(cycle)
+    ) {
+      throw new Error(
+        'Stored DailyTemperatureRange is incompatible or invalid.'
+      );
+    }
+
+    return cycle;
+  }
+
+  const cycle =
+    createDailyTemperatureRangeCycle(seed);
+
+  if (!validateDailyTemperatureRangeCycle(cycle)) {
+    throw new Error(
+      'Generated DailyTemperatureRange is invalid.'
+    );
+  }
+
+  await hostedCollectionRepository.save(
+    DAILY_TEMPERATURE_RANGE_COLLECTION,
+    projectId,
+    {
+      version: DAILY_TEMPERATURE_RANGE_VERSION,
+      worldId,
+      values: cycle.values,
+    } satisfies StoredDailyTemperatureRange
+  );
+
+  return cycle;
+}
+
 export function testTemperatureSwingGenerator(): void {
   const seeds = [
     0,
@@ -361,6 +620,44 @@ export function testTemperatureSwingGenerator(): void {
           `TemperatureSwing lookup failed for day ${day}.`
         );
       }
+    }
+  }
+}
+
+export function testDailyTemperatureRangeGenerator(): void {
+  const seeds = [
+    0,
+    1,
+    42,
+    12345,
+    987654321,
+    0xffffffff,
+  ];
+
+  for (const seed of seeds) {
+    const first =
+      createDailyTemperatureRangeCycle(seed);
+
+    const second =
+      createDailyTemperatureRangeCycle(seed);
+
+    if (
+      !validateDailyTemperatureRangeCycle(first)
+    ) {
+      throw new Error(
+        `DailyTemperatureRange validation failed for seed ${seed}.`
+      );
+    }
+
+    if (
+      first.values.some(
+        (value, index) =>
+          value !== second.values[index]
+      )
+    ) {
+      throw new Error(
+        `DailyTemperatureRange is not deterministic for seed ${seed}.`
+      );
     }
   }
 }

@@ -12,6 +12,7 @@ export interface WeatherSeeds {
   movement: number;
   transitions: number;
   temperature: number;
+  dailyTemperatureRange: number;
 }
 
 export function deriveWeatherSeeds(
@@ -32,6 +33,11 @@ export function deriveWeatherSeeds(
     temperature: deriveSeed(
         worldSeed,
         'weather.temperature'
+    ),
+
+    dailyTemperatureRange: deriveSeed(
+        worldSeed,
+        'weather.daily-temperature-range'
     ),
   };
 }

@@ -21,6 +21,7 @@ import type { WeatherEnvironmentSnapshot } from './WeatherEnvironment';
 import {
   TemperatureManager,
   loadOrCreateTemperatureSwing,
+  loadOrCreateDailyTemperatureRange,
 } from './TemperatureManager';
 import { deriveWeatherSeeds } from './WeatherSeedConfiguration';
 
@@ -191,26 +192,37 @@ useEffect(() => {
     worldContext.seed
   );
 
-  void loadOrCreateTemperatureSwing(
+  
+void Promise.all([
+  loadOrCreateTemperatureSwing(
     projectId,
     worldContext.worldId,
     seeds.temperature
-  )
-    .then(cycle => {
-      if (!cancelled) {
-        setTemperatureManager(
-          new TemperatureManager(cycle)
-        );
-      }
-    })
-    .catch((error: unknown) => {
-      if (!cancelled) {
-        console.error(
-          '[Temperature] Unable to load TemperatureSwing.',
-          error
-        );
-      }
-    });
+  ),
+  loadOrCreateDailyTemperatureRange(
+    projectId,
+    worldContext.worldId,
+    seeds.dailyTemperatureRange
+  ),
+])
+  .then(([swingCycle, rangeCycle]) => {
+    if (!cancelled) {
+      setTemperatureManager(
+        new TemperatureManager(
+          swingCycle,
+          rangeCycle
+        )
+      );
+    }
+  })
+  .catch((error: unknown) => {
+    if (!cancelled) {
+      console.error(
+        '[Temperature] Unable to load temperature cycles.',
+        error
+      );
+    }
+  });
 
   return () => {
     cancelled = true;
