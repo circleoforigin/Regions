@@ -709,6 +709,130 @@ export function calculateDailyTemperature(
   };
 }
 
+export interface CurrentTemperature {
+  time: number;
+  worldDay: number;
+  dayFraction: number;
+  temperature: number;
+  dailyTemperature: DailyTemperature;
+}
+
+/**
+ * Returns the temperature at any simulation time.
+ *
+ * Daily minimum: 06:00
+ * Daily maximum: 15:00
+ *
+ * Temperatures between 15:00 and the next 06:00
+ * cool smoothly toward the next day's minimum.
+ */
+export function calculateCurrentTemperature(
+  manager: TemperatureManager,
+  profile: SeasonalTemperatureProfile,
+  time: number,
+  secondsPerDay: number
+): CurrentTemperature {
+  if (
+    !Number.isFinite(time) ||
+    !Number.isFinite(secondsPerDay) ||
+    secondsPerDay <= 0
+  ) {
+    throw new Error(
+      'Invalid current temperature calculation input.'
+    );
+  }
+
+  const worldDay = Math.floor(
+    time / secondsPerDay
+  );
+
+  if (!Number.isSafeInteger(worldDay)) {
+    throw new Error(
+      'Temperature World day exceeds safe integer range.'
+    );
+  }
+
+  const dayFraction =
+    time / secondsPerDay - worldDay;
+
+  const minimumTime = 6 / 24;
+  const maximumTime = 15 / 24;
+
+  const today = calculateDailyTemperature(
+    manager,
+    profile,
+    worldDay,
+    secondsPerDay
+  );
+
+  let temperature: number;
+
+  if (dayFraction < minimumTime) {
+    // Continue cooling from yesterday's maximum
+    // toward today's minimum.
+    const yesterday = calculateDailyTemperature(
+      manager,
+      profile,
+      worldDay - 1,
+      secondsPerDay
+    );
+
+    temperature = interpolateSeasonalTemperature(
+      {
+        time: maximumTime - 1,
+        temperature: yesterday.maximum,
+      },
+      {
+        time: minimumTime,
+        temperature: today.minimum,
+      },
+      dayFraction
+    );
+  } else if (dayFraction <= maximumTime) {
+    // Warm from today's minimum to maximum.
+    temperature = interpolateSeasonalTemperature(
+      {
+        time: minimumTime,
+        temperature: today.minimum,
+      },
+      {
+        time: maximumTime,
+        temperature: today.maximum,
+      },
+      dayFraction
+    );
+  } else {
+    // Cool from today's maximum toward
+    // tomorrow's minimum.
+    const tomorrow = calculateDailyTemperature(
+      manager,
+      profile,
+      worldDay + 1,
+      secondsPerDay
+    );
+
+    temperature = interpolateSeasonalTemperature(
+      {
+        time: maximumTime,
+        temperature: today.maximum,
+      },
+      {
+        time: 1 + minimumTime,
+        temperature: tomorrow.minimum,
+      },
+      dayFraction
+    );
+  }
+
+  return {
+    time,
+    worldDay,
+    dayFraction,
+    temperature,
+    dailyTemperature: today,
+  };
+}
+
 export class TemperatureManager {
   private readonly cycle: TemperatureSwingCycle;
   private readonly dailyRangeCycle: DailyTemperatureRangeCycle | null;
@@ -1047,6 +1171,82 @@ export function testDailyTemperatureRangeGenerator(): void {
         );
       }
     }
+  }
+}
 
+export function testCurrentTemperatureCalculation(): void {
+  const manager = new TemperatureManager(
+    createTemperatureSwingCycle(12345),
+    createDailyTemperatureRangeCycle(67890)
+  );
+
+  const secondsPerDay = 86400;
+
+  const profile: SeasonalTemperatureProfile = {
+    anchors: [
+      { time: -86400 * 10, temperature: 50 },
+      { time: 86400 * 10, temperature: 70 },
+    ],
+  };
+
+  const at = (day: number, hour: number) =>
+    calculateCurrentTemperature(
+      manager,
+      profile,
+      (day + hour / 24) * secondsPerDay,
+      secondsPerDay
+    ).temperature;
+
+  const day = 2;
+
+  const daily = calculateDailyTemperature(
+    manager,
+    profile,
+    day,
+    secondsPerDay
+  );
+
+  const minimum = at(day, 6);
+  const maximum = at(day, 15);
+
+  if (Math.abs(minimum - daily.minimum) > 1e-8) {
+    throw new Error(
+      'Temperature does not reach daily minimum at 06:00.'
+    );
+  }
+
+  if (Math.abs(maximum - daily.maximum) > 1e-8) {
+    throw new Error(
+      'Temperature does not reach daily maximum at 15:00.'
+    );
+  }
+
+  const midnight = at(day + 1, 0);
+
+  const beforeMidnight = at(
+    day,
+    24 - 1 / 3600
+  );
+
+  if (Math.abs(midnight - beforeMidnight) > 0.01) {
+    throw new Error(
+      'Temperature is discontinuous at midnight.'
+    );
+  }
+
+  const repeated = at(day, 12);
+
+  if (repeated !== at(day, 12)) {
+    throw new Error(
+      'Current temperature is not deterministic.'
+    );
+  }
+
+  const negativeDay = at(-2, 12);
+
+  if (!Number.isFinite(negativeDay)) {
+    throw new Error(
+      'Negative World day temperature is invalid.'
+    );
   }
 }

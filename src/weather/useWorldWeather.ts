@@ -25,6 +25,7 @@ import {
   getSeasonalBaselineTemperature,
   loadOrCreateTemperatureSwing,
   loadOrCreateDailyTemperatureRange,
+  calculateCurrentTemperature,
 } from './TemperatureManager';
 import { deriveWeatherSeeds } from './WeatherSeedConfiguration';
 
@@ -619,6 +620,27 @@ const dailyTemperature = useMemo(() => {
   clockState,
 ]);
 
+const currentTemperature = useMemo(() => {
+  if (
+    !temperatureManager ||
+    !seasonalTemperatureProfile ||
+    !clockState
+  ) {
+    return null;
+  }
+
+  return calculateCurrentTemperature(
+    temperatureManager,
+    seasonalTemperatureProfile,
+    clockState.time,
+    clockState.secondsPerDay
+  );
+}, [
+  temperatureManager,
+  seasonalTemperatureProfile,
+  clockState,
+]);
+
 const pressureField = savedWeatherFields?.pressureField ?? null;
 const windField = savedWeatherFields?.windField ?? null;
 
@@ -647,5 +669,6 @@ return {
   weatherFieldsLoading,
   weatherFieldsError,
   dailyTemperature,
+  currentTemperature,
 };
 }
