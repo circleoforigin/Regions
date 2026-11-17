@@ -93,6 +93,76 @@ function wrap(value: number, size: number): number {
   return ((value % size) + size) % size;
 }
 
+export interface WeatherPlaneSector {
+  x: number;
+  y: number;
+}
+
+/**
+ * Maps a stationary world sector to the sector
+ * currently passing over it on the moving
+ * Weather Plane.
+ *
+ * No per-sector state or blending data is stored.
+ */
+export function getWeatherPlaneSector(
+  sector: SectorAddress,
+  time: number,
+  secondsPerDay: number,
+  configuration: WeatherConfiguration,
+  movementCycle: WeatherMovementCycle
+): WeatherPlaneSector {
+  const sectorsPerNode =
+    configuration.plane.nodeSpacingMiles / 5;
+
+  const width =
+    configuration.plane.width * sectorsPerNode;
+
+  const height =
+    configuration.plane.height * sectorsPerNode;
+
+  if (
+    !Number.isSafeInteger(sector.x) ||
+    !Number.isSafeInteger(sector.y) ||
+    !Number.isFinite(time) ||
+    !Number.isFinite(secondsPerDay) ||
+    secondsPerDay <= 0 ||
+    !Number.isSafeInteger(sectorsPerNode) ||
+    sectorsPerNode <= 0 ||
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    throw new Error(
+      'Invalid Weather Plane sector lookup.'
+    );
+  }
+
+  const step = getWeatherMovementStep(
+    time / secondsPerDay,
+    configuration
+  );
+
+  const displacement =
+    getWrappedWeatherDisplacement(
+      movementCycle,
+      step,
+      configuration
+    );
+
+  return {
+    x: wrap(
+      sector.x - displacement.x,
+      width
+    ),
+    y: wrap(
+      sector.y - displacement.y,
+      height
+    ),
+  };
+}
+
 function barycentric(
   point: Point,
   a: Point,
@@ -369,21 +439,17 @@ export function resolveSectorNodeInfluences(
     );
   }
 
-  const step = getWeatherMovementStep(
-    time / secondsPerDay,
-    configuration
+  const planeSector = getWeatherPlaneSector(
+    sector,
+    time,
+    secondsPerDay,
+    configuration,
+    movementCycle
   );
 
-  const displacement =
-    getWrappedWeatherDisplacement(
-      movementCycle,
-      step,
-      configuration
-    );
-
   const point: Point = {
-    x: sector.x + 0.5 - displacement.x,
-    y: sector.y + 0.5 - displacement.y,
+    x: planeSector.x + 0.5,
+    y: planeSector.y + 0.5,
   };
 
   const triangle = findContainingTriangle(
