@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+import { WeatherManager } from './WeatherManager';
 import {
   getWorldSeed,
   type WorldSeedContext,
@@ -653,6 +654,43 @@ const movementStep =
       )
     : null;
 
+const weatherManager = useMemo(() => {
+  if (
+    !configuration ||
+    !movementCycle ||
+    !pressureField ||
+    !windField ||
+    !temperatureManager ||
+    !seasonalTemperatureProfile ||
+    !clockState ||
+    !Number.isFinite(clockState.secondsPerDay) ||
+    clockState.secondsPerDay <= 0
+  ) {
+    return null;
+  }
+
+  return new WeatherManager({
+    configuration,
+    movementCycle,
+    pressureField,
+    windField,
+    environment,
+    temperatureManager,
+    seasonalTemperatureProfile,
+    time: clockState.time,
+    secondsPerDay: clockState.secondsPerDay,
+  });
+}, [
+  configuration,
+  movementCycle,
+  pressureField,
+  windField,
+  environment,
+  temperatureManager,
+  seasonalTemperatureProfile,
+  clockState,
+]);
+
 return {
   worldContext:
     configuration ? worldContext : null,
@@ -670,5 +708,8 @@ return {
   weatherFieldsError,
   dailyTemperature,
   currentTemperature,
+  weatherManager,
 };
 }
+
+

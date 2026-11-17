@@ -77,10 +77,28 @@ export interface SeasonalTemperatureDefinition {
  * Every season boundary has exactly one temperature.
  * Winter and summer solstices provide extrema.
  */
+
 export function createSeasonalTemperatureProfile(
   calendar: SeasonalTemperatureCalendar,
   seasons: SeasonalTemperatureDefinition[]
 ): SeasonalTemperatureProfile {
+  type SolsticeKind = 'estival' | 'hibernal';
+
+  interface SolsticeEvent {
+    time: number;
+    kind: SolsticeKind;
+  }
+
+  interface SeasonInterval {
+    start: SeasonalCalendarStart;
+    end: SeasonalCalendarStart;
+    definition: SeasonalTemperatureDefinition;
+    solstice?: SolsticeEvent;
+    direction: 'warming' | 'cooling';
+    startTarget: number;
+    endTarget: number;
+  }
+
   const definitions = new Map(
     seasons.map(season => [season.id, season])
   );
@@ -130,124 +148,157 @@ export function createSeasonalTemperatureProfile(
     }
   }
 
-  const solstices = years.flatMap(year => [
-    ...(year.shortSolstice
-      ? [{ time: year.shortSolstice.time, kind: 'short' }]
-      : []),
-    ...(year.longSolstice
-      ? [{ time: year.longSolstice.time, kind: 'long' }]
-      : []),
-  ]);
+  const solstices: SolsticeEvent[] = years
+    .flatMap(year => [
+      ...(year.shortSolstice
+        ? [{
+            time: year.shortSolstice.time,
+            kind: 'hibernal' as const,
+          }]
+        : []),
+      ...(year.longSolstice
+        ? [{
+            time: year.longSolstice.time,
+            kind: 'estival' as const,
+          }]
+        : []),
+    ])
+    .filter(event => Number.isFinite(event.time))
+    .sort((a, b) => a.time - b.time);
+
+  const getDirection = (
+    kind: SolsticeKind
+  ): 'warming' | 'cooling' =>
+    kind === 'hibernal' ? 'warming' : 'cooling';
+
+  const intervals: SeasonInterval[] = [];
+
+  for (let index = 0; index < starts.length - 1; index++) {
+    const start = starts[index];
+    const end = starts[index + 1];
+    const definition = definitions.get(start.seasonId)!;
+
+    const containedSolstices = solstices.filter(
+      event =>
+        event.time >= start.time &&
+        event.time < end.time
+    );
+
+    // Almanac owns enforcement of calendar rules.
+    // A valid calendar normally has at most one
+    // solstice in a season.
+    const solstice = containedSolstices[0];
+
+    const previousSolstice = [...solstices]
+      .reverse()
+      .find(event => event.time < start.time);
+
+    const nextSolstice = solstices.find(
+      event => event.time >= end.time
+    );
+
+    // The previous solstice determines the direction
+    // between solstice-bearing seasons.
+    // The next solstice provides a fallback at the
+    // beginning of the supplied calendar window.
+    const direction = solstice
+      ? getDirection(solstice.kind)
+      : previousSolstice
+        ? getDirection(previousSolstice.kind)
+        : nextSolstice?.kind === 'hibernal'
+          ? 'cooling'
+          : 'warming';
+
+    let startTarget: number;
+    let endTarget: number;
+
+    if (solstice?.kind === 'hibernal') {
+      // Cold extreme occurs inside this season.
+      startTarget = definition.highTemperature;
+      endTarget = definition.highTemperature;
+    } else if (solstice?.kind === 'estival') {
+      // Warm extreme occurs inside this season.
+      startTarget = definition.lowTemperature;
+      endTarget = definition.lowTemperature;
+    } else if (direction === 'warming') {
+      startTarget = definition.lowTemperature;
+      endTarget = definition.highTemperature;
+    } else {
+      startTarget = definition.highTemperature;
+      endTarget = definition.lowTemperature;
+    }
+
+    intervals.push({
+      start,
+      end,
+      definition,
+      solstice,
+      direction,
+      startTarget,
+      endTarget,
+    });
+  }
 
   const anchors: SeasonalTemperatureAnchor[] = [];
 
-  for (let index = 0; index < starts.length; index++) {
-    const start = starts[index];
-    const season = definitions.get(start.seasonId)!;
+  for (let index = 0; index < intervals.length; index++) {
+    const interval = intervals[index];
+    const previous = intervals[index - 1];
 
-    const previous = index > 0
-      ? definitions.get(starts[index - 1].seasonId)!
-      : null;
-
-    // Average the neighboring seasons' desired
-    // boundary temperatures to prevent jumps.
-    let boundaryTemperature: number;
-
-    switch (start.seasonId) {
-      case 'spring':
-        boundaryTemperature = previous
-          ? (previous.highTemperature +
-              season.lowTemperature) / 2
-          : season.lowTemperature;
-        break;
-
-      case 'summer':
-        boundaryTemperature = previous
-          ? (previous.highTemperature +
-              season.lowTemperature) / 2
-          : season.lowTemperature;
-        break;
-
-      case 'autumn':
-        boundaryTemperature = previous
-          ? (previous.lowTemperature +
-              season.highTemperature) / 2
-          : season.highTemperature;
-        break;
-
-      case 'winter':
-        boundaryTemperature = previous
-          ? (previous.lowTemperature +
-              season.highTemperature) / 2
-          : season.highTemperature;
-        break;
-
-      default:
-        boundaryTemperature =
-          (season.lowTemperature +
-            season.highTemperature) / 2;
-    }
+    // One shared temperature at each season boundary.
+    const boundaryTemperature = previous
+      ? (
+          previous.endTarget +
+          interval.startTarget
+        ) / 2
+      : interval.startTarget;
 
     anchors.push({
-      time: start.time,
+      time: interval.start.time,
       temperature: boundaryTemperature,
     });
 
-    const end = starts[index + 1];
-
-    if (!end) {
+    if (!interval.solstice) {
       continue;
     }
 
-    const expectedSolstice =
-      start.seasonId === 'winter'
-        ? 'short'
-        : start.seasonId === 'summer'
-          ? 'long'
-          : null;
+    const lag = interval.solstice.kind === 'estival'
+      ? ESTIVAL_TEMPERATURE_LAG
+      : HIBERNAL_TEMPERATURE_LAG;
 
-    if (!expectedSolstice) {
-      continue;
+    const extremeTime =
+      interval.solstice.time +
+      (interval.end.time - interval.solstice.time) * lag;
+
+    // Almanac will enforce valid solstice placement
+    // and lag configuration. Only usable interior
+    // anchors are added to this profile.
+    if (
+      extremeTime > interval.start.time &&
+      extremeTime < interval.end.time
+    ) {
+      anchors.push({
+        time: extremeTime,
+        temperature:
+          interval.solstice.kind === 'hibernal'
+            ? interval.definition.lowTemperature
+            : interval.definition.highTemperature,
+      });
     }
-
-const matching = solstices
-  .filter(
-    solstice =>
-      solstice.kind === expectedSolstice &&
-      solstice.time > start.time &&
-      solstice.time < end.time
-  )
-  .sort(
-    (a, b) =>
-      Math.abs(
-        a.time - (start.time + end.time) / 2
-      ) -
-      Math.abs(
-        b.time - (start.time + end.time) / 2
-      )
-  );
-
-// Use the actual solstice when it falls inside
-// the season. Otherwise, place the temperature
-// extreme at the season's midpoint.
-const extremeTime =
-  matching.length > 0
-    ? matching[0].time
-    : start.time + (end.time - start.time) / 2;
-
-anchors.push({
-  time: extremeTime,
-  temperature:
-    start.seasonId === 'winter'
-      ? season.lowTemperature
-      : season.highTemperature,
-});
   }
+
+  const lastInterval = intervals[intervals.length - 1];
+
+  anchors.push({
+    time: lastInterval.end.time,
+    temperature: lastInterval.endTarget,
+  });
 
   anchors.sort((a, b) => a.time - b.time);
 
   return { anchors };
 }
+
 
 /**
  * Interpolates smoothly between two temperature
