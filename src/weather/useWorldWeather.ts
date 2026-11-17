@@ -19,7 +19,10 @@ import {
 } from './WeatherMovementCycle';
 import type { WeatherEnvironmentSnapshot } from './WeatherEnvironment';
 import {
+  calculateDailyTemperature,
   TemperatureManager,
+  createSeasonalTemperatureProfile,
+  getSeasonalBaselineTemperature,
   loadOrCreateTemperatureSwing,
   loadOrCreateDailyTemperatureRange,
 } from './TemperatureManager';
@@ -555,6 +558,67 @@ useEffect(() => {
   configuration,
 ]);
 
+const seasonalTemperatureProfile = useMemo(() => {
+  if (
+    !seasonCalendar ||
+    !environment?.definitions
+  ) {
+    return null;
+  }
+
+  return createSeasonalTemperatureProfile(
+    seasonCalendar,
+    environment.definitions.seasons
+  );
+}, [
+  seasonCalendar,
+  environment,
+]);
+
+const seasonalBaselineTemperature = useMemo(() => {
+  if (
+    !seasonalTemperatureProfile ||
+    !clockState
+  ) {
+    return null;
+  }
+
+  return getSeasonalBaselineTemperature(
+    seasonalTemperatureProfile,
+    clockState.time
+  );
+}, [
+  seasonalTemperatureProfile,
+  clockState,
+]);
+
+const dailyTemperature = useMemo(() => {
+  if (
+    !temperatureManager ||
+    !seasonalTemperatureProfile ||
+    !clockState ||
+    !Number.isFinite(clockState.secondsPerDay) ||
+    clockState.secondsPerDay <= 0
+  ) {
+    return null;
+  }
+
+  const worldDay = Math.floor(
+    clockState.time / clockState.secondsPerDay
+  );
+
+  return calculateDailyTemperature(
+    temperatureManager,
+    seasonalTemperatureProfile,
+    worldDay,
+    clockState.secondsPerDay
+  );
+}, [
+  temperatureManager,
+  seasonalTemperatureProfile,
+  clockState,
+]);
+
 const pressureField = savedWeatherFields?.pressureField ?? null;
 const windField = savedWeatherFields?.windField ?? null;
 
@@ -578,7 +642,10 @@ return {
   environment,
   temperatureManager,
   seasonCalendar,
+  seasonalTemperatureProfile,
+  seasonalBaselineTemperature,
   weatherFieldsLoading,
   weatherFieldsError,
+  dailyTemperature,
 };
 }

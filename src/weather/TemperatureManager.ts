@@ -27,6 +27,202 @@ export interface SeasonalTemperatureProfile {
   anchors: SeasonalTemperatureAnchor[];
 }
 
+export interface SeasonalCalendarStart {
+  seasonId: string;
+  time: number;
+}
+
+export interface SeasonalCalendarSolstice {
+  time: number;
+}
+
+export interface SeasonalCalendarYear {
+  year: number;
+  starts: SeasonalCalendarStart[];
+  shortSolstice?: SeasonalCalendarSolstice;
+  longSolstice?: SeasonalCalendarSolstice;
+}
+
+export interface SeasonalTemperatureCalendar {
+  previous: SeasonalCalendarYear;
+  current: SeasonalCalendarYear;
+  next: SeasonalCalendarYear;
+}
+
+export interface SeasonalTemperatureDefinition {
+  id: string;
+  lowTemperature: number;
+  highTemperature: number;
+}
+
+/**
+ * Builds a continuous seasonal temperature profile
+ * using Celestial season starts and solstices.
+ *
+ * Every season boundary has exactly one temperature.
+ * Winter and summer solstices provide extrema.
+ */
+export function createSeasonalTemperatureProfile(
+  calendar: SeasonalTemperatureCalendar,
+  seasons: SeasonalTemperatureDefinition[]
+): SeasonalTemperatureProfile {
+  const definitions = new Map(
+    seasons.map(season => [season.id, season])
+  );
+
+  for (const season of seasons) {
+    if (
+      !Number.isFinite(season.lowTemperature) ||
+      !Number.isFinite(season.highTemperature) ||
+      season.lowTemperature > season.highTemperature
+    ) {
+      throw new Error(
+        `Invalid temperature definition: ${season.id}`
+      );
+    }
+  }
+
+  const years = [
+    calendar.previous,
+    calendar.current,
+    calendar.next,
+  ];
+
+  const starts = years
+    .flatMap(year => year.starts)
+    .sort((a, b) => a.time - b.time);
+
+  if (starts.length < 2) {
+    throw new Error(
+      'Seasonal temperature requires multiple season starts.'
+    );
+  }
+
+  for (let index = 0; index < starts.length; index++) {
+    const start = starts[index];
+
+    if (
+      !Number.isFinite(start.time) ||
+      !definitions.has(start.seasonId) ||
+      (
+        index > 0 &&
+        start.time <= starts[index - 1].time
+      )
+    ) {
+      throw new Error(
+        'Invalid Celestial season sequence.'
+      );
+    }
+  }
+
+  const solstices = years.flatMap(year => [
+    ...(year.shortSolstice
+      ? [{ time: year.shortSolstice.time, kind: 'short' }]
+      : []),
+    ...(year.longSolstice
+      ? [{ time: year.longSolstice.time, kind: 'long' }]
+      : []),
+  ]);
+
+  const anchors: SeasonalTemperatureAnchor[] = [];
+
+  for (let index = 0; index < starts.length; index++) {
+    const start = starts[index];
+    const season = definitions.get(start.seasonId)!;
+
+    const previous = index > 0
+      ? definitions.get(starts[index - 1].seasonId)!
+      : null;
+
+    // Average the neighboring seasons' desired
+    // boundary temperatures to prevent jumps.
+    let boundaryTemperature: number;
+
+    switch (start.seasonId) {
+      case 'spring':
+        boundaryTemperature = previous
+          ? (previous.highTemperature +
+              season.lowTemperature) / 2
+          : season.lowTemperature;
+        break;
+
+      case 'summer':
+        boundaryTemperature = previous
+          ? (previous.highTemperature +
+              season.lowTemperature) / 2
+          : season.lowTemperature;
+        break;
+
+      case 'autumn':
+        boundaryTemperature = previous
+          ? (previous.lowTemperature +
+              season.highTemperature) / 2
+          : season.highTemperature;
+        break;
+
+      case 'winter':
+        boundaryTemperature = previous
+          ? (previous.lowTemperature +
+              season.highTemperature) / 2
+          : season.highTemperature;
+        break;
+
+      default:
+        boundaryTemperature =
+          (season.lowTemperature +
+            season.highTemperature) / 2;
+    }
+
+    anchors.push({
+      time: start.time,
+      temperature: boundaryTemperature,
+    });
+
+    const end = starts[index + 1];
+
+    if (!end) {
+      continue;
+    }
+
+    const expectedSolstice =
+      start.seasonId === 'winter'
+        ? 'short'
+        : start.seasonId === 'summer'
+          ? 'long'
+          : null;
+
+    if (!expectedSolstice) {
+      continue;
+    }
+
+    const matching = solstices.filter(
+      solstice =>
+        solstice.kind === expectedSolstice &&
+        solstice.time > start.time &&
+        solstice.time < end.time
+    );
+
+    if (matching.length !== 1) {
+      throw new Error(
+        `Expected one ${expectedSolstice} solstice ` +
+        `inside ${start.seasonId}.`
+      );
+    }
+
+    anchors.push({
+      time: matching[0].time,
+      temperature:
+        start.seasonId === 'winter'
+          ? season.lowTemperature
+          : season.highTemperature,
+    });
+  }
+
+  anchors.sort((a, b) => a.time - b.time);
+
+  return { anchors };
+}
+
 /**
  * Interpolates smoothly between two temperature
  * anchors using a cosine curve.
@@ -456,6 +652,61 @@ export function validateDailyTemperatureRangeCycle(
       ) <= 10;
     }
   );
+}
+
+export interface DailyTemperature {
+  worldDay: number;
+  seasonalBaseline: number;
+  dailySwing: number;
+  mean: number;
+  range: number;
+  minimum: number;
+  maximum: number;
+}
+
+export function calculateDailyTemperature(
+  manager: TemperatureManager,
+  profile: SeasonalTemperatureProfile,
+  worldDay: number,
+  secondsPerDay: number
+): DailyTemperature {
+  if (
+    !Number.isSafeInteger(worldDay) ||
+    !Number.isFinite(secondsPerDay) ||
+    secondsPerDay <= 0
+  ) {
+    throw new Error(
+      'Invalid daily temperature calculation input.'
+    );
+  }
+
+  const midday =
+    (worldDay + 0.5) * secondsPerDay;
+
+  const seasonalBaseline =
+    getSeasonalBaselineTemperature(
+      profile,
+      midday
+    );
+
+  const dailySwing =
+    manager.getDailySwing(worldDay);
+
+  const range =
+    manager.getDailyTemperatureRange(worldDay);
+
+  const mean =
+    seasonalBaseline + dailySwing;
+
+  return {
+    worldDay,
+    seasonalBaseline,
+    dailySwing,
+    mean,
+    range,
+    minimum: mean - range / 2,
+    maximum: mean + range / 2,
+  };
 }
 
 export class TemperatureManager {
