@@ -1,30 +1,21 @@
 
-import type {
-  WeatherConfiguration,
-} from './models/WeatherConfiguration';
-
-import type {
-  WeatherPressureField,
-} from './generation/WeatherPressureFieldGenerator';
-
-import type {
-  WeatherWindField,
-} from './generation/WeatherWindGenerator';
-
-import type {
-  WeatherMovementCycle,
-} from './WeatherMovementCycle';
-
-import type {
-  WeatherEnvironmentSnapshot,
-} from './WeatherEnvironment';
-
+import type { WeatherConfiguration } from './models/WeatherConfiguration';
+import type { WeatherPressureField } from './generation/WeatherPressureFieldGenerator';
+import type { WeatherWindField } from './generation/WeatherWindGenerator';
+import type { WeatherMovementCycle } from './WeatherMovementCycle';
+import type { WeatherEnvironmentSnapshot } from './WeatherEnvironment';
 import {
   TemperatureManager,
   type SeasonalTemperatureProfile,
   type CurrentTemperature,
   calculateCurrentTemperature,
 } from './TemperatureManager';
+import type { SectorAddress } from '../spatial/Sector';
+import {
+  blendWeatherValues,
+  type WeatherValues,
+  type WeightedWeatherNode,
+} from './generation/WeatherNodeInfluenceResolver';
 
 export interface WeatherManagerState {
   configuration: WeatherConfiguration;
@@ -36,6 +27,26 @@ export interface WeatherManagerState {
   seasonalTemperatureProfile: SeasonalTemperatureProfile;
   time: number;
   secondsPerDay: number;
+}
+
+export interface SectorWeatherResult {
+  sector: SectorAddress;
+  time: number;
+
+  /**
+   * Raw atmospheric values after node blending.
+   * Zone and Area modifiers are not yet applied.
+   */
+  blended: WeatherValues;
+
+  /**
+   * Current numeric sector weather values.
+   * Initially identical to blended.
+   *
+   * Later, Zone and Area processing will
+   * modify these before finalization.
+   */
+  values: WeatherValues;
 }
 
 /**
@@ -73,16 +84,34 @@ export class WeatherManager {
     );
   }
 
-  /**
-   * Future primary weather calculation entry point:
-   *
-   * getSectorWeather(sector, time)
-   *
-   * This will resolve contributing nodes,
-   * blend their five weather values, apply
-   * Zone/Area effects, and finalize the result.
-   *
-   * It is intentionally not implemented until
-   * sector-to-node geometry is connected.
-   */
+/**
+ * Calculates all five weather properties for
+ * a sector from its contributing weather nodes.
+ *
+ * Node selection and influence calculation
+ * are performed by the geometry resolver.
+ *
+ * Zone and Area processing will be inserted
+ * after blending in a future implementation.
+ */
+public getSectorWeather(
+  sector: SectorAddress,
+  influences: readonly WeightedWeatherNode[],
+  time: number = this.state.time
+): SectorWeatherResult {
+  if (!Number.isFinite(time)) {
+    throw new Error(
+      'Invalid sector weather simulation time.'
+    );
+  }
+
+  const blended = blendWeatherValues(influences);
+
+  return {
+    sector: { ...sector },
+    time,
+    blended,
+    values: { ...blended },
+  };
+}
 }

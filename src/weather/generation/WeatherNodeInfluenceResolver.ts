@@ -1,10 +1,17 @@
-/**
- * Reusable atmospheric value blending.
- *
- * This module does not generate weather, classify
- * weather conditions, resolve Areas, or calculate
- * wind direction.
- */
+
+import type {
+  WeatherConfiguration,
+} from '../models/WeatherConfiguration';
+
+import {
+  getWeatherMovementStep,
+  getWrappedWeatherDisplacement,
+  type WeatherMovementCycle,
+} from '../WeatherMovementCycle';
+
+import type {
+  SectorAddress,
+} from '../../spatial/Sector';
 
 export interface WeatherValues {
   temperature: number;
@@ -33,6 +40,10 @@ export type WeatherBlendPattern =
   | 'triangle-near'
   | 'triangle-center';
 
+export type WeatherTriangleOrientation =
+  | 'upright'
+  | 'inverted';
+
 export const WEATHER_BLEND_WEIGHTS: Record<
   WeatherBlendPattern,
   readonly number[]
@@ -45,7 +56,7 @@ export const WEATHER_BLEND_WEIGHTS: Record<
   'triangle-center': [0.36, 0.32, 0.32],
 };
 
-const WEATHER_VALUE_KEYS = [
+const VALUE_KEYS = [
   'temperature',
   'visibility',
   'cloudCover',
@@ -53,18 +64,368 @@ const WEATHER_VALUE_KEYS = [
   'windStrength',
 ] as const satisfies readonly (keyof WeatherValues)[];
 
+export interface WeatherNodeInfluence {
+  nodeX: number;
+  nodeY: number;
+  weight: number;
+}
+
+export interface SectorNodeInfluenceResult {
+  orientation: WeatherTriangleOrientation;
+  pattern: WeatherBlendPattern;
+  influences: WeatherNodeInfluence[];
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface Triangle {
+  points: [Point, Point, Point];
+  weights: [number, number, number];
+  orientation: WeatherTriangleOrientation;
+}
+
+const EPSILON = 1e-9;
+
+function wrap(value: number, size: number): number {
+  return ((value % size) + size) % size;
+}
+
+function barycentric(
+  point: Point,
+  a: Point,
+  b: Point,
+  c: Point
+): [number, number, number] | null {
+  const denominator =
+    (b.y - c.y) * (a.x - c.x) +
+    (c.x - b.x) * (a.y - c.y);
+
+  if (Math.abs(denominator) < EPSILON) {
+    return null;
+  }
+
+  const first =
+    (
+      (b.y - c.y) * (point.x - c.x) +
+      (c.x - b.x) * (point.y - c.y)
+    ) / denominator;
+
+  const second =
+    (
+      (c.y - a.y) * (point.x - c.x) +
+      (a.x - c.x) * (point.y - c.y)
+    ) / denominator;
+
+  return [first, second, 1 - first - second];
+}
+
+function findContainingTriangle(
+  point: Point,
+  spacing: number
+): Triangle {
+  const lowerRow = Math.floor(point.y / spacing);
+
+  const nodes: Point[] = [];
+
+  for (
+    let row = lowerRow - 1;
+    row <= lowerRow + 2;
+    row++
+  ) {
+    const offset =
+      wrap(row, 2) === 1 ? spacing / 2 : 0;
+
+    const nearestColumn = Math.floor(
+      (point.x - offset) / spacing
+    );
+
+    for (
+      let column = nearestColumn - 1;
+      column <= nearestColumn + 2;
+      column++
+    ) {
+      nodes.push({
+        x: column * spacing + offset,
+        y: row * spacing,
+      });
+    }
+  }
+
+  let best: Triangle | null = null;
+  let bestScore = -Infinity;
+
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      for (let k = j + 1; k < nodes.length; k++) {
+        const points = [
+          nodes[i],
+          nodes[j],
+          nodes[k],
+        ] as [Point, Point, Point];
+
+        const rows = new Set(
+          points.map(p => p.y)
+        );
+
+        if (rows.size !== 2) continue;
+
+        const lengths = [
+          Math.hypot(
+            points[0].x - points[1].x,
+            points[0].y - points[1].y
+          ),
+          Math.hypot(
+            points[1].x - points[2].x,
+            points[1].y - points[2].y
+          ),
+          Math.hypot(
+            points[2].x - points[0].x,
+            points[2].y - points[0].y
+          ),
+        ];
+
+        // Only immediate triangular-grid neighbors.
+        const diagonal =
+          Math.hypot(spacing / 2, spacing);
+
+        if (
+          lengths.some(
+            length =>
+              Math.abs(length - spacing) > EPSILON &&
+              Math.abs(length - diagonal) > EPSILON
+          )
+        ) {
+          continue;
+        }
+
+        const weights = barycentric(
+          point,
+          ...points
+        );
+
+        if (!weights) continue;
+
+        const minimum = Math.min(...weights);
+
+        if (minimum < -EPSILON) continue;
+
+        if (minimum > bestScore) {
+          bestScore = minimum;
+
+          const sorted = [...points].sort(
+            (a, b) => a.y - b.y
+          );
+
+          best = {
+            points,
+            weights,
+            orientation:
+              sorted[0].y === sorted[1].y
+                ? 'inverted'
+                : 'upright',
+          };
+        }
+      }
+    }
+  }
+
+  if (!best) {
+    throw new Error(
+      'Unable to resolve Weather triangle.'
+    );
+  }
+
+  return best;
+}
+
+interface Candidate {
+  pattern: WeatherBlendPattern;
+  weights: number[];
+}
+
+function chooseInfluencePattern(
+  geometricWeights: readonly number[],
+  points: readonly Point[]
+): Candidate {
+  const candidates: Candidate[] = [];
+
+  for (let i = 0; i < 3; i++) {
+    const single = [0, 0, 0];
+    single[i] = 1;
+
+    candidates.push({
+      pattern: 'single',
+      weights: single,
+    });
+
+    for (let j = 0; j < 3; j++) {
+      if (i === j) continue;
+
+      const horizontal =
+        Math.abs(points[i].y - points[j].y) <
+        EPSILON;
+
+      const patterns: WeatherBlendPattern[] =
+        horizontal
+          ? ['horizontal-near', 'horizontal-center']
+          : ['diagonal'];
+
+      for (const pattern of patterns) {
+        const [first, second] =
+          WEATHER_BLEND_WEIGHTS[pattern];
+
+        const weights = [0, 0, 0];
+        weights[i] = first;
+        weights[j] = second;
+
+        candidates.push({ pattern, weights });
+      }
+    }
+
+    for (const pattern of [
+      'triangle-near',
+      'triangle-center',
+    ] as const) {
+      const [first, second, third] =
+        WEATHER_BLEND_WEIGHTS[pattern];
+
+      const weights = [third, third, third];
+      weights[i] = first;
+
+      const others = [0, 1, 2].filter(
+        index => index !== i
+      );
+
+      weights[others[0]] = second;
+      weights[others[1]] = third;
+
+      candidates.push({ pattern, weights });
+    }
+  }
+
+  let selected = candidates[0];
+  let lowestError = Infinity;
+
+  for (const candidate of candidates) {
+    const error = candidate.weights.reduce(
+      (total, weight, index) =>
+        total +
+        Math.pow(
+          weight - geometricWeights[index],
+          2
+        ),
+      0
+    );
+
+    if (error < lowestError) {
+      lowestError = error;
+      selected = candidate;
+    }
+  }
+
+  return selected;
+}
+
 /**
- * Associates nodes with a selected influence
- * pattern.
+ * Resolve sector influences at a simulation time.
  *
- * Node ordering is significant:
- *
- * - Two nodes: dominant node first.
- * - Three nodes: triangle apex first.
- *
- * The caller may reverse two-node ordering to
- * represent the opposite side of a connection.
+ * Displacement is already expressed in sectors
+ * by WeatherMovementCycle.
  */
+export function resolveSectorNodeInfluences(
+  sector: SectorAddress,
+  time: number,
+  secondsPerDay: number,
+  configuration: WeatherConfiguration,
+  movementCycle: WeatherMovementCycle
+): SectorNodeInfluenceResult {
+  const {
+    width,
+    height,
+    nodeSpacingMiles,
+  } = configuration.plane;
+
+  const spacing = nodeSpacingMiles / 5;
+
+  if (
+    !Number.isSafeInteger(sector.x) ||
+    !Number.isSafeInteger(sector.y) ||
+    !Number.isFinite(time) ||
+    !Number.isFinite(secondsPerDay) ||
+    secondsPerDay <= 0 ||
+    !Number.isSafeInteger(spacing) ||
+    spacing <= 0 ||
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    height % 2 !== 0
+  ) {
+    throw new Error(
+      'Invalid Weather sector influence inputs.'
+    );
+  }
+
+  const step = getWeatherMovementStep(
+    time / secondsPerDay,
+    configuration
+  );
+
+  const displacement =
+    getWrappedWeatherDisplacement(
+      movementCycle,
+      step,
+      configuration
+    );
+
+  const point: Point = {
+    x: sector.x + 0.5 - displacement.x,
+    y: sector.y + 0.5 - displacement.y,
+  };
+
+  const triangle = findContainingTriangle(
+    point,
+    spacing
+  );
+
+  const selected = chooseInfluencePattern(
+    triangle.weights,
+    triangle.points
+  );
+
+  const influences = triangle.points.flatMap(
+    (node, index) => {
+      const weight = selected.weights[index];
+
+      if (weight <= 0) return [];
+
+      const row = Math.round(node.y / spacing);
+
+      const offset =
+        wrap(row, 2) === 1 ? spacing / 2 : 0;
+
+      const column = Math.round(
+        (node.x - offset) / spacing
+      );
+
+      return [{
+        nodeX: wrap(column, width),
+        nodeY: wrap(row, height),
+        weight,
+      }];
+    }
+  );
+
+  return {
+    orientation: triangle.orientation,
+    pattern: selected.pattern,
+    influences,
+  };
+}
+
 export function createWeightedWeatherNodes(
   nodes: readonly WeatherNodeSample[],
   pattern: WeatherBlendPattern
@@ -84,12 +445,6 @@ export function createWeightedWeatherNodes(
   }));
 }
 
-/**
- * Blends all five atmospheric values in one pass.
- *
- * Intermediate results are deliberately not
- * rounded or classified.
- */
 export function blendWeatherValues(
   influences: readonly WeightedWeatherNode[]
 ): WeatherValues {
@@ -109,7 +464,7 @@ export function blendWeatherValues(
         influence.weight < 0
       ) {
         throw new Error(
-          'Invalid weather node influence weight.'
+          'Invalid Weather influence weight.'
         );
       }
 
@@ -118,9 +473,9 @@ export function blendWeatherValues(
     0
   );
 
-  if (Math.abs(totalWeight - 1) > 1e-9) {
+  if (Math.abs(totalWeight - 1) > EPSILON) {
     throw new Error(
-      'Weather node influence weights must total 1.'
+      'Weather influence weights must total 1.'
     );
   }
 
@@ -133,14 +488,12 @@ export function blendWeatherValues(
   };
 
   for (const influence of influences) {
-    for (const key of WEATHER_VALUE_KEYS) {
+    for (const key of VALUE_KEYS) {
       const value = influence.node.values[key];
 
       if (!Number.isFinite(value)) {
         throw new Error(
-          `Invalid ${key} value at weather node ` +
-          `(${influence.node.nodeX}, ` +
-          `${influence.node.nodeY}).`
+          `Invalid ${key} at Weather node.`
         );
       }
 
@@ -151,11 +504,6 @@ export function blendWeatherValues(
   return result;
 }
 
-/**
- * Convenience operation for callers that have
- * already identified the contributing nodes
- * and the applicable blending pattern.
- */
 export function calculateBlendedWeather(
   nodes: readonly WeatherNodeSample[],
   pattern: WeatherBlendPattern
