@@ -1,5 +1,6 @@
 import { createSeededRandom } from '@settingforge/module-sdk';
 import { hostedCollectionRepository } from '../host/HostedCollectionRepository';
+import type { WeatherPressure } from './generation/WeatherPressureFieldGenerator';
 
 export const TEMPERATURE_SWING_LENGTH = 1024;
 export const MAX_TEMPERATURE_SWING = 10;
@@ -13,6 +14,20 @@ export const DAILY_TEMPERATURE_RANGE_LENGTH = 1009;
 export const MIN_DAILY_TEMPERATURE_RANGE = 10;
 export const MAX_DAILY_TEMPERATURE_RANGE = 30;
 export const DAILY_TEMPERATURE_RANGE_VERSION = 1;
+
+export const DAILY_MINIMUM_TIME = 6 / 24;
+export const DAILY_MAXIMUM_TIME = 15 / 24;
+
+export const MAX_PRESSURE_TEMPERATURE_MODIFIER = 5;
+/**
+ * Fraction of the remaining season after the
+ * solstice before the temperature extreme occurs.
+ *
+ * 0 = at the solstice
+ * 0.5 = halfway between solstice and season end
+ */
+export const ESTIVAL_TEMPERATURE_LAG = 0.5;
+export const HIBERNAL_TEMPERATURE_LAG = 0.5;
 
 export interface DailyTemperatureRangeCycle {
   values: number[];
@@ -195,27 +210,38 @@ export function createSeasonalTemperatureProfile(
       continue;
     }
 
-    const matching = solstices.filter(
-      solstice =>
-        solstice.kind === expectedSolstice &&
-        solstice.time > start.time &&
-        solstice.time < end.time
-    );
+const matching = solstices
+  .filter(
+    solstice =>
+      solstice.kind === expectedSolstice &&
+      solstice.time > start.time &&
+      solstice.time < end.time
+  )
+  .sort(
+    (a, b) =>
+      Math.abs(
+        a.time - (start.time + end.time) / 2
+      ) -
+      Math.abs(
+        b.time - (start.time + end.time) / 2
+      )
+  );
 
-    if (matching.length !== 1) {
-      throw new Error(
-        `Expected one ${expectedSolstice} solstice ` +
-        `inside ${start.seasonId}.`
-      );
-    }
+// Use the actual solstice when it falls inside
+// the season. Otherwise, place the temperature
+// extreme at the season's midpoint.
+const extremeTime =
+  matching.length > 0
+    ? matching[0].time
+    : start.time + (end.time - start.time) / 2;
 
-    anchors.push({
-      time: matching[0].time,
-      temperature:
-        start.seasonId === 'winter'
-          ? season.lowTemperature
-          : season.highTemperature,
-    });
+anchors.push({
+  time: extremeTime,
+  temperature:
+    start.seasonId === 'winter'
+      ? season.lowTemperature
+      : season.highTemperature,
+});
   }
 
   anchors.sort((a, b) => a.time - b.time);
@@ -752,11 +778,10 @@ export function calculateCurrentTemperature(
     );
   }
 
-  const dayFraction =
-    time / secondsPerDay - worldDay;
+  const dayFraction = time / secondsPerDay - worldDay;
 
-  const minimumTime = 6 / 24;
-  const maximumTime = 15 / 24;
+  const minimumTime = DAILY_MINIMUM_TIME;
+  const maximumTime = DAILY_MAXIMUM_TIME;
 
   const today = calculateDailyTemperature(
     manager,
@@ -831,6 +856,99 @@ export function calculateCurrentTemperature(
     temperature,
     dailyTemperature: today,
   };
+}
+/**
+ * Returns the whole-degree temperature adjustment
+ * produced by a weather node's pressure.
+ *
+ * High pressure:
+ *   -5°F at the daily minimum.
+ *   +5°F at the daily maximum.
+ *
+ * Low pressure produces the opposite adjustment.
+ * Neutral pressure produces no adjustment.
+ *
+ * dayFraction represents progress through a
+ * SimClock day, normalized to [0, 1).
+ */
+
+export function getPressureTemperatureModifier(
+  pressure: WeatherPressure,
+  dayFraction: number
+): number {
+  if (
+    (pressure !== -1 &&
+      pressure !== 0 &&
+      pressure !== 1) ||
+    !Number.isFinite(dayFraction)
+  ) {
+    throw new Error(
+      'Invalid pressure temperature modifier input.'
+    );
+  }
+
+  if (pressure === 0) {
+    return 0;
+  }
+
+  const fraction =
+    ((dayFraction % 1) + 1) % 1;
+
+  const minimumTime = DAILY_MINIMUM_TIME;
+  const maximumTime = DAILY_MAXIMUM_TIME;
+
+  let highPressureModifier: number;
+
+  if (fraction < minimumTime) {
+    highPressureModifier =
+      interpolateSeasonalTemperature(
+        {
+          time: maximumTime - 1,
+          temperature:
+            MAX_PRESSURE_TEMPERATURE_MODIFIER,
+        },
+        {
+          time: minimumTime,
+          temperature:
+            -MAX_PRESSURE_TEMPERATURE_MODIFIER,
+        },
+        fraction
+      );
+  } else if (fraction <= maximumTime) {
+    highPressureModifier =
+      interpolateSeasonalTemperature(
+        {
+          time: minimumTime,
+          temperature:
+            -MAX_PRESSURE_TEMPERATURE_MODIFIER,
+        },
+        {
+          time: maximumTime,
+          temperature:
+            MAX_PRESSURE_TEMPERATURE_MODIFIER,
+        },
+        fraction
+      );
+  } else {
+    highPressureModifier =
+      interpolateSeasonalTemperature(
+        {
+          time: maximumTime,
+          temperature:
+            MAX_PRESSURE_TEMPERATURE_MODIFIER,
+        },
+        {
+          time: 1 + minimumTime,
+          temperature:
+            -MAX_PRESSURE_TEMPERATURE_MODIFIER,
+        },
+        fraction
+      );
+  }
+
+  return Math.round(
+    highPressureModifier * pressure
+  );
 }
 
 export class TemperatureManager {
@@ -1248,5 +1366,59 @@ export function testCurrentTemperatureCalculation(): void {
     throw new Error(
       'Negative World day temperature is invalid.'
     );
+  }
+}
+
+export function testPressureTemperatureModifier(): void {
+  const cases: Array<
+    [WeatherPressure, number, number]
+  > = [
+    [1, 6 / 24, -5],
+    [1, 15 / 24, 5],
+    [-1, 6 / 24, 5],
+    [-1, 15 / 24, -5],
+    [0, 6 / 24, 0],
+    [0, 15 / 24, 0],
+  ];
+
+  for (const [pressure, time, expected] of cases) {
+    const actual =
+      getPressureTemperatureModifier(
+        pressure,
+        time
+      );
+
+    if (actual !== expected) {
+      throw new Error(
+        `Pressure modifier mismatch: ${actual} !== ${expected}`
+      );
+    }
+  }
+
+  for (let i = 0; i < 1000; i++) {
+    const fraction = i / 1000;
+
+    const high =
+      getPressureTemperatureModifier(
+        1,
+        fraction
+      );
+
+    const low =
+      getPressureTemperatureModifier(
+        -1,
+        fraction
+      );
+
+    if (
+      !Number.isInteger(high) ||
+      !Number.isInteger(low) ||
+      high !== -low ||
+      Math.abs(high) > 5
+    ) {
+      throw new Error(
+        'Invalid pressure modifier behavior.'
+      );
+    }
   }
 }
