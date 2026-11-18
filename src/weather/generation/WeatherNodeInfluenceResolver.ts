@@ -163,6 +163,45 @@ export function getWeatherPlaneSector(
   };
 }
 
+
+export interface WeatherNodeAddress {
+  nodeX: number;
+  nodeY: number;
+}
+
+/**
+ * Wrap a Weather Node address around the
+ * boundaries of the repeating Weather Plane.
+ *
+ * This allows neighboring Nodes to be
+ * referenced across either plane boundary.
+ */
+export function getWrappedWeatherNode(
+  nodeX: number,
+  nodeY: number,
+  configuration: WeatherConfiguration
+): WeatherNodeAddress {
+  const { width, height } = configuration.plane;
+
+  if (
+    !Number.isSafeInteger(nodeX) ||
+    !Number.isSafeInteger(nodeY) ||
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    throw new Error(
+      'Invalid Weather Node address.'
+    );
+  }
+
+  return {
+    nodeX: wrap(nodeX, width),
+    nodeY: wrap(nodeY, height),
+  };
+}
+
 function barycentric(
   point: Point,
   a: Point,
@@ -477,11 +516,14 @@ export function resolveSectorNodeInfluences(
         (node.x - offset) / spacing
       );
 
-      return [{
-        nodeX: wrap(column, width),
-        nodeY: wrap(row, height),
-        weight,
-      }];
+return [{
+  ...getWrappedWeatherNode(
+    column,
+    row,
+    configuration
+  ),
+  weight,
+}];
     }
   );
 
