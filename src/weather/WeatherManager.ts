@@ -16,6 +16,9 @@ import {
   type WeatherValues,
   type WeightedWeatherNode,
 } from './generation/WeatherNodeInfluenceResolver';
+import { getPressureTemperatureModifier } from './TemperatureManager';
+import { getWeatherNodePressure } from './generation/WeatherPressureFieldGenerator';
+import { resolveSectorNodeInfluences } from './generation/WeatherNodeInfluenceResolver';
 
 export interface WeatherManagerState {
   configuration: WeatherConfiguration;
@@ -83,6 +86,68 @@ export class WeatherManager {
       this.state.secondsPerDay
     );
   }
+
+
+public getSectorTemperature(
+  sector: SectorAddress,
+  time: number = this.state.time
+): number {
+  const {
+    configuration,
+    movementCycle,
+    pressureField,
+    secondsPerDay,
+  } = this.state;
+
+  const baseline =
+    this.getCurrentTemperature(time).temperature;
+
+  const { influences } =
+    resolveSectorNodeInfluences(
+      sector,
+      time,
+      secondsPerDay,
+      configuration,
+      movementCycle
+    );
+
+  const dayFraction =
+    ((time / secondsPerDay) % 1 + 1) % 1;
+
+  let modifier = 0;
+
+  for (const influence of influences) {
+    const pressure = getWeatherNodePressure(
+      pressureField,
+      influence.nodeX,
+      influence.nodeY
+    );
+
+    modifier +=
+      getPressureTemperatureModifier(
+        pressure,
+        dayFraction
+      ) * influence.weight;
+  }
+
+  return baseline + modifier;
+}
+
+public getTemperatureAtSector(
+  worldMapId: string,
+  sectorX: number,
+  sectorY: number,
+  time: number = this.state.time
+): number {
+  return this.getSectorTemperature(
+    {
+      worldMapId,
+      x: sectorX,
+      y: sectorY,
+    },
+    time
+  );
+}
 
 /**
  * Calculates all five weather properties for
