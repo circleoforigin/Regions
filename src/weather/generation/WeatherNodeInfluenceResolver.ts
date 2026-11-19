@@ -38,7 +38,10 @@ export type WeatherBlendPattern =
   | 'horizontal-center'
   | 'diagonal'
   | 'triangle-near'
-  | 'triangle-center';
+  | 'triangle-center'
+  | 'triangle-strong'
+  | 'triangle-column'
+  | 'triangle-balanced';
 
 export type WeatherTriangleOrientation =
   | 'upright'
@@ -54,6 +57,9 @@ export const WEATHER_BLEND_WEIGHTS: Record<
   diagonal: [0.66, 0.34],
   'triangle-near': [0.7, 0.15, 0.15],
   'triangle-center': [0.36, 0.32, 0.32],
+  'triangle-strong': [0.8, 0.1, 0.1],
+  'triangle-column': [0.56, 0.22, 0.22],
+  'triangle-balanced': [0.3, 0.35, 0.35],
 };
 
 const VALUE_KEYS = [
@@ -71,20 +77,7 @@ export interface WeatherNodeInfluence {
 }
 
 export interface SectorNodeInfluenceResult {
-  orientation: WeatherTriangleOrientation;
-  pattern: WeatherBlendPattern;
   influences: WeatherNodeInfluence[];
-}
-
-interface Point {
-  x: number;
-  y: number;
-}
-
-interface Triangle {
-  points: [Point, Point, Point];
-  weights: [number, number, number];
-  orientation: WeatherTriangleOrientation;
 }
 
 const EPSILON = 1e-9;
@@ -202,242 +195,6 @@ export function getWrappedWeatherNode(
   };
 }
 
-function barycentric(
-  point: Point,
-  a: Point,
-  b: Point,
-  c: Point
-): [number, number, number] | null {
-  const denominator =
-    (b.y - c.y) * (a.x - c.x) +
-    (c.x - b.x) * (a.y - c.y);
-
-  if (Math.abs(denominator) < EPSILON) {
-    return null;
-  }
-
-  const first =
-    (
-      (b.y - c.y) * (point.x - c.x) +
-      (c.x - b.x) * (point.y - c.y)
-    ) / denominator;
-
-  const second =
-    (
-      (c.y - a.y) * (point.x - c.x) +
-      (a.x - c.x) * (point.y - c.y)
-    ) / denominator;
-
-  return [first, second, 1 - first - second];
-}
-
-function findContainingTriangle(
-  point: Point,
-  spacing: number
-): Triangle {
-  const lowerRow = Math.floor(point.y / spacing);
-
-  const nodes: Point[] = [];
-
-  for (
-    let row = lowerRow - 1;
-    row <= lowerRow + 2;
-    row++
-  ) {
-    const offset =
-      wrap(row, 2) === 1 ? spacing / 2 : 0;
-
-    const nearestColumn = Math.floor(
-      (point.x - offset) / spacing
-    );
-
-    for (
-      let column = nearestColumn - 1;
-      column <= nearestColumn + 2;
-      column++
-    ) {
-      nodes.push({
-        x: column * spacing + offset,
-        y: row * spacing,
-      });
-    }
-  }
-
-  let best: Triangle | null = null;
-  let bestScore = -Infinity;
-
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      for (let k = j + 1; k < nodes.length; k++) {
-        const points = [
-          nodes[i],
-          nodes[j],
-          nodes[k],
-        ] as [Point, Point, Point];
-
-        const rows = new Set(
-          points.map(p => p.y)
-        );
-
-        if (rows.size !== 2) continue;
-
-        const lengths = [
-          Math.hypot(
-            points[0].x - points[1].x,
-            points[0].y - points[1].y
-          ),
-          Math.hypot(
-            points[1].x - points[2].x,
-            points[1].y - points[2].y
-          ),
-          Math.hypot(
-            points[2].x - points[0].x,
-            points[2].y - points[0].y
-          ),
-        ];
-
-        // Only immediate triangular-grid neighbors.
-        const diagonal =
-          Math.hypot(spacing / 2, spacing);
-
-        if (
-          lengths.some(
-            length =>
-              Math.abs(length - spacing) > EPSILON &&
-              Math.abs(length - diagonal) > EPSILON
-          )
-        ) {
-          continue;
-        }
-
-        const weights = barycentric(
-          point,
-          ...points
-        );
-
-        if (!weights) continue;
-
-        const minimum = Math.min(...weights);
-
-        if (minimum < -EPSILON) continue;
-
-        if (minimum > bestScore) {
-          bestScore = minimum;
-
-          const sorted = [...points].sort(
-            (a, b) => a.y - b.y
-          );
-
-          best = {
-            points,
-            weights,
-            orientation:
-              sorted[0].y === sorted[1].y
-                ? 'inverted'
-                : 'upright',
-          };
-        }
-      }
-    }
-  }
-
-  if (!best) {
-    throw new Error(
-      'Unable to resolve Weather triangle.'
-    );
-  }
-
-  return best;
-}
-
-interface Candidate {
-  pattern: WeatherBlendPattern;
-  weights: number[];
-}
-
-function chooseInfluencePattern(
-  geometricWeights: readonly number[],
-  points: readonly Point[]
-): Candidate {
-  const candidates: Candidate[] = [];
-
-  for (let i = 0; i < 3; i++) {
-    const single = [0, 0, 0];
-    single[i] = 1;
-
-    candidates.push({
-      pattern: 'single',
-      weights: single,
-    });
-
-    for (let j = 0; j < 3; j++) {
-      if (i === j) continue;
-
-      const horizontal =
-        Math.abs(points[i].y - points[j].y) <
-        EPSILON;
-
-      const patterns: WeatherBlendPattern[] =
-        horizontal
-          ? ['horizontal-near', 'horizontal-center']
-          : ['diagonal'];
-
-      for (const pattern of patterns) {
-        const [first, second] =
-          WEATHER_BLEND_WEIGHTS[pattern];
-
-        const weights = [0, 0, 0];
-        weights[i] = first;
-        weights[j] = second;
-
-        candidates.push({ pattern, weights });
-      }
-    }
-
-    for (const pattern of [
-      'triangle-near',
-      'triangle-center',
-    ] as const) {
-      const [first, second, third] =
-        WEATHER_BLEND_WEIGHTS[pattern];
-
-      const weights = [third, third, third];
-      weights[i] = first;
-
-      const others = [0, 1, 2].filter(
-        index => index !== i
-      );
-
-      weights[others[0]] = second;
-      weights[others[1]] = third;
-
-      candidates.push({ pattern, weights });
-    }
-  }
-
-  let selected = candidates[0];
-  let lowestError = Infinity;
-
-  for (const candidate of candidates) {
-    const error = candidate.weights.reduce(
-      (total, weight, index) =>
-        total +
-        Math.pow(
-          weight - geometricWeights[index],
-          2
-        ),
-      0
-    );
-
-    if (error < lowestError) {
-      lowestError = error;
-      selected = candidate;
-    }
-  }
-
-  return selected;
-}
-
 /**
  * Resolve sector influences at a simulation time.
  *
@@ -486,52 +243,15 @@ export function resolveSectorNodeInfluences(
     movementCycle
   );
 
-  const point: Point = {
-    x: planeSector.x + 0.5,
-    y: planeSector.y + 0.5,
-  };
+ const influences = resolveWeatherBlendInfluences(
+  planeSector.x,
+  planeSector.y,
+  configuration
+);
 
-  const triangle = findContainingTriangle(
-    point,
-    spacing
-  );
+validateWeatherNodeInfluences(influences);
 
-  const selected = chooseInfluencePattern(
-    triangle.weights,
-    triangle.points
-  );
-
-  const influences = triangle.points.flatMap(
-    (node, index) => {
-      const weight = selected.weights[index];
-
-      if (weight <= 0) return [];
-
-      const row = Math.round(node.y / spacing);
-
-      const offset =
-        wrap(row, 2) === 1 ? spacing / 2 : 0;
-
-      const column = Math.round(
-        (node.x - offset) / spacing
-      );
-
-return [{
-  ...getWrappedWeatherNode(
-    column,
-    row,
-    configuration
-  ),
-  weight,
-}];
-    }
-  );
-
-  return {
-    orientation: triangle.orientation,
-    pattern: selected.pattern,
-    influences,
-  };
+return { influences };
 }
 
 export function createWeightedWeatherNodes(
@@ -619,4 +339,417 @@ export function calculateBlendedWeather(
   return blendWeatherValues(
     createWeightedWeatherNodes(nodes, pattern)
   );
+}
+
+export interface WeatherBlendEntry {
+  readonly nodeOffsetX: number;
+  readonly nodeOffsetY: number;
+  readonly weight: number;
+}
+
+export type WeatherBlendCell = readonly WeatherBlendEntry[];
+export type WeatherBlendRow = readonly WeatherBlendCell[];
+export type WeatherBlendTable = readonly WeatherBlendRow[];
+
+/**
+ * Offsets are relative to a base weather node.
+ *
+ * A node offset of (1, 0) means the next
+ * weather node horizontally.
+ *
+ * A node offset of (0, 1) means the next
+ * staggered weather-node row.
+ */
+const blend = (
+  ...entries: readonly [
+    number,
+    number,
+    number
+  ][]
+): WeatherBlendCell =>
+  entries.map(([nodeOffsetX, nodeOffsetY, weight]) => ({
+    nodeOffsetX,
+    nodeOffsetY,
+    weight,
+  }));
+
+const WEATHER_BLEND_PERIOD_X = 8;
+const WEATHER_BLEND_PERIOD_Y = 8;
+
+export const WEATHER_BLEND_TABLE: WeatherBlendTable = [
+  // y = 0
+  [
+    blend([0,0,1]),
+    blend([0,0,.75],[1,0,.25]),
+    blend([0,0,.5],[1,0,.5]),
+    blend([0,0,.25],[1,0,.75]),
+    blend([1,0,1]),
+    blend([1,0,.75],[2,0,.25]),
+    blend([1,0,.5],[2,0,.5]),
+    blend([1,0,.25],[2,0,.75]),
+  ],
+
+  // y = 1
+  [
+    blend([0,0,.8],[-1,1,.1],[0,1,.1]),
+    blend([0,0,.75],[0,1,.25]),
+    blend([0,0,.35],[1,0,.35],[0,1,.3]),
+    blend([1,0,.75],[0,1,.25]),
+    blend([1,0,.8],[0,1,.1],[1,1,.1]),
+    blend([1,0,.75],[1,1,.25]),
+    blend([1,0,.35],[2,0,.35],[1,1,.3]),
+    blend([2,0,.75],[1,1,.25]),
+  ],
+
+  // y = 2
+  [
+    blend([0,0,.56],[-1,1,.22],[0,1,.22]),
+    blend([0,0,.5],[0,1,.5]),
+    blend([0,1,.56],[0,0,.22],[1,0,.22]),
+    blend([0,1,.5],[1,0,.5]),
+    blend([1,0,.56],[0,1,.22],[1,1,.22]),
+    blend([1,0,.5],[1,1,.5]),
+    blend([1,1,.56],[1,0,.22],[2,0,.22]),
+    blend([1,1,.5],[2,0,.5]),
+  ],
+
+  // y = 3
+  [
+    blend([-1,1,.35],[0,1,.35],[0,0,.3]),
+    blend([0,1,.75],[0,0,.25]),
+    blend([0,1,.8],[0,0,.1],[1,0,.1]),
+    blend([0,1,.75],[1,0,.25]),
+    blend([0,1,.35],[1,1,.35],[1,0,.3]),
+    blend([1,1,.75],[1,0,.25]),
+    blend([1,1,.8],[1,0,.1],[2,0,.1]),
+    blend([1,1,.75],[2,0,.25]),
+  ],
+
+  // y = 4
+  [
+    blend([-1,1,.5],[0,1,.5]),
+    blend([-1,1,.25],[0,1,.75]),
+    blend([0,1,1]),
+    blend([0,1,.75],[1,1,.25]),
+    blend([0,1,.5],[1,1,.5]),
+    blend([0,1,.25],[1,1,.75]),
+    blend([1,1,1]),
+    blend([1,1,.75],[2,1,.25]),
+  ],
+
+  // y = 5
+  [
+    blend([-1,1,.35],[0,1,.35],[0,2,.3]),
+    blend([0,1,.75],[0,2,.25]),
+    blend([0,1,.8],[0,2,.1],[1,2,.1]),
+    blend([0,1,.75],[1,2,.25]),
+    blend([0,1,.35],[1,1,.35],[1,2,.3]),
+    blend([1,1,.75],[1,2,.25]),
+    blend([1,1,.8],[1,2,.1],[2,2,.1]),
+    blend([1,1,.75],[2,2,.25]),
+  ],
+
+  // y = 6
+  [
+    blend([0,2,.56],[-1,1,.22],[0,1,.22]),
+    blend([0,1,.5],[0,2,.5]),
+    blend([0,1,.56],[0,2,.22],[1,2,.22]),
+    blend([0,1,.5],[1,2,.5]),
+    blend([1,2,.56],[0,1,.22],[1,1,.22]),
+    blend([1,1,.5],[1,2,.5]),
+    blend([1,1,.56],[1,2,.22],[2,2,.22]),
+    blend([1,1,.5],[2,2,.5]),
+  ],
+
+  // y = 7
+  [
+    blend([0,2,.8],[-1,1,.1],[0,1,.1]),
+    blend([0,2,.75],[0,1,.25]),
+    blend([0,2,.35],[1,2,.35],[0,1,.3]),
+    blend([1,2,.75],[0,1,.25]),
+    blend([1,2,.8],[0,1,.1],[1,1,.1]),
+    blend([1,2,.75],[1,1,.25]),
+    blend([1,2,.35],[2,2,.35],[1,1,.3]),
+    blend([2,2,.75],[1,1,.25]),
+  ],
+];
+
+export function getWeatherBlendCell(
+  sectorX: number,
+  sectorY: number
+): WeatherBlendCell {
+  const { localX, localY } =
+    getWeatherBlendPosition(sectorX, sectorY);
+
+  const cell = WEATHER_BLEND_TABLE[localY]?.[localX];
+
+  if (!cell) {
+    throw new Error(
+      `Missing Weather blend cell (${localX}, ${localY}).`
+    );
+  }
+
+  return cell;
+}
+
+export interface WeatherBlendPosition {
+  localX: number;
+  localY: number;
+  tileX: number;
+  tileY: number;
+}
+
+/**
+ * Locate a sector within the repeating 8x8
+ * weather blending pattern.
+ *
+ * Tile coordinates identify which repetition
+ * of the pattern contains the sector.
+ *
+ * Local coordinates identify its lookup cell.
+ */
+export function getWeatherBlendPosition(
+  sectorX: number,
+  sectorY: number
+): WeatherBlendPosition {
+  if (
+    !Number.isSafeInteger(sectorX) ||
+    !Number.isSafeInteger(sectorY)
+  ) {
+    throw new Error(
+      'Invalid Weather blend sector coordinates.'
+    );
+  }
+
+const tileX = Math.floor(
+  sectorX / WEATHER_BLEND_PERIOD_X
+);
+
+const tileY = Math.floor(
+  sectorY / WEATHER_BLEND_PERIOD_Y
+);
+
+return {
+  localX:
+    sectorX - tileX * WEATHER_BLEND_PERIOD_X,
+  localY:
+    sectorY - tileY * WEATHER_BLEND_PERIOD_Y,
+  tileX,
+  tileY,
+};
+}
+
+export function resolveWeatherBlendNode(
+  sectorX: number,
+  sectorY: number,
+  entry: WeatherBlendEntry,
+  configuration: WeatherConfiguration
+): WeatherNodeAddress {
+  const spacing =
+    configuration.plane.nodeSpacingMiles / 5;
+
+  if (spacing !== 4) {
+    throw new Error(
+      'Fixed Weather blending requires 4-sector node spacing.'
+    );
+  }
+
+  const { tileX, tileY } =
+    getWeatherBlendPosition(sectorX, sectorY);
+
+  const row = tileY * 2 + entry.nodeOffsetY;
+
+  return getWrappedWeatherNode(
+    tileX * 2 + entry.nodeOffsetX,
+    row,
+    configuration
+  );
+}
+
+export function resolveWeatherBlendInfluences(
+  sectorX: number,
+  sectorY: number,
+  configuration: WeatherConfiguration
+): WeatherNodeInfluence[] {
+  const cell = getWeatherBlendCell(
+    sectorX,
+    sectorY
+  );
+
+  return cell.map(entry => ({
+    ...resolveWeatherBlendNode(
+      sectorX,
+      sectorY,
+      entry,
+      configuration
+    ),
+    weight: entry.weight,
+  }));
+}
+
+export function validateWeatherNodeInfluences(
+  influences: readonly WeatherNodeInfluence[]
+): void {
+  if (
+    influences.length < 1 ||
+    influences.length > 3
+  ) {
+    throw new Error(
+      'Weather requires 1 to 3 node influences.'
+    );
+  }
+
+  let total = 0;
+
+  for (const influence of influences) {
+    if (
+      !Number.isFinite(influence.weight) ||
+      influence.weight <= 0
+    ) {
+      throw new Error(
+        'Invalid Weather node influence weight.'
+      );
+    }
+
+    total += influence.weight;
+  }
+
+  if (Math.abs(total - 1) > 1e-9) {
+    throw new Error(
+      'Weather node influences must total 1.'
+    );
+  }
+}
+
+export function verifyWeatherBlendCell(
+  sectorX: number,
+  sectorY: number,
+  expected: readonly WeatherBlendEntry[]
+): void {
+  const actual = getWeatherBlendCell(sectorX, sectorY);
+
+  if (
+    actual.length !== expected.length ||
+    actual.some((entry, index) =>
+      entry.nodeOffsetX !== expected[index].nodeOffsetX ||
+      entry.nodeOffsetY !== expected[index].nodeOffsetY ||
+      Math.abs(entry.weight - expected[index].weight) > 1e-9
+    )
+  ) {
+    throw new Error(
+      `Incorrect Weather blend at (${sectorX}, ${sectorY}).`
+    );
+  }
+}
+
+export function verifyApprovedWeatherBlends(): void {
+  verifyWeatherBlendCell(0, 0, [
+    { nodeOffsetX: 0, nodeOffsetY: 0, weight: 1 },
+  ]);
+
+  verifyWeatherBlendCell(1, 0, [
+    { nodeOffsetX: 0, nodeOffsetY: 0, weight: .75 },
+    { nodeOffsetX: 1, nodeOffsetY: 0, weight: .25 },
+  ]);
+
+  verifyWeatherBlendCell(1, 3, [
+    { nodeOffsetX: 0, nodeOffsetY: 1, weight: .75 },
+    { nodeOffsetX: 0, nodeOffsetY: 0, weight: .25 },
+  ]);
+
+  verifyWeatherBlendCell(2, 2, [
+    { nodeOffsetX: 0, nodeOffsetY: 1, weight: .56 },
+    { nodeOffsetX: 0, nodeOffsetY: 0, weight: .22 },
+    { nodeOffsetX: 1, nodeOffsetY: 0, weight: .22 },
+  ]);
+
+  verifyWeatherBlendCell(4, 1, [
+    { nodeOffsetX: 1, nodeOffsetY: 0, weight: .8 },
+    { nodeOffsetX: 0, nodeOffsetY: 1, weight: .1 },
+    { nodeOffsetX: 1, nodeOffsetY: 1, weight: .1 },
+  ]);
+
+  verifyWeatherBlendCell(6, 2, [
+    { nodeOffsetX: 1, nodeOffsetY: 1, weight: .56 },
+    { nodeOffsetX: 1, nodeOffsetY: 0, weight: .22 },
+    { nodeOffsetX: 2, nodeOffsetY: 0, weight: .22 },
+  ]);
+}
+
+export function verifyWeatherBlendLookup(): void {
+  validateWeatherBlendTable();
+  verifyApprovedWeatherBlends();
+
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      if (!verifyWeatherBlendRepeat(x, y)) {
+        throw new Error(
+          `Weather blend does not repeat at (${x}, ${y}).`
+        );
+      }
+    }
+  }
+}
+
+export function verifyWeatherBlendRepeat(
+  sectorX: number,
+  sectorY: number
+): boolean {
+  const original = getWeatherBlendCell(
+    sectorX,
+    sectorY
+  );
+
+  const horizontal = getWeatherBlendCell(
+    sectorX + WEATHER_BLEND_PERIOD_X,
+    sectorY
+  );
+
+  const vertical = getWeatherBlendCell(
+    sectorX,
+    sectorY + WEATHER_BLEND_PERIOD_Y
+  );
+
+  return (
+    original === horizontal &&
+    original === vertical
+  );
+}
+
+export function validateWeatherBlendTable(): void {
+  if (
+    WEATHER_BLEND_TABLE.length !==
+    WEATHER_BLEND_PERIOD_Y
+  ) {
+    throw new Error(
+      'Weather blend table must contain 8 rows.'
+    );
+  }
+
+  for (const row of WEATHER_BLEND_TABLE) {
+    if (row.length !== WEATHER_BLEND_PERIOD_X) {
+      throw new Error(
+        'Weather blend table must contain 8 columns.'
+      );
+    }
+
+    for (const cell of row) {
+      if (cell.length < 1 || cell.length > 3) {
+        throw new Error(
+          'Weather blend cells require 1–3 nodes.'
+        );
+      }
+
+      const total = cell.reduce(
+        (sum, entry) => sum + entry.weight,
+        0
+      );
+
+      if (Math.abs(total - 1) > 1e-9) {
+        throw new Error(
+          'Weather blend weights must total 1.'
+        );
+      }
+    }
+  }
 }
