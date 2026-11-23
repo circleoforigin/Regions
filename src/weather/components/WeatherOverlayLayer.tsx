@@ -5,7 +5,7 @@ import type {
 import { useRegionsState } from '../../state/RegionsStateContext';
 import { defaultLayerVisibility } from '../../state/RegionsState';
 import { useWeather } from '../WeatherContext';
-
+import WeatherTemperatureOverlay from './WeatherTemperatureOverlay';
 import WeatherNodeOverlay from './WeatherNodeOverlay';
 import WeatherWindOverlay from './WeatherWindOverlay';
 
@@ -44,6 +44,7 @@ const {
   movementStep,
   pressureField,
   windField,
+  weatherManager,
 } = useWeather();
 
   const visibility =
@@ -51,30 +52,11 @@ const {
     defaultLayerVisibility;
 
   const showNodes = visibility.weatherNodes;
-
   const showWind = visibility.weatherWind;
+  const showTemperature = visibility.weatherTemperature;
 
   return (
     <>
-{showNodes &&
-  configuration &&
-  movementCycle &&
-  movementStep !== null &&
-  pressureField && (
-    <WeatherNodeOverlay
-      map={map}
-      registration={registration}
-      imageSize={imageSize}
-      viewportSize={viewportSize}
-      scale={scale}
-      pan={pan}
-      pressureField={pressureField}
-      movementCycle={movementCycle}
-      configuration={configuration}
-      movementStep={movementStep}
-    />
-  )}
-
       {showWind &&
         configuration &&
         movementCycle &&
@@ -92,6 +74,44 @@ const {
             configuration={configuration}
             movementStep={movementStep}
           />
+        )}
+
+        {showTemperature &&
+            weatherManager &&
+            map.simulationScale === 'overworld' && (
+                <WeatherTemperatureOverlay
+                    map={map}
+                    registration={registration}
+                    imageSize={imageSize}
+                    viewportSize={viewportSize}
+                    scale={scale}
+                    pan={pan}
+                    getSectorTemperature={(sectorX, sectorY) =>
+                        weatherManager.getTemperatureAtSector(
+                            map.id,
+                            sectorX,
+                            sectorY
+                        )
+                    }
+                />
+        )}
+        {showNodes &&
+            configuration &&
+            movementCycle &&
+            movementStep !== null &&
+            pressureField && (
+                <WeatherNodeOverlay
+                    map={map}
+                    registration={registration}
+                    imageSize={imageSize}
+                    viewportSize={viewportSize}
+                    scale={scale}
+                    pan={pan}
+                    pressureField={pressureField}
+                    movementCycle={movementCycle}
+                    configuration={configuration}
+                    movementStep={movementStep}
+                />
         )}
     </>
   );

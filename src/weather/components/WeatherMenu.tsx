@@ -21,6 +21,10 @@ export default function WeatherMenu({
     state.layerVisibility?.weatherWind ??
     defaultLayerVisibility.weatherWind;
 
+  const temperatureVisible =
+    state.layerVisibility?.weatherTemperature ??
+    defaultLayerVisibility.weatherTemperature;
+
   return (
     <div className="dropdown-menu">
       <button
@@ -62,6 +66,26 @@ export default function WeatherMenu({
     {windVisible ? '✓' : ''}
   </span>
   Show Wind
+</button>
+
+<button
+  type="button"
+  className="dropdown-item"
+  role="menuitemcheckbox"
+  aria-checked={temperatureVisible}
+  disabled={!projectActive}
+  onClick={() => {
+    dispatch({
+      type: 'layers.setVisibility',
+      layer: 'weatherTemperature',
+      visible: !temperatureVisible,
+    });
+  }}
+>
+  <span className="dropdown-check">
+    {temperatureVisible ? '✓' : ''}
+  </span>
+  Show Temperature
 </button>
       <div className="dropdown-separator" />
 

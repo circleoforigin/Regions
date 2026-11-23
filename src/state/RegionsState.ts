@@ -20,6 +20,7 @@ export interface RegionsLayerVisibility {
   sectorGrid: boolean;
   weatherNodes: boolean;
   weatherWind: boolean;
+  weatherTemperature: boolean;
 }
 
 export type RegionsLayer = keyof RegionsLayerVisibility;
@@ -35,6 +36,7 @@ export const defaultLayerVisibility: RegionsLayerVisibility = {
   sectorGrid: false,
   weatherNodes: false,
   weatherWind: false,
+  weatherTemperature: false,
 };
 
 export type RegionsEditingMode =
@@ -165,14 +167,26 @@ export function regionsStateReducer(
         selectedFeaturePopupOffset: { x: 0, y: 0 },
       };
 
-    case 'layers.setVisibility':
-      return {
-        ...state,
-        layerVisibility: {
-          ...(state.layerVisibility ?? defaultLayerVisibility),
-          [action.layer]: action.visible,
-        },
-      };
+case 'layers.setVisibility': {
+  const visibility = {
+    ...(state.layerVisibility ?? defaultLayerVisibility),
+    [action.layer]: action.visible,
+  };
+
+  if (action.visible) {
+    if (action.layer === 'weatherWind') {
+      visibility.weatherTemperature = false;
+    } else if (action.layer === 'weatherTemperature') {
+      visibility.weatherWind = false;
+    }
+  }
+
+  return {
+    ...state,
+    layerVisibility: visibility,
+  };
+}
+
 
     case 'viewport.set':
       return { ...state, viewport: action.viewport };

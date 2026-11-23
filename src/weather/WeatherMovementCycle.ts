@@ -14,18 +14,37 @@ export interface WeatherMovementCycle
   completedDisplacement: WeatherVector;
 }
 
+
 const DIRECTIONS: readonly WeatherVector[] = [
+  // East — 60%
   { x: 1, y: 0 },
   { x: 1, y: 0 },
   { x: 1, y: 0 },
-  { x: 1, y: -1 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 0 },
+
+  // Southeast — 25%
   { x: 1, y: 1 },
-  { x: 0, y: -1 },
+  { x: 1, y: 1 },
+  { x: 1, y: 1 },
+  { x: 1, y: 1 },
+  { x: 1, y: 1 },
+
+  // Northeast — 10%
+  { x: 1, y: -1 },
+  { x: 1, y: -1 },
+
+  // South — 5%
   { x: 0, y: 1 },
-  { x: -1, y: 0 },
-  { x: -1, y: -1 },
-  { x: -1, y: 1 },
 ];
+
 
 export function createWeatherMovementCycle(
   configuration: WeatherConfiguration

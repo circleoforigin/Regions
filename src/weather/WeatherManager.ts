@@ -19,6 +19,24 @@ import {
 import { getPressureTemperatureModifier } from './TemperatureManager';
 import { getWeatherNodePressure } from './generation/WeatherPressureFieldGenerator';
 import { resolveSectorNodeInfluences } from './generation/WeatherNodeInfluenceResolver';
+import {
+  createWeatherTransitionCycle,
+  getWeatherTransitionPosition,
+  type WeatherTransitionCycle,
+} from './WeatherTransitionCycle';
+import {
+  createSeededRandom,
+  deriveSeed,
+} from '@settingforge/module-sdk';
+import {
+  deriveWeatherSeeds,
+} from './WeatherSeedConfiguration';
+import {
+  createWeatherProbabilityChart,
+  generateWeatherNodeMidpointTarget,
+  type WeatherNodeMidpointTarget,
+  type WeatherProbabilityChart,
+} from './generation/WeatherConditionGenerator';
 
 export interface WeatherManagerState {
   configuration: WeatherConfiguration;
@@ -67,6 +85,20 @@ export class WeatherManager {
   constructor(state: WeatherManagerState) {
     this.state = state;
   }
+
+  public getProbabilityCharts():
+  WeatherProbabilityCharts | null {
+  const environment = this.state.environment;
+
+  if (!environment?.definitions) {
+    return null;
+  }
+
+  return createWeatherProbabilityCharts(
+    environment.definitions,
+    environment.seasonId
+  );
+}
 
   public update(state: WeatherManagerState): void {
     this.state = state;
@@ -179,4 +211,82 @@ public getSectorWeather(
     values: { ...blended },
   };
 }
+}
+
+export interface WeatherNodeTransitionSchedule {
+  nodeX: number;
+  nodeY: number;
+  cycle: WeatherTransitionCycle;
+}
+
+const MINUTES_PER_DAY = 1440;
+const MINIMUM_SPACING_MINUTES = 180;
+
+export function createWeatherNodeTransitionSchedule(
+  worldSeed: number,
+  nodeX: number,
+  nodeY: number
+): WeatherNodeTransitionSchedule {
+  if (
+    !Number.isSafeInteger(nodeX) ||
+    !Number.isSafeInteger(nodeY)
+  ) {
+    throw new Error(
+      'Invalid Weather Node coordinates.'
+    );
+  }
+
+  const transitionSeed =
+    deriveWeatherSeeds(worldSeed).transitions;
+
+  const nodeSeed = deriveSeed(
+    transitionSeed,
+    `node.${nodeX}.${nodeY}.schedule`
+  );
+
+  const random = createSeededRandom(nodeSeed);
+
+  // One, two, or three transitions daily.
+  const transitionCount =
+    Math.floor(random() * 3) + 1;
+
+  const spacing =
+    MINUTES_PER_DAY / transitionCount;
+
+  if (spacing < MINIMUM_SPACING_MINUTES) {
+    throw new Error(
+      'Weather transition spacing is too short.'
+    );
+  }
+
+  const minuteOfDay = Array.from(
+    { length: transitionCount },
+    (_, index) => Math.floor(index * spacing)
+  );
+
+  return {
+    nodeX,
+    nodeY,
+    cycle: createWeatherTransitionCycle(
+      minuteOfDay
+    ),
+  };
+}
+
+export function getWeatherNodeMidpointTarget(
+  worldSeed: number,
+  schedule: WeatherNodeTransitionSchedule,
+  elapsedMinutes: number
+): WeatherNodeMidpointTarget {
+  const position = getWeatherTransitionPosition(
+    schedule.cycle,
+    elapsedMinutes
+  );
+
+  return generateWeatherNodeMidpointTarget(
+    worldSeed,
+    schedule.nodeX,
+    schedule.nodeY,
+    position.index
+  );
 }

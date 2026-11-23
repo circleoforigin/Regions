@@ -35,15 +35,26 @@ interface WeatherTemperatureOverlayProps {
   ) => number;
 }
 
+
 const TEMPERATURE_COLORS = [
-  { temperature: 0, rgb: [8, 28, 133] },
-  { temperature: 20, rgb: [22, 116, 236] },
-  { temperature: 40, rgb: [35, 217, 232] },
+  { temperature: 0, rgb: [245, 250, 255] },
+  { temperature: 10, rgb: [213, 233, 255] },
+  { temperature: 20, rgb: [141, 184, 255] },
+  { temperature: 30, rgb: [50, 105, 216] },
+  { temperature: 40, rgb: [16, 44, 155] },
+  { temperature: 45, rgb: [22, 116, 236] },
+  { temperature: 50, rgb: [18, 100, 45] },
   { temperature: 55, rgb: [73, 188, 97] },
-  { temperature: 70, rgb: [245, 223, 58] },
-  { temperature: 85, rgb: [255, 139, 25] },
-  { temperature: 100, rgb: [255, 23, 8] },
+  { temperature: 60, rgb: [159, 212, 73] },
+  { temperature: 65, rgb: [245, 223, 58] },
+  { temperature: 70, rgb: [255, 181, 41] },
+  { temperature: 75, rgb: [245, 128, 41] },
+  { temperature: 80, rgb: [217, 76, 57] },
+  { temperature: 85, rgb: [227, 46, 36] },
+  { temperature: 90, rgb: [241, 23, 18] },
+  { temperature: 100, rgb: [176, 0, 0] },
 ] as const;
+
 
 function getTemperatureColor(
   temperature: number
@@ -52,10 +63,13 @@ function getTemperatureColor(
     throw new Error('Invalid sector temperature.');
   }
 
-  const value = Math.max(
-    0,
-    Math.min(100, temperature)
-  );
+const value = Math.max(
+  0,
+  Math.min(
+    100,
+    Math.floor(temperature / 5) * 5
+  )
+);
 
   for (
     let index = 1;
@@ -178,24 +192,25 @@ export default function WeatherTemperatureOverlay({
       return;
     }
 
-    // Sector addresses identify centers.
-    // Each sector extends half a sector
-    // in every direction from its center.
-    const startX = Math.floor(
-      (left - originX) / stepPx + 0.5
-    );
+    // Sector addresses identify cells.
+// Sector (0, 0) spans coordinates
+// 0 through one sector width.
 
-    const endX = Math.ceil(
-      (right - originX) / stepPx + 0.5
-    ) - 1;
+const startX = Math.floor(
+  (left - originX) / stepPx
+);
 
-    const startY = Math.floor(
-      (top - originY) / stepPx + 0.5
-    );
+const endX = Math.ceil(
+  (right - originX) / stepPx
+) - 1;
 
-    const endY = Math.ceil(
-      (bottom - originY) / stepPx + 0.5
-    ) - 1;
+const startY = Math.floor(
+  (top - originY) / stepPx
+);
+
+const endY = Math.ceil(
+  (bottom - originY) / stepPx
+) - 1;
 
     context.save();
 
@@ -217,10 +232,10 @@ export default function WeatherTemperatureOverlay({
           getTemperatureColor(temperature);
 
         context.fillRect(
-          originX + (x - 0.5) * stepPx,
-          originY + (y - 0.5) * stepPx,
-          stepPx,
-          stepPx
+            originX + x * stepPx,
+            originY + y * stepPx,
+            stepPx,
+            stepPx
         );
       }
     }
@@ -249,6 +264,7 @@ export default function WeatherTemperatureOverlay({
         top: 0,
         width: viewportSize.width,
         height: viewportSize.height,
+        opacity: 0.6,
         pointerEvents: 'none',
       }}
     />
