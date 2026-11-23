@@ -103,7 +103,7 @@ export function createWeatherTransitionCycle(
     offsets,
 
     durationMinutes:
-      (day + 1) * 1440,
+      (day + 1) * minutesPerDay,
   };
 }
 

@@ -672,6 +672,11 @@ const weatherManager = useMemo(() => {
 
   return new WeatherManager({
     worldSeed: worldContext?.seed,
+    timeDefinition: {
+        secondsPerMinute: clockState.era.secondsPerMinute,
+        minutesPerHour: clockState.era.minutesPerHour,
+        hoursPerDay: clockState.era.hoursPerDay,
+    },
     configuration,
     movementCycle,
     pressureField,

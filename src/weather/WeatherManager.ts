@@ -38,8 +38,15 @@ import {
   type WeatherProbabilityCharts,
 } from './generation/WeatherConditionGenerator';
 
+export interface WeatherTimeDefinition {
+  secondsPerMinute: number;
+  minutesPerHour: number;
+  hoursPerDay: number;
+}
+
 export interface WeatherManagerState {
   worldSeed: number;
+  timeDefinition: WeatherTimeDefinition;
   configuration: WeatherConfiguration;
   movementCycle: WeatherMovementCycle;
   pressureField: WeatherPressureField;
@@ -151,8 +158,8 @@ public getNodeMidpointTarget(
 
   // Existing transition schedules use
   // 1440 nominal minutes per world day.
-  const elapsedMinutes =
-    (time / secondsPerDay) * 1440;
+const elapsedMinutes =
+  time / this.state.timeDefinition.secondsPerMinute;
 
   return getWeatherNodeMidpointTarget(
     worldSeed,
