@@ -656,6 +656,7 @@ const movementStep =
 
 const weatherManager = useMemo(() => {
   if (
+    !worldContext ||
     !configuration ||
     !movementCycle ||
     !pressureField ||
@@ -670,6 +671,7 @@ const weatherManager = useMemo(() => {
   }
 
   return new WeatherManager({
+    worldSeed: worldContext?.seed,
     configuration,
     movementCycle,
     pressureField,

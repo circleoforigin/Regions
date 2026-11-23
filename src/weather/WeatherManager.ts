@@ -32,13 +32,14 @@ import {
   deriveWeatherSeeds,
 } from './WeatherSeedConfiguration';
 import {
-  createWeatherProbabilityChart,
+  createWeatherProbabilityCharts,
   generateWeatherNodeMidpointTarget,
   type WeatherNodeMidpointTarget,
-  type WeatherProbabilityChart,
+  type WeatherProbabilityCharts,
 } from './generation/WeatherConditionGenerator';
 
 export interface WeatherManagerState {
+  worldSeed: number;
   configuration: WeatherConfiguration;
   movementCycle: WeatherMovementCycle;
   pressureField: WeatherPressureField;
@@ -97,6 +98,66 @@ export class WeatherManager {
   return createWeatherProbabilityCharts(
     environment.definitions,
     environment.seasonId
+  );
+}
+
+public getNodeMidpointTarget(
+  nodeX: number,
+  nodeY: number,
+  time: number = this.state.time
+): WeatherNodeMidpointTarget {
+  const {
+    worldSeed,
+    configuration,
+    secondsPerDay,
+  } = this.state;
+
+  if (
+    !Number.isFinite(time) ||
+    !Number.isFinite(secondsPerDay) ||
+    secondsPerDay <= 0
+  ) {
+    throw new Error(
+      'Invalid Weather simulation time.'
+    );
+  }
+
+  const width = configuration.plane.width;
+  const height = configuration.plane.height;
+
+  if (
+    !Number.isSafeInteger(nodeX) ||
+    !Number.isSafeInteger(nodeY) ||
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    throw new Error(
+      'Invalid Weather Node coordinates.'
+    );
+  }
+
+  // The Weather Plane wraps around.
+  const x = ((nodeX % width) + width) % width;
+  const y = ((nodeY % height) + height) % height;
+
+  const schedule =
+    createWeatherNodeTransitionSchedule(
+      worldSeed,
+      x,
+      y
+    );
+
+  // Existing transition schedules use
+  // 1440 nominal minutes per world day.
+  const elapsedMinutes =
+    (time / secondsPerDay) * 1440;
+
+  return getWeatherNodeMidpointTarget(
+    worldSeed,
+    schedule,
+    elapsedMinutes
   );
 }
 

@@ -41,9 +41,17 @@ export interface WeatherTransitionPosition
 }
 
 export function createWeatherTransitionCycle(
-  minuteOfDay: readonly number[]
+  minuteOfDay: readonly number[],
+  minutesPerDay: number
 ): WeatherTransitionCycle
 {
+  if (
+    !Number.isSafeInteger(minutesPerDay) ||
+    minutesPerDay <= 0
+  ) {
+    throw new Error('Invalid SimClock minutes per day.'  );
+  }
+
   if (
     minuteOfDay.length === 0 ||
     minuteOfDay[0] !== 0
@@ -64,7 +72,7 @@ export function createWeatherTransitionCycle(
     if (
       !Number.isSafeInteger(minute) ||
       minute < 0 ||
-      minute >= 1440
+      minute >= minutesPerDay
     )
     {
       throw new Error(
@@ -85,7 +93,7 @@ export function createWeatherTransitionCycle(
     }
 
     offsets.push(
-      day * 1440 + minute
+      day * minutesPerDay + minute
     );
 
     previousMinute = minute;
