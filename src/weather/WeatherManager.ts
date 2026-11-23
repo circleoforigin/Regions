@@ -20,14 +20,10 @@ import { getPressureTemperatureModifier } from './TemperatureManager';
 import { getWeatherNodePressure } from './generation/WeatherPressureFieldGenerator';
 import { resolveSectorNodeInfluences } from './generation/WeatherNodeInfluenceResolver';
 import {
-  createWeatherTransitionCycle,
   getWeatherTransitionPosition,
   type WeatherTransitionCycle,
 } from './WeatherTransitionCycle';
-import {
-  createSeededRandom,
-  deriveSeed,
-} from '@settingforge/module-sdk';
+import { createSeededRandom } from '@settingforge/module-sdk';
 import {
   deriveWeatherSeeds,
 } from './WeatherSeedConfiguration';
@@ -46,6 +42,7 @@ export interface WeatherTimeDefinition {
 
 export interface WeatherManagerState {
   worldSeed: number;
+  transitionCycle: WeatherTransitionCycle;
   timeDefinition: WeatherTimeDefinition;
   configuration: WeatherConfiguration;
   movementCycle: WeatherMovementCycle;
@@ -116,13 +113,14 @@ public getNodeMidpointTarget(
   const {
     worldSeed,
     configuration,
-    secondsPerDay,
+    timeDefinition,
+    transitionCycle,
   } = this.state;
 
   if (
     !Number.isFinite(time) ||
-    !Number.isFinite(secondsPerDay) ||
-    secondsPerDay <= 0
+    !Number.isFinite(timeDefinition.secondsPerMinute) ||
+    timeDefinition.secondsPerMinute <= 0
   ) {
     throw new Error(
       'Invalid Weather simulation time.'
@@ -145,25 +143,17 @@ public getNodeMidpointTarget(
     );
   }
 
-  // The Weather Plane wraps around.
   const x = ((nodeX % width) + width) % width;
   const y = ((nodeY % height) + height) % height;
 
-  const schedule =
-    createWeatherNodeTransitionSchedule(
-      worldSeed,
-      x,
-      y
-    );
-
-  // Existing transition schedules use
-  // 1440 nominal minutes per world day.
-const elapsedMinutes =
-  time / this.state.timeDefinition.secondsPerMinute;
+  const elapsedMinutes =
+    time / timeDefinition.secondsPerMinute;
 
   return getWeatherNodeMidpointTarget(
     worldSeed,
-    schedule,
+    x,
+    y,
+    transitionCycle,
     elapsedMinutes
   );
 }
@@ -281,80 +271,151 @@ public getSectorWeather(
 }
 }
 
-export interface WeatherNodeTransitionSchedule {
-  nodeX: number;
-  nodeY: number;
-  cycle: WeatherTransitionCycle;
-}
 
-const MINUTES_PER_DAY = 1440;
-const MINIMUM_SPACING_MINUTES = 180;
-
-export function createWeatherNodeTransitionSchedule(
+/**
+ * Creates one repeating transition schedule
+ * shared by every Weather Node.
+ *
+ * Time units come exclusively from SimClock.
+ */
+export function createGlobalWeatherTransitionCycle(
   worldSeed: number,
-  nodeX: number,
-  nodeY: number
-): WeatherNodeTransitionSchedule {
+  timeDefinition: WeatherTimeDefinition,
+  transitionCount: number
+): WeatherTransitionCycle {
+  const {
+    minutesPerHour,
+    hoursPerDay,
+  } = timeDefinition;
+
+  const minutesPerDay =
+    minutesPerHour * hoursPerDay;
+
+  const minimumSpacing =
+    minutesPerHour * 3;
+
   if (
-    !Number.isSafeInteger(nodeX) ||
-    !Number.isSafeInteger(nodeY)
+    !Number.isSafeInteger(minutesPerDay) ||
+    !Number.isSafeInteger(minimumSpacing) ||
+    minimumSpacing <= 0 ||
+    minutesPerDay < minimumSpacing ||
+    !Number.isSafeInteger(transitionCount) ||
+    transitionCount <= 0
   ) {
     throw new Error(
-      'Invalid Weather Node coordinates.'
+      'Invalid SimClock weather transition configuration.'
     );
   }
 
-  const transitionSeed =
-    deriveWeatherSeeds(worldSeed).transitions;
-
-  const nodeSeed = deriveSeed(
-    transitionSeed,
-    `node.${nodeX}.${nodeY}.schedule`
+  // A shorter day may not accommodate
+  // three transitions.
+  const maximumDailyTransitions = Math.min(
+    3,
+    Math.floor(minutesPerDay / minimumSpacing)
   );
 
-  const random = createSeededRandom(nodeSeed);
+  const random = createSeededRandom(
+    deriveWeatherSeeds(worldSeed).transitions
+  );
 
-  // One, two, or three transitions daily.
-  const transitionCount =
-    Math.floor(random() * 3) + 1;
+  const offsets: number[] = [];
+  let day = 0;
 
-  const spacing =
-    MINUTES_PER_DAY / transitionCount;
+  while (offsets.length < transitionCount) {
+    const dailyCount =
+      1 + Math.floor(
+        random() * maximumDailyTransitions
+      );
 
-  if (spacing < MINIMUM_SPACING_MINUTES) {
-    throw new Error(
-      'Weather transition spacing is too short.'
+    // Divide the day into evenly spaced
+    // candidate slots, then select a subset.
+    const slots = Array.from(
+      { length: maximumDailyTransitions },
+      (_, index) => index
     );
-  }
 
-  const minuteOfDay = Array.from(
-    { length: transitionCount },
-    (_, index) => Math.floor(index * spacing)
-  );
+    // Fisher-Yates shuffle.
+    for (let i = slots.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+
+      [slots[i], slots[j]] = [
+        slots[j],
+        slots[i],
+      ];
+    }
+
+    const selectedSlots =
+      day === 0
+        ? [
+            0,
+            ...slots
+              .filter(slot => slot !== 0)
+              .slice(0, dailyCount - 1),
+          ]
+        : slots.slice(0, dailyCount);
+
+    selectedSlots.sort((a, b) => a - b);
+
+    const slotWidth =
+      minutesPerDay / maximumDailyTransitions;
+
+    const maximumVariation = Math.max(
+      0,
+      Math.floor(
+        (slotWidth - minimumSpacing) / 2
+      )
+    );
+
+    for (const slot of selectedSlots) {
+      if (offsets.length >= transitionCount) {
+        break;
+      }
+
+      const variation =
+        day === 0 && slot === 0
+          ? 0
+          : Math.floor(
+              random() * (maximumVariation + 1)
+            );
+
+      const minuteOfDay =
+        Math.floor(slot * slotWidth) +
+        variation;
+
+      offsets.push(
+        day * minutesPerDay + minuteOfDay
+      );
+    }
+
+    day++;
+  }
 
   return {
-    nodeX,
-    nodeY,
-    cycle: createWeatherTransitionCycle(
-      minuteOfDay
-    ),
+    offsets,
+    durationMinutes: day * minutesPerDay,
   };
 }
 
+/**
+ * Resolves a node's deterministic midpoint
+ * target using the shared transition cycle.
+ */
 export function getWeatherNodeMidpointTarget(
   worldSeed: number,
-  schedule: WeatherNodeTransitionSchedule,
+  nodeX: number,
+  nodeY: number,
+  cycle: WeatherTransitionCycle,
   elapsedMinutes: number
 ): WeatherNodeMidpointTarget {
   const position = getWeatherTransitionPosition(
-    schedule.cycle,
+    cycle,
     elapsedMinutes
   );
 
   return generateWeatherNodeMidpointTarget(
     worldSeed,
-    schedule.nodeX,
-    schedule.nodeY,
+    nodeX,
+    nodeY,
     position.index
   );
 }

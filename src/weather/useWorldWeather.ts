@@ -3,7 +3,10 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { WeatherManager } from './WeatherManager';
+import {
+  WeatherManager,
+  createGlobalWeatherTransitionCycle,
+} from './WeatherManager';
 import {
   getWorldSeed,
   type WorldSeedContext,
@@ -247,6 +250,28 @@ const [
   secondsPerDay: number;
   era: WeatherCalendarEra;
 } | null>(null);
+
+const transitionCycle = useMemo(() => {
+  if (
+    !worldContext ||
+    !configuration ||
+    !clockState
+  ) {
+    return null;
+  }
+
+  return createGlobalWeatherTransitionCycle(
+    worldContext.seed,
+    clockState.era,
+    configuration.transitions.cycleLength
+  );
+}, [
+  worldContext,
+  configuration,
+  clockState?.era.secondsPerMinute,
+  clockState?.era.minutesPerHour,
+  clockState?.era.hoursPerDay,
+]);
 
 useEffect(() =>
 {
@@ -656,6 +681,7 @@ const movementStep =
 
 const weatherManager = useMemo(() => {
   if (
+    !transitionCycle ||
     !worldContext ||
     !configuration ||
     !movementCycle ||
@@ -672,6 +698,7 @@ const weatherManager = useMemo(() => {
 
   return new WeatherManager({
     worldSeed: worldContext?.seed,
+    transitionCycle,
     timeDefinition: {
         secondsPerMinute: clockState.era.secondsPerMinute,
         minutesPerHour: clockState.era.minutesPerHour,
@@ -688,6 +715,8 @@ const weatherManager = useMemo(() => {
     secondsPerDay: clockState.secondsPerDay,
   });
 }, [
+    transitionCycle,
+    worldContext,
   configuration,
   movementCycle,
   pressureField,
