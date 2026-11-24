@@ -6,6 +6,8 @@ import {
   getWrappedWeatherDisplacement,
   type WeatherMovementCycle,
 } from '../WeatherMovementCycle';
+import type { WeatherWindStrengthDefinition } from '../WeatherEnvironment';
+import type { WeatherProbabilityEntry } from './WeatherConditionGenerator';
 
 /**
  * Wind direction represents the direction
@@ -27,6 +29,11 @@ import {
 export type WeatherWindDirection =
   | 0 | 1 | 2 | 3
   | 4 | 5 | 6 | 7;
+
+export interface WeatherResolvedWind {
+  direction: WeatherWindDirection;
+  speed: number | null;
+}
 
 export interface WeatherWindField {
   widthInSectors: number;
@@ -679,5 +686,66 @@ export function getWorldWindDirection(
     field,
     worldSectorX - displacement.x,
     worldSectorY - displacement.y
+  );
+}
+
+/**
+ * Derives descriptive wind speed from
+ * the finalized wind-strength roll.
+ *
+ * No additional random roll is required.
+ */
+export function resolveWeatherWindSpeed(
+  roll: number,
+  condition: WeatherProbabilityEntry,
+  definition: WeatherWindStrengthDefinition
+): number {
+  const {
+    minimumSpeed,
+    maximumSpeed,
+  } = definition;
+
+  if (
+    !Number.isFinite(minimumSpeed) ||
+    !Number.isFinite(maximumSpeed) ||
+    minimumSpeed < 0 ||
+    maximumSpeed < minimumSpeed
+  ) {
+    throw new Error(
+      'Invalid Weather wind speed range.'
+    );
+  }
+
+  const lowerBoundary =
+    condition.cumulativePercentage -
+    condition.percentage;
+
+  const minimumRoll =
+    Math.floor(lowerBoundary) + 1;
+
+  const maximumRoll =
+    Math.floor(
+      condition.cumulativePercentage
+    );
+
+  const rollRange =
+    maximumRoll - minimumRoll;
+
+  if (rollRange <= 0) {
+    return Math.floor(minimumSpeed);
+  }
+
+  const fraction = Math.max(
+    0,
+    Math.min(
+      1,
+      (roll - minimumRoll) / rollRange
+    )
+  );
+
+  return Math.floor(
+    minimumSpeed +
+    (maximumSpeed - minimumSpeed) *
+      fraction
   );
 }

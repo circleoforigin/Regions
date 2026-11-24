@@ -1,6 +1,11 @@
 import type { WeatherConfiguration } from './models/WeatherConfiguration';
 import type { WeatherPressureField } from './generation/WeatherPressureFieldGenerator';
-import type { WeatherWindField } from './generation/WeatherWindGenerator';
+import {
+  getAtmosphericWindDirection,
+  resolveWeatherWindSpeed,
+  type WeatherWindField,
+  type WeatherResolvedWind,
+} from './generation/WeatherWindGenerator';
 import type { WeatherMovementCycle } from './WeatherMovementCycle';
 import type { WeatherEnvironmentSnapshot } from './WeatherEnvironment';
 import {
@@ -20,15 +25,16 @@ import {
   getWeatherNodePressure,
   getPressureConditionModifier,
 } from './generation/WeatherPressureFieldGenerator';
-import { resolveSectorNodeInfluences } from './generation/WeatherNodeInfluenceResolver';
+import {
+  resolveSectorNodeInfluences,
+  getWeatherPlaneSector,
+} from './generation/WeatherNodeInfluenceResolver';
 import {
   getWeatherTransitionPosition,
   type WeatherTransitionCycle,
 } from './WeatherTransitionCycle';
 import { createSeededRandom } from '@settingforge/module-sdk';
-import {
-  deriveWeatherSeeds,
-} from './WeatherSeedConfiguration';
+import { deriveWeatherSeeds } from './WeatherSeedConfiguration';
 import {
   createWeatherProbabilityCharts,
   generateWeatherNodeMidpointTarget,
@@ -157,6 +163,12 @@ export interface SectorWeatherResult {
    * are unavailable.
    */
   conditions: WeatherResolvedConditions | null;
+
+  /**
+   * Current wind direction and
+   * descriptive numerical speed.
+   */
+  wind: WeatherResolvedWind;
 }
 
 /**
@@ -460,6 +472,64 @@ public getTemperatureAtSector(
   );
 }
 
+/**
+ * Resolves wind direction from the
+ * moving Weather Plane and numerical
+ * speed from the resolved wind strength.
+ */
+public getSectorWind(
+  sector: SectorAddress,
+  windStrengthRoll: number,
+  windStrength:
+    WeatherResolvedConditions['windStrength'] | null,
+  time: number = this.state.time
+): WeatherResolvedWind {
+  const {
+    configuration,
+    movementCycle,
+    windField,
+    secondsPerDay,
+    environment,
+  } = this.state;
+
+  const planeSector =
+    getWeatherPlaneSector(
+      sector,
+      time,
+      secondsPerDay,
+      configuration,
+      movementCycle
+    );
+
+  const direction =
+    getAtmosphericWindDirection(
+      windField,
+      planeSector.x,
+      planeSector.y
+    );
+
+  const definition = windStrength
+    ? environment?.definitions
+        ?.windStrength.find(
+          entry =>
+            entry.id === windStrength.id
+        )
+    : undefined;
+
+  const speed =
+    windStrength && definition
+      ? resolveWeatherWindSpeed(
+          windStrengthRoll,
+          windStrength,
+          definition
+        )
+      : null;
+
+  return {
+    direction,
+    speed,
+  };
+}
 
 /**
  * Calculates the current numeric weather
@@ -590,15 +660,24 @@ const conditions = charts
     )
   : null;
 
+const wind =
+  this.getSectorWind(
+    sector,
+    finalizedRolls.windStrength,
+    conditions?.windStrength ?? null,
+    time
+  );
+
 return {
   sector: { ...sector },
   time,
   blended,
   values,
   conditions,
+  wind,
 };
 }
-
+}
 
 /**
  * Creates one repeating transition schedule
