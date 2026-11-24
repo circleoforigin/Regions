@@ -30,6 +30,8 @@ import {
 import {
   createWeatherProbabilityCharts,
   generateWeatherNodeMidpointTarget,
+  interpolateWeatherConditionRolls,
+  type WeatherConditionRolls,
   type WeatherNodeMidpointTarget,
   type WeatherProbabilityCharts,
 } from './generation/WeatherConditionGenerator';
@@ -256,6 +258,118 @@ public getNodeMidpointTarget(
   );
 }
 
+/**
+ * Returns the current atmospheric rolls
+ * for a Weather Node at an arbitrary
+ * simulation time.
+ *
+ * Weather rolls change exclusively at
+ * UpdateInterval boundaries.
+ */
+public getNodeWeatherRolls(
+  nodeX: number,
+  nodeY: number,
+  time: number = this.state.time
+): WeatherConditionRolls {
+  const {
+    worldSeed,
+    transitionCycle,
+  } = this.state;
+
+  const currentInterval =
+    this.getUpdateIntervalIndex(time);
+
+  const currentPosition =
+    getWeatherTransitionPosition(
+      transitionCycle,
+      currentInterval
+    );
+
+  const currentTarget =
+    this.getNodeMidpointTarget(
+      nodeX,
+      nodeY,
+      time
+    );
+
+  // At the midpoint, every property has
+  // reached its generated target.
+  if (
+    currentInterval ===
+    currentPosition.midpointInterval
+  ) {
+    return { ...currentTarget.rolls };
+  }
+
+  // Before the current midpoint, move
+  // from the previous midpoint target
+  // toward the current midpoint target.
+  if (
+    currentInterval <
+    currentPosition.midpointInterval
+  ) {
+    const previousPosition =
+      getWeatherTransitionPosition(
+        transitionCycle,
+        currentPosition.startInterval - 1
+      );
+
+    const previousTarget =
+      generateWeatherNodeMidpointTarget(
+        worldSeed,
+        currentTarget.nodeX,
+        currentTarget.nodeY,
+        previousPosition.index
+      );
+
+    const totalUpdateIntervals =
+      currentPosition.midpointInterval -
+      previousPosition.midpointInterval;
+
+    const elapsedUpdateIntervals =
+      currentInterval -
+      previousPosition.midpointInterval;
+
+    return interpolateWeatherConditionRolls(
+      previousTarget.rolls,
+      currentTarget.rolls,
+      totalUpdateIntervals,
+      elapsedUpdateIntervals
+    );
+  }
+
+  // After the current midpoint, move
+  // toward the next midpoint target.
+  const nextPosition =
+    getWeatherTransitionPosition(
+      transitionCycle,
+      currentPosition.endInterval
+    );
+
+  const nextTarget =
+    generateWeatherNodeMidpointTarget(
+      worldSeed,
+      currentTarget.nodeX,
+      currentTarget.nodeY,
+      nextPosition.index
+    );
+
+  const totalUpdateIntervals =
+    nextPosition.midpointInterval -
+    currentPosition.midpointInterval;
+
+  const elapsedUpdateIntervals =
+    currentInterval -
+    currentPosition.midpointInterval;
+
+  return interpolateWeatherConditionRolls(
+    currentTarget.rolls,
+    nextTarget.rolls,
+    totalUpdateIntervals,
+    elapsedUpdateIntervals
+  );
+}
+
   public update(state: WeatherManagerState): void {
     this.state = state;
   }
@@ -337,19 +451,19 @@ public getTemperatureAtSector(
   );
 }
 
+
 /**
- * Calculates all five weather properties for
- * a sector from its contributing weather nodes.
+ * Calculates the current numeric weather
+ * values for a world Sector.
  *
- * Node selection and influence calculation
- * are performed by the geometry resolver.
+ * Weather Plane movement and atmospheric
+ * UpdateIntervals are resolved independently.
  *
- * Zone and Area processing will be inserted
- * after blending in a future implementation.
+ * Area and Zone modifiers will be applied
+ * after node blending.
  */
 public getSectorWeather(
   sector: SectorAddress,
-  influences: readonly WeightedWeatherNode[],
   time: number = this.state.time
 ): SectorWeatherResult {
   if (!Number.isFinite(time)) {
@@ -358,7 +472,72 @@ public getSectorWeather(
     );
   }
 
-  const blended = blendWeatherValues(influences);
+  const {
+    configuration,
+    movementCycle,
+    pressureField,
+    secondsPerDay,
+  } = this.state;
+
+  const { influences } =
+    resolveSectorNodeInfluences(
+      sector,
+      time,
+      secondsPerDay,
+      configuration,
+      movementCycle
+    );
+
+  const baselineTemperature =
+    this.getCurrentTemperature(time).temperature;
+
+  const dayFraction =
+    ((time / secondsPerDay) % 1 + 1) % 1;
+
+  const weightedNodes: WeightedWeatherNode[] =
+    influences.map(influence => {
+      const {
+        nodeX,
+        nodeY,
+        weight,
+      } = influence;
+
+      const rolls =
+        this.getNodeWeatherRolls(
+          nodeX,
+          nodeY,
+          time
+        );
+
+      const pressure =
+        getWeatherNodePressure(
+          pressureField,
+          nodeX,
+          nodeY
+        );
+
+      const temperature =
+        baselineTemperature +
+        getPressureTemperatureModifier(
+          pressure,
+          dayFraction
+        );
+
+      return {
+        node: {
+          nodeX,
+          nodeY,
+          values: {
+            temperature,
+            ...rolls,
+          },
+        },
+        weight,
+      };
+    });
+
+  const blended =
+    blendWeatherValues(weightedNodes);
 
   return {
     sector: { ...sector },
@@ -368,7 +547,6 @@ public getSectorWeather(
   };
 }
 }
-
 
 /**
  * Creates one repeating transition schedule

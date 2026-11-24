@@ -224,3 +224,94 @@ export function generateWeatherNodeMidpointTarget(
     },
   };
 }
+
+
+/**
+ * Calculates a Weather Node's current rolls
+ * between two consecutive midpoint targets.
+ *
+ * All properties share the same UpdateChange,
+ * determined by the largest absolute difference.
+ *
+ * Properties stop changing once their individual
+ * targets have been reached.
+ */
+export function interpolateWeatherConditionRolls(
+  from: WeatherConditionRolls,
+  to: WeatherConditionRolls,
+  totalUpdateIntervals: number,
+  elapsedUpdateIntervals: number
+): WeatherConditionRolls {
+  if (
+    !Number.isSafeInteger(totalUpdateIntervals) ||
+    totalUpdateIntervals <= 0 ||
+    !Number.isSafeInteger(elapsedUpdateIntervals)
+  ) {
+    throw new Error(
+      'Invalid Weather interpolation intervals.'
+    );
+  }
+
+  if (elapsedUpdateIntervals <= 0) {
+    return { ...from };
+  }
+
+  if (
+    elapsedUpdateIntervals >= totalUpdateIntervals
+  ) {
+    return { ...to };
+  }
+
+  const maximumDifference = Math.max(
+    Math.abs(to.visibility - from.visibility),
+    Math.abs(to.cloudCover - from.cloudCover),
+    Math.abs(to.precipitation - from.precipitation),
+    Math.abs(to.windStrength - from.windStrength)
+  );
+
+  const updateChange =
+    maximumDifference / totalUpdateIntervals;
+
+  const totalChange =
+    updateChange * elapsedUpdateIntervals;
+
+  const interpolate = (
+    start: number,
+    target: number
+  ): number => {
+    const difference = target - start;
+
+    if (
+      Math.abs(difference) <= totalChange
+    ) {
+      return target;
+    }
+
+    return (
+      start +
+      Math.sign(difference) * totalChange
+    );
+  };
+
+  return {
+    visibility: interpolate(
+      from.visibility,
+      to.visibility
+    ),
+
+    cloudCover: interpolate(
+      from.cloudCover,
+      to.cloudCover
+    ),
+
+    precipitation: interpolate(
+      from.precipitation,
+      to.precipitation
+    ),
+
+    windStrength: interpolate(
+      from.windStrength,
+      to.windStrength
+    ),
+  };
+}
