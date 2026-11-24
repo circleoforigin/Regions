@@ -1,4 +1,3 @@
-
 import type { WeatherConfiguration } from './models/WeatherConfiguration';
 import type { WeatherPressureField } from './generation/WeatherPressureFieldGenerator';
 import type { WeatherWindField } from './generation/WeatherWindGenerator';
@@ -17,7 +16,10 @@ import {
   type WeightedWeatherNode,
 } from './generation/WeatherNodeInfluenceResolver';
 import { getPressureTemperatureModifier } from './TemperatureManager';
-import { getWeatherNodePressure } from './generation/WeatherPressureFieldGenerator';
+import {
+  getWeatherNodePressure,
+  getPressureConditionModifier,
+} from './generation/WeatherPressureFieldGenerator';
 import { resolveSectorNodeInfluences } from './generation/WeatherNodeInfluenceResolver';
 import {
   getWeatherTransitionPosition,
@@ -494,6 +496,7 @@ public getSectorWeather(
   const dayFraction =
     ((time / secondsPerDay) % 1 + 1) % 1;
 
+  let pressureConditionModifier = 0;
   const weightedNodes: WeightedWeatherNode[] =
     influences.map(influence => {
       const {
@@ -516,6 +519,11 @@ public getSectorWeather(
           nodeY
         );
 
+      pressureConditionModifier +=
+        getPressureConditionModifier(
+            pressure
+        ) * weight;
+
       const temperature =
         baselineTemperature +
         getPressureTemperatureModifier(
@@ -536,15 +544,26 @@ public getSectorWeather(
       };
     });
 
-  const blended =
-    blendWeatherValues(weightedNodes);
+const blended = blendWeatherValues(weightedNodes);
 
-  return {
-    sector: { ...sector },
-    time,
-    blended,
-    values: { ...blended },
-  };
+const values: WeatherValues = {
+  ...blended,
+
+  cloudCover:
+    blended.cloudCover +
+    pressureConditionModifier,
+
+  precipitation:
+    blended.precipitation +
+    pressureConditionModifier,
+};
+
+return {
+  sector: { ...sector },
+  time,
+  blended,
+  values,
+};
 }
 }
 

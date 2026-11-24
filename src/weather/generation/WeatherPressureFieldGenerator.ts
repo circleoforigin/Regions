@@ -619,3 +619,15 @@ export function generateWeatherPressureFields(
     },
   };
 }
+
+/**
+ * Returns the atmospheric roll modifier
+ * associated with a Weather Node's pressure.
+ *
+ * Applies to cloud cover and precipitation.
+ */
+export function getPressureConditionModifier(
+  pressure: WeatherPressure
+): number {
+  return pressure * -5;
+}
