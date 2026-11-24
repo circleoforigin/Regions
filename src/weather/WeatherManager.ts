@@ -40,6 +40,79 @@ export interface WeatherTimeDefinition {
   hoursPerDay: number;
 }
 
+/**
+ * Returns the duration of one Weather
+ * UpdateInterval in simulation seconds.
+ */
+export function getWeatherUpdateIntervalSeconds(
+  timeDefinition: WeatherTimeDefinition,
+  updatesPerHour: number
+): number {
+  const {
+    secondsPerMinute,
+    minutesPerHour,
+  } = timeDefinition;
+
+  if (
+    !Number.isSafeInteger(updatesPerHour) ||
+    updatesPerHour <= 0 ||
+    !Number.isFinite(secondsPerMinute) ||
+    secondsPerMinute <= 0 ||
+    !Number.isFinite(minutesPerHour) ||
+    minutesPerHour <= 0
+  ) {
+    throw new Error(
+      'Invalid Weather UpdateInterval configuration.'
+    );
+  }
+
+  return (
+    secondsPerMinute * minutesPerHour
+  ) / updatesPerHour;
+}
+
+/**
+ * Returns the absolute UpdateInterval
+ * containing the supplied simulation time.
+ */
+export function getWeatherUpdateIntervalIndex(
+  time: number,
+  intervalSeconds: number
+): number {
+  if (
+    !Number.isFinite(time) ||
+    !Number.isFinite(intervalSeconds) ||
+    intervalSeconds <= 0
+  ) {
+    throw new Error(
+      'Invalid Weather UpdateInterval time.'
+    );
+  }
+
+  return Math.floor(
+    time / intervalSeconds
+  );
+}
+
+/**
+ * Returns the next Weather UpdateInterval
+ * boundary strictly after the supplied time.
+ */
+export function getNextWeatherUpdateTime(
+  time: number,
+  intervalSeconds: number
+): number {
+  const currentInterval =
+    getWeatherUpdateIntervalIndex(
+      time,
+      intervalSeconds
+    );
+
+  return (
+    currentInterval + 1
+  ) * intervalSeconds;
+}
+
 export interface WeatherManagerState {
   worldSeed: number;
   transitionCycle: WeatherTransitionCycle;
@@ -105,6 +178,32 @@ export class WeatherManager {
   );
 }
 
+public getUpdateIntervalSeconds(): number {
+  return getWeatherUpdateIntervalSeconds(
+    this.state.timeDefinition,
+    this.state.configuration.transitions
+      .updatesPerHour
+  );
+}
+
+public getUpdateIntervalIndex(
+  time: number = this.state.time
+): number {
+  return getWeatherUpdateIntervalIndex(
+    time,
+    this.getUpdateIntervalSeconds()
+  );
+}
+
+public getNextUpdateTime(
+  time: number = this.state.time
+): number {
+  return getNextWeatherUpdateTime(
+    time,
+    this.getUpdateIntervalSeconds()
+  );
+}
+
 public getNodeMidpointTarget(
   nodeX: number,
   nodeY: number,
@@ -146,15 +245,14 @@ public getNodeMidpointTarget(
   const x = ((nodeX % width) + width) % width;
   const y = ((nodeY % height) + height) % height;
 
-  const elapsedMinutes =
-    time / timeDefinition.secondsPerMinute;
+  const elapsedIntervals = this.getUpdateIntervalIndex(time);
 
   return getWeatherNodeMidpointTarget(
     worldSeed,
     x,
     y,
     transitionCycle,
-    elapsedMinutes
+    elapsedIntervals
   );
 }
 
@@ -278,40 +376,41 @@ public getSectorWeather(
  *
  * Time units come exclusively from SimClock.
  */
+
 export function createGlobalWeatherTransitionCycle(
   worldSeed: number,
   timeDefinition: WeatherTimeDefinition,
-  transitionCount: number
+  transitionCount: number,
+  updatesPerHour: number
 ): WeatherTransitionCycle {
-  const {
-    minutesPerHour,
-    hoursPerDay,
-  } = timeDefinition;
+  const intervalsPerDay =
+    timeDefinition.hoursPerDay *
+    updatesPerHour;
 
-  const minutesPerDay =
-    minutesPerHour * hoursPerDay;
-
+  // Minimum separation of three
+  // SimClock hours.
   const minimumSpacing =
-    minutesPerHour * 3;
+    updatesPerHour * 3;
 
   if (
-    !Number.isSafeInteger(minutesPerDay) ||
+    !Number.isSafeInteger(updatesPerHour) ||
+    updatesPerHour <= 0 ||
+    !Number.isSafeInteger(intervalsPerDay) ||
     !Number.isSafeInteger(minimumSpacing) ||
-    minimumSpacing <= 0 ||
-    minutesPerDay < minimumSpacing ||
+    intervalsPerDay < minimumSpacing ||
     !Number.isSafeInteger(transitionCount) ||
     transitionCount <= 0
   ) {
     throw new Error(
-      'Invalid SimClock weather transition configuration.'
+      'Invalid Weather transition configuration.'
     );
   }
 
-  // A shorter day may not accommodate
-  // three transitions.
   const maximumDailyTransitions = Math.min(
     3,
-    Math.floor(minutesPerDay / minimumSpacing)
+    Math.floor(
+      intervalsPerDay / minimumSpacing
+    )
   );
 
   const random = createSeededRandom(
@@ -327,8 +426,6 @@ export function createGlobalWeatherTransitionCycle(
         random() * maximumDailyTransitions
       );
 
-    // Divide the day into evenly spaced
-    // candidate slots, then select a subset.
     const slots = Array.from(
       { length: maximumDailyTransitions },
       (_, index) => index
@@ -336,7 +433,9 @@ export function createGlobalWeatherTransitionCycle(
 
     // Fisher-Yates shuffle.
     for (let i = slots.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
+      const j = Math.floor(
+        random() * (i + 1)
+      );
 
       [slots[i], slots[j]] = [
         slots[j],
@@ -357,33 +456,39 @@ export function createGlobalWeatherTransitionCycle(
     selectedSlots.sort((a, b) => a - b);
 
     const slotWidth =
-      minutesPerDay / maximumDailyTransitions;
-
-    const maximumVariation = Math.max(
-      0,
-      Math.floor(
-        (slotWidth - minimumSpacing) / 2
-      )
-    );
+      intervalsPerDay /
+      maximumDailyTransitions;
 
     for (const slot of selectedSlots) {
       if (offsets.length >= transitionCount) {
         break;
       }
 
+      const slotStart = Math.floor(
+        slot * slotWidth
+      );
+
+      const slotEnd = Math.floor(
+        (slot + 1) * slotWidth
+      );
+
+      const maximumVariation =
+        slotEnd -
+        slotStart -
+        minimumSpacing;
+
       const variation =
         day === 0 && slot === 0
           ? 0
           : Math.floor(
-              random() * (maximumVariation + 1)
+              random() *
+              (maximumVariation + 1)
             );
 
-      const minuteOfDay =
-        Math.floor(slot * slotWidth) +
-        variation;
-
       offsets.push(
-        day * minutesPerDay + minuteOfDay
+        day * intervalsPerDay +
+        slotStart +
+        variation
       );
     }
 
@@ -392,7 +497,8 @@ export function createGlobalWeatherTransitionCycle(
 
   return {
     offsets,
-    durationMinutes: day * minutesPerDay,
+    durationIntervals:
+      day * intervalsPerDay,
   };
 }
 
@@ -405,11 +511,11 @@ export function getWeatherNodeMidpointTarget(
   nodeX: number,
   nodeY: number,
   cycle: WeatherTransitionCycle,
-  elapsedMinutes: number
+  elapsedIntervals: number
 ): WeatherNodeMidpointTarget {
   const position = getWeatherTransitionPosition(
     cycle,
-    elapsedMinutes
+    elapsedIntervals
   );
 
   return generateWeatherNodeMidpointTarget(

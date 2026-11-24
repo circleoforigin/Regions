@@ -16,6 +16,7 @@ export interface WeatherConfiguration
 
   transitions: {
     cycleLength: number;
+    updatesPerHour: number;
   };
 }
 
@@ -37,5 +38,6 @@ export const DEFAULT_WEATHER_CONFIGURATION:
 
   transitions: {
     cycleLength: 256,
+    updatesPerHour: 2,
   },
 };

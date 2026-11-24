@@ -260,11 +260,12 @@ const transitionCycle = useMemo(() => {
     return null;
   }
 
-  return createGlobalWeatherTransitionCycle(
-    worldContext.seed,
-    clockState.era,
-    configuration.transitions.cycleLength
-  );
+return createGlobalWeatherTransitionCycle(
+  worldContext.seed,
+  clockState.era,
+  configuration.transitions.cycleLength,
+  configuration.transitions.updatesPerHour
+);
 }, [
   worldContext,
   configuration,

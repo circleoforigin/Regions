@@ -1,195 +1,109 @@
-
-export interface WeatherTransitionCycle
-{
+export interface WeatherTransitionCycle {
   /**
-   * Transition times expressed as absolute
-   * minutes within one complete cycle.
+   * Transition boundaries expressed as
+   * integer UpdateInterval indices within
+   * one complete repeating cycle.
    */
   offsets: number[];
 
   /**
-   * Length of the repeating schedule,
-   * measured in minutes.
+   * Total number of UpdateIntervals
+   * in the repeating cycle.
    */
-  durationMinutes: number;
+  durationIntervals: number;
 }
 
-export interface WeatherTransitionPosition
-{
+export interface WeatherTransitionPosition {
   /**
    * Absolute transition index.
    * May be negative for past dates.
    */
   index: number;
 
-  /**
-   * Absolute minute when this transition
-   * began.
-   */
-  startMinute: number;
-
-  /**
-   * Absolute minute of the next transition.
-   */
-  endMinute: number;
-
-  /**
-   * Progress between transitions.
-   * Range: 0 through less than 1.
-   */
-  progress: number;
+  startInterval: number;
+  midpointInterval: number;
+  endInterval: number;
 }
 
-export function createWeatherTransitionCycle(
-  minuteOfDay: readonly number[],
-  minutesPerDay: number
-): WeatherTransitionCycle
-{
-  if (
-    !Number.isSafeInteger(minutesPerDay) ||
-    minutesPerDay <= 0
-  ) {
-    throw new Error('Invalid SimClock minutes per day.'  );
-  }
-
-  if (
-    minuteOfDay.length === 0 ||
-    minuteOfDay[0] !== 0
-  )
-  {
-    throw new Error(
-      'Weather transition cycle must begin at midnight.'
-    );
-  }
-
-  const offsets: number[] = [];
-
-  let day = 0;
-  let previousMinute = -1;
-
-  for (const minute of minuteOfDay)
-  {
-    if (
-      !Number.isSafeInteger(minute) ||
-      minute < 0 ||
-      minute >= minutesPerDay
-    )
-    {
-      throw new Error(
-        'Invalid Weather transition minute.'
-      );
-    }
-
-    if (minute === previousMinute)
-    {
-      throw new Error(
-        'Duplicate consecutive Weather transition.'
-      );
-    }
-
-    if (minute < previousMinute)
-    {
-      day += 1;
-    }
-
-    offsets.push(
-      day * minutesPerDay + minute
-    );
-
-    previousMinute = minute;
-  }
-
-  return {
-    offsets,
-
-    durationMinutes:
-      (day + 1) * minutesPerDay,
-  };
-}
-
+/**
+ * Resolves the transition containing an
+ * absolute UpdateInterval index.
+ */
 export function getWeatherTransitionPosition(
   cycle: WeatherTransitionCycle,
-  elapsedMinutes: number
-): WeatherTransitionPosition
-{
-  if (!Number.isFinite(elapsedMinutes))
-  {
+  elapsedIntervals: number
+): WeatherTransitionPosition {
+  if (!Number.isSafeInteger(elapsedIntervals)) {
     throw new Error(
-      'Invalid Weather simulation time.'
+      'Invalid Weather UpdateInterval index.'
     );
   }
 
-  const minute =
-    Math.floor(elapsedMinutes);
-
-  const cycleLength =
-    cycle.offsets.length;
+  const cycleLength = cycle.offsets.length;
 
   if (
     cycleLength === 0 ||
-    cycle.durationMinutes <= 0
-  )
-  {
+    !Number.isSafeInteger(cycle.durationIntervals) ||
+    cycle.durationIntervals <= 0
+  ) {
     throw new Error(
       'Invalid Weather transition cycle.'
     );
   }
 
-  const completedCycles =
-    Math.floor(
-      minute / cycle.durationMinutes
-    );
+  const completedCycles = Math.floor(
+    elapsedIntervals / cycle.durationIntervals
+  );
 
-  const minuteWithinCycle =
-    minute -
-    completedCycles * cycle.durationMinutes;
+  const cycleStart =
+    completedCycles * cycle.durationIntervals;
+
+  const intervalWithinCycle =
+    elapsedIntervals - cycleStart;
 
   let low = 0;
   let high = cycleLength;
 
-  while (low < high)
-  {
-    const middle =
-      Math.floor((low + high) / 2);
+  while (low < high) {
+    const middle = Math.floor(
+      (low + high) / 2
+    );
 
     if (
       cycle.offsets[middle] <=
-      minuteWithinCycle
-    )
-    {
+      intervalWithinCycle
+    ) {
       low = middle + 1;
-    }
-    else
-    {
+    } else {
       high = middle;
     }
   }
 
   const localIndex = low - 1;
 
-  const startMinute =
-    completedCycles *
-      cycle.durationMinutes +
-    cycle.offsets[localIndex];
+  const startInterval =
+    cycleStart + cycle.offsets[localIndex];
 
-  const endMinute =
+  const endInterval =
     localIndex + 1 < cycleLength
-      ? completedCycles *
-          cycle.durationMinutes +
+      ? cycleStart +
         cycle.offsets[localIndex + 1]
-      : (completedCycles + 1) *
-          cycle.durationMinutes;
+      : cycleStart +
+        cycle.durationIntervals;
+
+  const midpointInterval =
+    startInterval +
+    Math.floor(
+      (endInterval - startInterval) / 2
+    );
 
   return {
     index:
       completedCycles * cycleLength +
       localIndex,
 
-    startMinute,
-    endMinute,
-
-    progress:
-      (minute - startMinute) /
-      (endMinute - startMinute),
+    startInterval,
+    midpointInterval,
+    endInterval,
   };
 }
