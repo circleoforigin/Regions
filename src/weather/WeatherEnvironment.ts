@@ -6,12 +6,6 @@ export interface WeatherNamedDefinition {
 export interface WeatherWeightedDefinition
   extends WeatherNamedDefinition {
   generationWeight: number;
-  temperatureModifier?: number;
-}
-
-export interface WeatherTemperatureModifierDefinition
-  extends WeatherWeightedDefinition {
-  temperatureModifier?: number;
 }
 
 export interface WeatherSeasonDefinition
@@ -22,7 +16,7 @@ export interface WeatherSeasonDefinition
 }
 
 export interface WeatherWindStrengthDefinition
-  extends WeatherTemperatureModifierDefinition {
+  extends WeatherWeightedDefinition {
   minimumSpeed: number;
   maximumSpeed: number;
 }
@@ -69,8 +63,8 @@ export interface WeatherEnvironmentDefinitions {
   };
 
 visibility: WeatherWeightedDefinition[];
-cloudCover: WeatherTemperatureModifierDefinition[];
-precipitation: WeatherTemperatureModifierDefinition[];
+cloudCover: WeatherWeightedDefinition[];
+precipitation: WeatherWeightedDefinition[];
 windStrength: WeatherWindStrengthDefinition[];
   windDirections: WeatherWindDirectionDefinition[];
   specialWeather: WeatherSpecialDefinition[];

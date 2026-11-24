@@ -6,6 +6,7 @@ import type {
   WeatherEnvironmentDefinitions,
   WeatherWeightedDefinition,
   WeatherWeightVector,
+  WeatherSeasonWeights,
 } from '../WeatherEnvironment';
 
 export interface WeatherConditionRolls {
@@ -148,35 +149,63 @@ export function createWeatherProbabilityChart(
  * The current season's weight vectors are
  * applied before percentage normalization.
  */
+/**
+ * Constructs the four shared charts.
+ *
+ * Ruleset and setting-specific seasonal
+ * weight vectors are applied before
+ * percentage normalization.
+ */
 export function createWeatherProbabilityCharts(
   definitions: WeatherEnvironmentDefinitions,
-  seasonId?: string
+  seasonId?: string,
+  overrides: readonly WeatherSeasonWeights[] = []
 ): WeatherProbabilityCharts {
   const seasonal = seasonId
     ? definitions.generation
         ?.seasonalWeightVectors
-        ?.find(vector => vector.seasonId === seasonId)
+        ?.find(
+          vector => vector.seasonId === seasonId
+        )
+    : undefined;
+
+  const seasonalOverride = seasonId
+    ? overrides.find(
+        vector => vector.seasonId === seasonId
+      )
     : undefined;
 
   return {
     visibility: createWeatherProbabilityChart(
       definitions.visibility,
-      seasonal?.visibility
+      [
+        ...(seasonal?.visibility ?? []),
+        ...(seasonalOverride?.visibility ?? []),
+      ]
     ),
 
     cloudCover: createWeatherProbabilityChart(
       definitions.cloudCover,
-      seasonal?.cloudCover
+      [
+        ...(seasonal?.cloudCover ?? []),
+        ...(seasonalOverride?.cloudCover ?? []),
+      ]
     ),
 
     precipitation: createWeatherProbabilityChart(
       definitions.precipitation,
-      seasonal?.precipitation
+      [
+        ...(seasonal?.precipitation ?? []),
+        ...(seasonalOverride?.precipitation ?? []),
+      ]
     ),
 
     windStrength: createWeatherProbabilityChart(
       definitions.windStrength,
-      seasonal?.windStrength
+      [
+        ...(seasonal?.windStrength ?? []),
+        ...(seasonalOverride?.windStrength ?? []),
+      ]
     ),
   };
 }
@@ -445,20 +474,8 @@ export function resolveWeatherConditions(
 
 /**
  * Calculates the combined temperature
- * modifier of the resolved atmospheric
- * conditions.
- *
- * All modifiers are signed and additive.
- */
-/**
- * Calculates the combined temperature
- * modifier of applicable atmospheric
- * conditions.
- */
-/**
- * Calculates the combined temperature
- * reduction from resolved atmospheric
- * condition severity.
+ * reduction in Fahrenheit from resolved
+ * atmospheric condition severity.
  */
 export function getWeatherConditionTemperatureModifier(
   conditions: WeatherResolvedConditions

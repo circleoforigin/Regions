@@ -193,7 +193,7 @@ export class WeatherManager {
     this.state = state;
   }
 
-  public getProbabilityCharts():
+ public getProbabilityCharts():
   WeatherProbabilityCharts | null {
   const environment = this.state.environment;
 
@@ -203,7 +203,8 @@ export class WeatherManager {
 
   return createWeatherProbabilityCharts(
     environment.definitions,
-    environment.seasonId
+    environment.seasonId,
+    environment.overrides?.seasonalWeightVectors
   );
 }
 
@@ -647,12 +648,11 @@ const conditions = charts
     )
   : null;
 
-const definitions =
-  this.state.environment?.definitions;
-
 const temperatureModifier =
-  conditions && definitions
-    ? getWeatherConditionTemperatureModifier(conditions)
+  conditions
+    ? getWeatherConditionTemperatureModifier(
+        conditions
+      )
     : 0;
 
 const values: WeatherValues = {
