@@ -442,3 +442,30 @@ export function resolveWeatherConditions(
     windStrength,
   };
 }
+
+/**
+ * Calculates the combined temperature
+ * modifier of the resolved atmospheric
+ * conditions.
+ *
+ * All modifiers are signed and additive.
+ */
+/**
+ * Calculates the combined temperature
+ * modifier of applicable atmospheric
+ * conditions.
+ */
+/**
+ * Calculates the combined temperature
+ * reduction from resolved atmospheric
+ * condition severity.
+ */
+export function getWeatherConditionTemperatureModifier(
+  conditions: WeatherResolvedConditions
+): number {
+  return -(
+    conditions.cloudCover.index * 2 +
+    conditions.precipitation.index * 2 +
+    conditions.windStrength.index
+  );
+}

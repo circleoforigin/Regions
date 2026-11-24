@@ -41,6 +41,7 @@ import {
   interpolateWeatherConditionRolls,
   finalizeWeatherConditionRolls,
   resolveWeatherConditions,
+  getWeatherConditionTemperatureModifier,
   type WeatherConditionRolls,
   type WeatherNodeMidpointTarget,
   type WeatherProbabilityCharts,
@@ -415,50 +416,14 @@ public getNodeWeatherRolls(
     );
   }
 
-
 public getSectorTemperature(
   sector: SectorAddress,
   time: number = this.state.time
 ): number {
-  const {
-    configuration,
-    movementCycle,
-    pressureField,
-    secondsPerDay,
-  } = this.state;
-
-  const baseline =
-    this.getCurrentTemperature(time).temperature;
-
-  const { influences } =
-    resolveSectorNodeInfluences(
-      sector,
-      time,
-      secondsPerDay,
-      configuration,
-      movementCycle
-    );
-
-  const dayFraction =
-    ((time / secondsPerDay) % 1 + 1) % 1;
-
-  let modifier = 0;
-
-  for (const influence of influences) {
-    const pressure = getWeatherNodePressure(
-      pressureField,
-      influence.nodeX,
-      influence.nodeY
-    );
-
-    modifier +=
-      getPressureTemperatureModifier(
-        pressure,
-        dayFraction
-      ) * influence.weight;
-  }
-
-  return baseline + modifier;
+  return this.getSectorWeather(
+    sector,
+    time
+  ).values.temperature;
 }
 
 public getTemperatureAtSector(
@@ -672,11 +637,6 @@ const finalizedRolls =
     modifiedRolls
   );
 
-const values: WeatherValues = {
-  temperature: blended.temperature,
-  ...finalizedRolls,
-};
-
 const charts =
   this.getProbabilityCharts();
 
@@ -686,6 +646,22 @@ const conditions = charts
       charts
     )
   : null;
+
+const definitions =
+  this.state.environment?.definitions;
+
+const temperatureModifier =
+  conditions && definitions
+    ? getWeatherConditionTemperatureModifier(conditions)
+    : 0;
+
+const values: WeatherValues = {
+  temperature:
+    blended.temperature +
+    temperatureModifier,
+
+  ...finalizedRolls,
+};
 
 const wind =
   this.getSectorWind(
