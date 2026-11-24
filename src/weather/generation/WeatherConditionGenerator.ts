@@ -34,6 +34,13 @@ export interface WeatherProbabilityCharts {
   windStrength: WeatherProbabilityChart;
 }
 
+export interface WeatherResolvedConditions {
+  visibility: WeatherProbabilityEntry;
+  cloudCover: WeatherProbabilityEntry;
+  precipitation: WeatherProbabilityEntry;
+  windStrength: WeatherProbabilityEntry;
+}
+
 export interface WeatherNodeMidpointTarget {
   nodeX: number;
   nodeY: number;
@@ -313,5 +320,125 @@ export function interpolateWeatherConditionRolls(
       from.windStrength,
       to.windStrength
     ),
+  };
+}
+
+/**
+ * Finalizes an atmospheric roll after all
+ * applicable modifiers have been applied.
+ *
+ * Always rounds down and clamps to 1–100.
+ */
+export function finalizeWeatherRoll(
+  value: number
+): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(
+      'Invalid Weather condition roll.'
+    );
+  }
+
+  return Math.max(
+    1,
+    Math.min(100, Math.floor(value))
+  );
+}
+
+/**
+ * Finalizes all four atmospheric rolls.
+ */
+export function finalizeWeatherConditionRolls(
+  rolls: WeatherConditionRolls
+): WeatherConditionRolls {
+  return {
+    visibility: finalizeWeatherRoll(rolls.visibility),
+    cloudCover: finalizeWeatherRoll(rolls.cloudCover),
+    precipitation: finalizeWeatherRoll(rolls.precipitation),
+    windStrength: finalizeWeatherRoll(rolls.windStrength),
+  };
+}
+
+/**
+ * Resolves a finalized atmospheric roll
+ * against its cumulative probability chart.
+ */
+export function resolveWeatherCondition(
+  roll: number,
+  chart: WeatherProbabilityChart
+): WeatherProbabilityEntry {
+  if (
+    !Number.isSafeInteger(roll) ||
+    roll < 1 ||
+    roll > 100
+  ) {
+    throw new Error(
+      'Weather condition roll must be finalized.'
+    );
+  }
+
+  const condition = chart.find(
+    entry =>
+      entry.weight > 0 &&
+      roll <= entry.cumulativePercentage
+  );
+
+  if (!condition) {
+    throw new Error(
+      'Unable to resolve Weather condition.'
+    );
+  }
+
+  return condition;
+}
+
+/**
+ * Resolves the four atmospheric conditions.
+ *
+ * Precipitation severity cannot exceed
+ * cloud-cover severity.
+ *
+ * The original precipitation roll is preserved.
+ */
+export function resolveWeatherConditions(
+  rolls: WeatherConditionRolls,
+  charts: WeatherProbabilityCharts
+): WeatherResolvedConditions {
+  const visibility =
+    resolveWeatherCondition(
+      rolls.visibility,
+      charts.visibility
+    );
+
+  const cloudCover =
+    resolveWeatherCondition(
+      rolls.cloudCover,
+      charts.cloudCover
+    );
+
+  const precipitation =
+    resolveWeatherCondition(
+      rolls.precipitation,
+      charts.precipitation
+    );
+
+  const windStrength =
+    resolveWeatherCondition(
+      rolls.windStrength,
+      charts.windStrength
+    );
+
+  const precipitationIndex = Math.min(
+    precipitation.index,
+    cloudCover.index
+  );
+
+  return {
+    visibility,
+    cloudCover,
+
+    precipitation:
+      charts.precipitation[precipitationIndex],
+
+    windStrength,
   };
 }

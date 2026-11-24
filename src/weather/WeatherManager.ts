@@ -33,9 +33,12 @@ import {
   createWeatherProbabilityCharts,
   generateWeatherNodeMidpointTarget,
   interpolateWeatherConditionRolls,
+  finalizeWeatherConditionRolls,
+  resolveWeatherConditions,
   type WeatherConditionRolls,
   type WeatherNodeMidpointTarget,
   type WeatherProbabilityCharts,
+  type WeatherResolvedConditions,
 } from './generation/WeatherConditionGenerator';
 
 export interface WeatherTimeDefinition {
@@ -137,19 +140,23 @@ export interface SectorWeatherResult {
   time: number;
 
   /**
-   * Raw atmospheric values after node blending.
-   * Zone and Area modifiers are not yet applied.
+   * Raw values after Weather Node blending.
    */
   blended: WeatherValues;
 
   /**
-   * Current numeric sector weather values.
-   * Initially identical to blended.
-   *
-   * Later, Zone and Area processing will
-   * modify these before finalization.
+   * Finalized numeric weather values after
+   * applicable modifiers and roll clamping.
    */
   values: WeatherValues;
+
+  /**
+   * Resolved atmospheric conditions.
+   *
+   * Null when Ruleset weather definitions
+   * are unavailable.
+   */
+  conditions: WeatherResolvedConditions | null;
 }
 
 /**
@@ -544,10 +551,12 @@ public getSectorWeather(
       };
     });
 
-const blended = blendWeatherValues(weightedNodes);
+const blended =
+  blendWeatherValues(weightedNodes);
 
-const values: WeatherValues = {
-  ...blended,
+const modifiedRolls: WeatherConditionRolls = {
+  visibility:
+    blended.visibility,
 
   cloudCover:
     blended.cloudCover +
@@ -556,16 +565,40 @@ const values: WeatherValues = {
   precipitation:
     blended.precipitation +
     pressureConditionModifier,
+
+  windStrength:
+    blended.windStrength,
 };
+
+const finalizedRolls =
+  finalizeWeatherConditionRolls(
+    modifiedRolls
+  );
+
+const values: WeatherValues = {
+  temperature: blended.temperature,
+  ...finalizedRolls,
+};
+
+const charts =
+  this.getProbabilityCharts();
+
+const conditions = charts
+  ? resolveWeatherConditions(
+      finalizedRolls,
+      charts
+    )
+  : null;
 
 return {
   sector: { ...sector },
   time,
   blended,
   values,
+  conditions,
 };
 }
-}
+
 
 /**
  * Creates one repeating transition schedule
