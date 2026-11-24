@@ -141,6 +141,10 @@ export interface WeatherManagerState {
   secondsPerDay: number;
 }
 
+export type WeatherPrecipitationType =
+  | 'rain'
+  | 'snow';
+
 export interface SectorWeatherResult {
   sector: SectorAddress;
   time: number;
@@ -169,6 +173,7 @@ export interface SectorWeatherResult {
    * descriptive numerical speed.
    */
   wind: WeatherResolvedWind;
+  precipitationType: WeatherPrecipitationType | null;
 }
 
 /**
@@ -532,6 +537,28 @@ public getSectorWind(
 }
 
 /**
+ * Determines precipitation type using
+ * the Ruleset's rain/snow threshold.
+ */
+public getPrecipitationType(
+  temperature: number
+): WeatherPrecipitationType | null {
+  const threshold =
+    this.state.environment
+      ?.definitions
+      ?.temperature
+      .rainSnowThreshold;
+
+  if (threshold === undefined) {
+    return null;
+  }
+
+  return temperature <= threshold
+    ? 'snow'
+    : 'rain';
+}
+
+/**
  * Calculates the current numeric weather
  * values for a world Sector.
  *
@@ -668,6 +695,11 @@ const wind =
     time
   );
 
+const precipitationType =
+  this.getPrecipitationType(
+    values.temperature
+  );
+
 return {
   sector: { ...sector },
   time,
@@ -675,6 +707,7 @@ return {
   values,
   conditions,
   wind,
+  precipitationType,
 };
 }
 }
